@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --toast-bg: #fff;
+    --toast-color: #1f2937;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-white text-gray-700 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors font-medium text-sm;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium text-sm;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  }
+  .label-text {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-green {
+    @apply badge bg-green-100 text-green-800;
+  }
+  .badge-blue {
+    @apply badge bg-blue-100 text-blue-800;
+  }
+  .badge-red {
+    @apply badge bg-red-100 text-red-800;
+  }
+  .badge-yellow {
+    @apply badge bg-yellow-100 text-yellow-800;
+  }
+  .badge-gray {
+    @apply badge bg-gray-100 text-gray-800;
+  }
+  .badge-purple {
+    @apply badge bg-purple-100 text-purple-800;
+  }
+}
+
+/* Animations */
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.2s ease-out;
+}
+
+/* ─── Print Styles ─────────────────────────────────────── */
+@media print {
+  header, aside, nav, .btn-primary, .btn-secondary, .btn-danger,
+  .no-print, [data-no-print], .fixed, .lg\:hidden,
+  button:not(.print-visible) {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  main, .main-content, [class*="lg:col-span"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .grid { display: block !important; }
+  .grid > * { margin-bottom: 1rem; }
+
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; font-size: 10pt; }
+  th { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .badge, [class*="badge-"] { border: 1px solid #999; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bg-green-100, .bg-blue-100, .bg-red-100, .bg-yellow-100, .bg-gray-100, .bg-purple-100, .bg-orange-100 {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  img[alt="QR Code"] { display: block !important; width: 120px !important; height: 120px !important; }
+  h1, h2 { page-break-after: avoid; }
+
+  a[href]:not([href^="#"]):not([href^="/"]):after {
+    content: " (" attr(href) ")"; font-size: 9pt; color: #666;
+  }
+
+  .pagination, [class*="Pagination"] { display: none !important; }
+
+  @page { margin: 2cm; size: A4; }
+  @page :first { margin-top: 1cm; }
+}

@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables (contain secrets)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+
+# Turborepo
+.turbo/
+
+# Prisma migrations (generated locally)
+# Keep migration files in git for team collaboration
+# prisma/migrations/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Claude artifacts
+.claude/
+plan.md

@@ -1,0 +1,12 @@
+node_modules
+*/node_modules
+.git
+.env
+*.md
+.DS_Store
+dist
+*/dist
+client/node_modules
+server/node_modules
+shared/node_modules
+prisma/*.db

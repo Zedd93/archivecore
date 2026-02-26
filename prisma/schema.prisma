@@ -1,0 +1,756 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto, pg_trgm, uuid_ossp(map: "uuid-ossp")]
+}
+
+// =============================================
+// ENUMS
+// =============================================
+
+enum LocationType {
+  warehouse
+  zone
+  rack
+  shelf
+  level
+  slot
+}
+
+enum BoxStatus {
+  active
+  checked_out
+  pending_disposal
+  disposed
+  lost
+  damaged
+}
+
+enum FolderStatus {
+  active
+  checked_out
+  disposed
+}
+
+enum Confidentiality {
+  normal
+  confidential
+  strictly_confidential
+}
+
+enum EmploymentStatus {
+  active
+  terminated
+  retired
+  deceased
+}
+
+enum RetentionPeriodType {
+  ten_years
+  fifty_years
+}
+
+enum DisposalStatus {
+  active
+  pending_review
+  approved
+  disposed
+}
+
+enum StorageForm {
+  paper
+  digital
+  hybrid
+}
+
+enum HRPartCode {
+  A
+  B
+  C
+  D
+  E
+}
+
+enum OcrStatus {
+  pending
+  completed
+  failed
+  not_applicable
+}
+
+enum OrderType {
+  checkout
+  return_order
+  transfer
+  disposal
+}
+
+enum OrderStatus {
+  draft
+  submitted
+  approved
+  rejected
+  in_progress
+  ready
+  delivered
+  completed
+  cancelled
+}
+
+enum OrderPriority {
+  normal
+  high
+  urgent
+}
+
+enum OrderItemStatus {
+  pending
+  picked
+  delivered
+  returned
+  issue
+}
+
+enum CustodyEventType {
+  handover
+  receipt
+  return_event
+  transfer
+}
+
+enum RetentionTrigger {
+  creation_date
+  end_date
+  event_date
+  custom
+}
+
+enum TransferListStatus {
+  draft
+  confirmed
+  archived
+}
+
+enum RetentionAction {
+  dispose
+  review
+  transfer
+  extend
+}
+
+enum QrErrorLevel {
+  L
+  M
+  Q
+  H
+}
+
+// =============================================
+// MODELS
+// =============================================
+
+model Tenant {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(255)
+  shortCode    String   @unique @db.VarChar(20)
+  nip          String?  @db.VarChar(13)
+  address      String?  @db.Text
+  contactPerson String? @db.VarChar(255)
+  contactEmail  String? @db.VarChar(255)
+  contactPhone  String? @db.VarChar(20)
+  isActive     Boolean  @default(true)
+  configJson   Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users             User[]
+  roles             Role[]
+  boxes             Box[]
+  folders           Folder[]
+  documents         Document[]
+  attachments       Attachment[]
+  hrFolders         HRFolder[]
+  hrDocuments       HRDocument[]
+  orders            Order[]
+  locations         Location[]
+  retentionPolicies RetentionPolicy[]
+  labelTemplates    LabelTemplate[]
+  auditLogs         AuditLog[]
+  shareLinks        ShareLink[]
+  transferLists     TransferList[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String?   @db.Uuid
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @db.VarChar(255)
+  firstName     String    @db.VarChar(100)
+  lastName      String    @db.VarChar(100)
+  phone         String?   @db.VarChar(20)
+  isActive      Boolean   @default(true)
+  mfaEnabled    Boolean   @default(false)
+  mfaSecret     String?   @db.VarChar(255)
+  totpRecoveryCodes String[] @default([])
+  ssoProvider   String?   @db.VarChar(50)
+  ssoExternalId String?   @db.VarChar(255)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id])
+  userRoles     UserRole[]
+  createdBoxes  Box[]     @relation("BoxCreator")
+  requestedOrders Order[] @relation("OrderRequester")
+  approvedOrders  Order[] @relation("OrderApprover")
+  assignedOrders  Order[] @relation("OrderAssignee")
+  pickedItems   OrderItem[] @relation("ItemPicker")
+  custodyFrom   CustodyEvent[] @relation("CustodyFrom")
+  custodyTo     CustodyEvent[] @relation("CustodyTo")
+  auditLogs     AuditLog[]
+  labels        Label[]
+  uploadedAttachments Attachment[] @relation("AttachmentUploader")
+  assignedRoles UserRole[] @relation("RoleAssigner")
+  shareLinks    ShareLink[]
+  refreshTokens RefreshToken[]
+  createdTransferLists TransferList[] @relation("TransferListCreator")
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String?  @db.Uuid
+  name        String   @db.VarChar(100)
+  code        String   @db.VarChar(50)
+  description String?  @db.Text
+  isSystem    Boolean  @default(false)
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id])
+  userRoles UserRole[]
+
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+model UserRole {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  roleId     String   @db.Uuid
+  assignedAt DateTime @default(now())
+  assignedBy String?  @db.Uuid
+
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assigner User? @relation("RoleAssigner", fields: [assignedBy], references: [id])
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model Location {
+  id           String       @id @default(uuid()) @db.Uuid
+  parentId     String?      @db.Uuid
+  tenantId     String?      @db.Uuid
+  type         LocationType
+  code         String       @db.VarChar(50)
+  name         String       @db.VarChar(255)
+  description  String?      @db.Text
+  capacity     Int?
+  currentCount Int          @default(0)
+  isActive     Boolean      @default(true)
+  fullPath     String       @db.VarChar(500)
+  sortOrder    Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  parent   Location?  @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children Location[] @relation("LocationHierarchy")
+  tenant   Tenant?    @relation(fields: [tenantId], references: [id])
+  boxes    Box[]
+  custodyFrom CustodyEvent[] @relation("CustodyFromLocation")
+  custodyTo   CustodyEvent[] @relation("CustodyToLocation")
+
+  @@index([parentId])
+  @@index([tenantId])
+  @@index([type])
+  @@index([code])
+  @@map("locations")
+}
+
+model Box {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @db.Uuid
+  locationId        String?   @db.Uuid
+  qrCode            String    @unique @db.VarChar(100)
+  barcode           String?   @db.VarChar(100)
+  boxNumber         String    @db.VarChar(50)
+  title             String    @db.VarChar(500)
+  description       String?   @db.Text
+  docType           String?   @db.VarChar(100)
+  dateFrom          DateTime? @db.Date
+  dateTo            DateTime? @db.Date
+  keywords          String[]  @default([])
+  status            BoxStatus @default(active)
+  retentionPolicyId String?   @db.Uuid
+  retentionDate     DateTime? @db.Date
+  disposalDate      DateTime? @db.Date
+  notes             String?   @db.Text
+  customFields      Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdById       String    @db.Uuid
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  location        Location?        @relation(fields: [locationId], references: [id])
+  retentionPolicy RetentionPolicy? @relation(fields: [retentionPolicyId], references: [id])
+  createdBy       User             @relation("BoxCreator", fields: [createdById], references: [id])
+  folders         Folder[]
+  documents       Document[]
+  attachments     Attachment[]     @relation("BoxAttachments")
+  hrFolders       HRFolder[]
+  orderItems      OrderItem[]
+  custodyEvents   CustodyEvent[]
+  labels          Label[]
+  transferListItems TransferListItem[]
+
+  @@index([tenantId, status])
+  @@index([qrCode])
+  @@index([barcode])
+  @@index([boxNumber])
+  @@index([retentionDate])
+  @@index([docType])
+  @@map("boxes")
+}
+
+model Folder {
+  id           String       @id @default(uuid()) @db.Uuid
+  boxId        String       @db.Uuid
+  tenantId     String       @db.Uuid
+  folderNumber String       @db.VarChar(50)
+  title        String       @db.VarChar(500)
+  docType      String?      @db.VarChar(100)
+  dateFrom     DateTime?    @db.Date
+  dateTo       DateTime?    @db.Date
+  description  String?      @db.Text
+  orderInBox   Int          @default(0)
+  status       FolderStatus @default(active)
+  customFields Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  box         Box          @relation(fields: [boxId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  documents   Document[]
+  attachments Attachment[] @relation("FolderAttachments")
+  orderItems  OrderItem[]
+
+  @@index([boxId])
+  @@index([tenantId])
+  @@map("folders")
+}
+
+model Document {
+  id              String          @id @default(uuid()) @db.Uuid
+  folderId        String?         @db.Uuid
+  boxId           String?         @db.Uuid
+  tenantId        String          @db.Uuid
+  title           String          @db.VarChar(500)
+  docType         String?         @db.VarChar(100)
+  docDate         DateTime?       @db.Date
+  pageCount       Int?
+  description     String?         @db.Text
+  confidentiality Confidentiality @default(normal)
+  orderInFolder   Int?
+  customFields    Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  folder      Folder?      @relation(fields: [folderId], references: [id])
+  box         Box?         @relation(fields: [boxId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  attachments Attachment[] @relation("DocumentAttachments")
+
+  @@index([folderId])
+  @@index([boxId])
+  @@index([tenantId])
+  @@map("documents")
+}
+
+model Attachment {
+  id             String    @id @default(uuid()) @db.Uuid
+  documentId     String?   @db.Uuid
+  folderId       String?   @db.Uuid
+  boxId          String?   @db.Uuid
+  tenantId       String    @db.Uuid
+  fileName       String    @db.VarChar(500)
+  filePath       String    @db.VarChar(1000)
+  fileSize       BigInt
+  mimeType       String    @db.VarChar(100)
+  checksumSha256 String    @db.VarChar(64)
+  version        Int       @default(1)
+  ocrText        String?   @db.Text
+  ocrStatus      OcrStatus @default(not_applicable)
+  uploadedBy     String    @db.Uuid
+  uploadedAt     DateTime  @default(now())
+
+  document    Document?    @relation("DocumentAttachments", fields: [documentId], references: [id])
+  folder      Folder?      @relation("FolderAttachments", fields: [folderId], references: [id])
+  box         Box?         @relation("BoxAttachments", fields: [boxId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  uploader    User         @relation("AttachmentUploader", fields: [uploadedBy], references: [id])
+  hrDocuments HRDocument[]
+
+  @@index([tenantId])
+  @@index([documentId])
+  @@index([boxId])
+  @@map("attachments")
+}
+
+model HRFolder {
+  id                 String           @id @default(uuid()) @db.Uuid
+  tenantId           String           @db.Uuid
+  boxId              String?          @db.Uuid
+  employeeFirstName  String           @db.VarChar(100)
+  employeeLastName   String           @db.VarChar(100)
+  employeePesel      String           @db.VarChar(255) // AES-256 encrypted
+  employeePeselHmac  String           @db.VarChar(64)  // HMAC-SHA256 for search
+  employeeIdNumber   String?          @db.VarChar(50)
+  employmentStart    DateTime?        @db.Date
+  employmentEnd      DateTime?        @db.Date
+  employmentStatus   EmploymentStatus @default(active)
+  department         String?          @db.VarChar(200)
+  position           String?          @db.VarChar(200)
+  retentionPeriod    RetentionPeriodType @default(ten_years)
+  retentionBaseDate  DateTime?        @db.Date
+  retentionEndDate   DateTime?        @db.Date
+  disposalStatus     DisposalStatus   @default(active)
+  storageForm        StorageForm      @default(paper)
+  litigationHold     Boolean          @default(false)
+  litigationHoldUntil DateTime?       @db.Date
+  litigationNotes    String?          @db.Text
+  notes              String?          @db.Text
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  box        Box?         @relation(fields: [boxId], references: [id])
+  parts      HRFolderPart[]
+  orderItems OrderItem[]
+
+  @@index([tenantId, employmentStatus])
+  @@index([employeePeselHmac])
+  @@index([retentionEndDate])
+  @@map("hr_folders")
+}
+
+model HRFolderPart {
+  id            String     @id @default(uuid()) @db.Uuid
+  hrFolderId    String     @db.Uuid
+  partCode      HRPartCode
+  partSubcode   String?    @db.VarChar(10)
+  description   String?    @db.Text
+  documentCount Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  hrFolder    HRFolder     @relation(fields: [hrFolderId], references: [id], onDelete: Cascade)
+  hrDocuments HRDocument[]
+
+  @@unique([hrFolderId, partCode, partSubcode])
+  @@map("hr_folder_parts")
+}
+
+model HRDocument {
+  id               String   @id @default(uuid()) @db.Uuid
+  hrFolderPartId   String   @db.Uuid
+  tenantId         String   @db.Uuid
+  title            String   @db.VarChar(500)
+  docType          String?  @db.VarChar(100)
+  docDate          DateTime? @db.Date
+  orderNumber      Int
+  pageCount        Int?
+  notes            String?  @db.Text
+  attachmentId     String?  @db.Uuid
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  hrFolderPart HRFolderPart @relation(fields: [hrFolderPartId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  attachment   Attachment?  @relation(fields: [attachmentId], references: [id])
+
+  @@index([hrFolderPartId])
+  @@index([tenantId])
+  @@map("hr_documents")
+}
+
+model Order {
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @db.Uuid
+  orderNumber  String        @unique @db.VarChar(50)
+  orderType    OrderType
+  status       OrderStatus   @default(draft)
+  priority     OrderPriority @default(normal)
+  requestedBy  String        @db.Uuid
+  approvedBy   String?       @db.Uuid
+  assignedTo   String?       @db.Uuid
+  slaDeadline  DateTime?
+  completedAt  DateTime?
+  notes        String?       @db.Text
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  requester     User           @relation("OrderRequester", fields: [requestedBy], references: [id])
+  approver      User?          @relation("OrderApprover", fields: [approvedBy], references: [id])
+  assignee      User?          @relation("OrderAssignee", fields: [assignedTo], references: [id])
+  items         OrderItem[]
+  custodyEvents CustodyEvent[]
+
+  @@index([tenantId, status])
+  @@index([orderNumber])
+  @@index([slaDeadline])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String          @id @default(uuid()) @db.Uuid
+  orderId     String          @db.Uuid
+  boxId       String?         @db.Uuid
+  folderId    String?         @db.Uuid
+  hrFolderId  String?         @db.Uuid
+  itemStatus  OrderItemStatus @default(pending)
+  pickedAt    DateTime?
+  deliveredAt DateTime?
+  pickedById  String?         @db.Uuid
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  box      Box?      @relation(fields: [boxId], references: [id])
+  folder   Folder?   @relation(fields: [folderId], references: [id])
+  hrFolder HRFolder? @relation(fields: [hrFolderId], references: [id])
+  picker   User?     @relation("ItemPicker", fields: [pickedById], references: [id])
+
+  @@index([orderId])
+  @@index([boxId])
+  @@map("order_items")
+}
+
+model CustodyEvent {
+  id             String           @id @default(uuid()) @db.Uuid
+  orderId        String?          @db.Uuid
+  boxId          String           @db.Uuid
+  eventType      CustodyEventType
+  fromUserId     String?          @db.Uuid
+  toUserId       String?          @db.Uuid
+  fromLocationId String?          @db.Uuid
+  toLocationId   String?          @db.Uuid
+  signatureData  String?          @db.Text
+  notes          String?          @db.Text
+  eventAt        DateTime         @default(now())
+
+  order        Order?    @relation(fields: [orderId], references: [id])
+  box          Box       @relation(fields: [boxId], references: [id])
+  fromUser     User?     @relation("CustodyFrom", fields: [fromUserId], references: [id])
+  toUser       User?     @relation("CustodyTo", fields: [toUserId], references: [id])
+  fromLocation Location? @relation("CustodyFromLocation", fields: [fromLocationId], references: [id])
+  toLocation   Location? @relation("CustodyToLocation", fields: [toLocationId], references: [id])
+
+  @@index([orderId])
+  @@index([boxId])
+  @@index([eventAt])
+  @@map("custody_events")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String?  @db.Uuid
+  userId     String   @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(50)
+  entityId   String?  @db.Uuid
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?  @db.VarChar(45)
+  userAgent  String?  @db.VarChar(500)
+  sessionId  String?  @db.VarChar(100)
+  createdAt  DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model RetentionPolicy {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String?          @db.Uuid
+  name            String           @db.VarChar(255)
+  docType         String?          @db.VarChar(100)
+  retentionYears  Int
+  retentionTrigger RetentionTrigger
+  description     String?          @db.Text
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+
+  tenant Tenant?         @relation(fields: [tenantId], references: [id])
+  rules  RetentionRule[]
+  boxes  Box[]
+
+  @@index([tenantId])
+  @@map("retention_policies")
+}
+
+model RetentionRule {
+  id                String          @id @default(uuid()) @db.Uuid
+  policyId          String          @db.Uuid
+  conditionField    String          @db.VarChar(100)
+  conditionOperator String          @db.VarChar(20)
+  conditionValue    String          @db.VarChar(500)
+  action            RetentionAction
+  notifyBeforeDays  Int?
+
+  policy RetentionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@map("retention_rules")
+}
+
+model Label {
+  id           String   @id @default(uuid()) @db.Uuid
+  boxId        String   @db.Uuid
+  templateId   String   @db.Uuid
+  qrData       String   @db.Text
+  generatedBy  String   @db.Uuid
+  generatedAt  DateTime @default(now())
+  printCount   Int      @default(0)
+  lastPrintedAt DateTime?
+
+  box       Box           @relation(fields: [boxId], references: [id])
+  template  LabelTemplate @relation(fields: [templateId], references: [id])
+  generator User          @relation(fields: [generatedBy], references: [id])
+
+  @@index([boxId])
+  @@map("labels")
+}
+
+model LabelTemplate {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String?      @db.Uuid
+  name         String       @db.VarChar(255)
+  widthMm      Decimal      @db.Decimal(6, 2)
+  heightMm     Decimal      @db.Decimal(6, 2)
+  layoutJson   Json
+  fields       String[]     @default([])
+  qrSizeMm    Decimal      @db.Decimal(6, 2)
+  qrErrorLevel QrErrorLevel @default(M)
+  isDefault    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  labels Label[]
+
+  @@map("label_templates")
+}
+
+model ShareLink {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  token          String   @unique @db.VarChar(255)
+  entityType     String   @db.VarChar(50)
+  entityId       String   @db.Uuid
+  createdById    String   @db.Uuid
+  recipientEmail String?  @db.VarChar(255)
+  expiresAt      DateTime
+  accessCount    Int      @default(0)
+  lastAccessedAt DateTime?
+  createdAt      DateTime @default(now())
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id])
+  creator User   @relation(fields: [createdById], references: [id])
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("share_links")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  token     String    @unique @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// =============================================
+// SPISY ZDAWCZO-ODBIORCZE
+// =============================================
+
+model TransferList {
+  id               String             @id @default(uuid()) @db.Uuid
+  tenantId         String             @db.Uuid
+  listNumber       String             @db.VarChar(50)
+  title            String             @db.VarChar(500)
+  transferringUnit String?            @db.VarChar(255)  // Komórka przekazująca
+  receivingUnit    String?            @db.VarChar(255)  // Komórka przejmująca
+  transferDate     DateTime?          @db.Date          // Data przekazania
+  status           TransferListStatus @default(draft)
+  notes            String?            @db.Text
+  createdById      String             @db.Uuid
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id])
+  createdBy User               @relation("TransferListCreator", fields: [createdById], references: [id])
+  items     TransferListItem[]
+
+  @@index([tenantId])
+  @@index([listNumber])
+  @@index([status])
+  @@map("transfer_lists")
+}
+
+model TransferListItem {
+  id                 String    @id @default(uuid()) @db.Uuid
+  transferListId     String    @db.Uuid
+  ordinalNumber      Int                             // Lp.
+  folderSignature    String    @db.VarChar(100)      // Znak teczki
+  folderTitle        String    @db.VarChar(1000)     // Tytuł teczki lub tomu
+  dateFrom           DateTime? @db.Date              // Daty skrajne — od
+  dateTo             DateTime? @db.Date              // Daty skrajne — do
+  categoryCode       String    @db.VarChar(20)       // Kat. akt (A, B5, B10, B25, BE5, BE10)
+  folderCount        Int       @default(1)           // Liczba teczek
+  storageLocation    String?   @db.VarChar(500)      // Miejsce przechowywania akt w archiwum
+  disposalOrTransferDate DateTime? @db.Date          // Data zniszczenia lub przekazania do AP
+  notes              String?   @db.Text
+  boxId              String?   @db.Uuid              // Powiązanie z kartonem
+
+  transferList TransferList @relation(fields: [transferListId], references: [id], onDelete: Cascade)
+  box          Box?         @relation(fields: [boxId], references: [id])
+
+  @@index([transferListId])
+  @@index([boxId])
+  @@index([folderSignature])
+  @@index([categoryCode])
+  @@map("transfer_list_items")
+}
