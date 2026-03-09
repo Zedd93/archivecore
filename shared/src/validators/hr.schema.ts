@@ -1,9 +1,17 @@
 import { z } from 'zod';
 
+function validatePeselChecksum(pesel: string): boolean {
+  if (!/^\d{11}$/.test(pesel)) return false;
+  const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+  const digits = pesel.split('').map(Number);
+  const sum = weights.reduce((acc, w, i) => acc + w * digits[i], 0);
+  return (10 - (sum % 10)) % 10 === digits[10];
+}
+
 export const createHRFolderSchema = z.object({
   employeeFirstName: z.string().min(1, 'Imię jest wymagane').max(100),
   employeeLastName: z.string().min(1, 'Nazwisko jest wymagane').max(100),
-  employeePesel: z.string().length(11, 'PESEL musi mieć 11 znaków').regex(/^\d{11}$/, 'PESEL musi składać się z cyfr'),
+  employeePesel: z.string().length(11, 'PESEL musi mieć 11 znaków').regex(/^\d{11}$/, 'PESEL musi składać się z cyfr').refine(validatePeselChecksum, 'Invalid PESEL checksum'),
   employeeIdNumber: z.string().max(50).optional(),
   employmentStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   employmentEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

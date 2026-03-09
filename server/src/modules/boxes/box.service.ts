@@ -56,6 +56,19 @@ export class BoxService {
   }
 
   async create(data: any, tenantId: string, userId: string) {
+    // Validate location type - boxes cannot be placed at warehouse/zone/rack level
+    if (data.locationId) {
+      const location = await prisma.location.findUnique({
+        where: { id: data.locationId },
+        select: { type: true },
+      });
+      if (location && ['warehouse', 'zone', 'rack'].includes(location.type)) {
+        const err = new Error('Cannot place box at warehouse/zone/rack level. Use shelf, level, or slot.');
+        (err as any).statusCode = 400;
+        throw err;
+      }
+    }
+
     // Get tenant for QR code generation
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw Object.assign(new Error('Tenant nie znaleziony'), { statusCode: 404 });
@@ -128,6 +141,19 @@ export class BoxService {
   }
 
   async move(id: string, tenantId: string, locationId: string, notes?: string) {
+    // Validate location type - boxes cannot be placed at warehouse/zone/rack level
+    if (locationId) {
+      const location = await prisma.location.findUnique({
+        where: { id: locationId },
+        select: { type: true },
+      });
+      if (location && ['warehouse', 'zone', 'rack'].includes(location.type)) {
+        const err = new Error('Cannot place box at warehouse/zone/rack level. Use shelf, level, or slot.');
+        (err as any).statusCode = 400;
+        throw err;
+      }
+    }
+
     const box = await this.getById(id, tenantId);
     const oldLocationId = box.locationId;
 

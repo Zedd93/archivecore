@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import api from '@/services/api';
+import toast from 'react-hot-toast';
+import Modal from '@/components/ui/Modal';
 import { MapPin, ChevronRight, ChevronDown, Box, Plus, Loader2 } from 'lucide-react';
 
 interface LocationNode {
@@ -35,6 +38,7 @@ function LocationTree({ nodes, depth = 0 }: { nodes: LocationNode[]; depth?: num
 
 function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children && node.children.length > 0;
   const occupancy = node.capacity ? Math.round((node.currentCount / node.capacity) * 100) : null;
@@ -79,6 +83,13 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
               />
             </div>
           )}
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(`/boxes?locationId=${node.id}`); }}
+            className="text-xs text-primary-600 hover:text-primary-800 whitespace-nowrap"
+            title={t('boxes.title')}
+          >
+            <Box size={14} />
+          </button>
         </div>
       </div>
       {expanded && hasChildren && <LocationTree nodes={node.children} depth={depth + 1} />}
@@ -88,6 +99,12 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
 
 export default function LocationsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
+  const [creating, setCreating] = useState(false);
+
   const { data: tree, isLoading } = useQuery({
     queryKey: ['locations-tree'],
     queryFn: async () => {
@@ -96,6 +113,28 @@ export default function LocationsPage() {
     },
   });
 
+  const handleCreateLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      await api.post('/locations', {
+        name: createForm.name,
+        code: createForm.code,
+        type: createForm.type,
+        parentId: createForm.parentId || undefined,
+        capacity: createForm.capacity ? parseInt(createForm.capacity) : undefined,
+      });
+      toast.success(t('common.success'));
+      setShowCreateModal(false);
+      setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
+      queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('common.genericError'));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -103,7 +142,7 @@ export default function LocationsPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t('locations.title')}</h1>
           <p className="text-sm text-gray-500">{t('locations.subtitle')}</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
+        <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> {t('locations.add')}
         </button>
       </div>
@@ -120,6 +159,47 @@ export default function LocationsPage() {
           </div>
         )}
       </div>
+
+      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title={t('locations.add')}>
+        <form onSubmit={handleCreateLocation} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-text">{t('common.name')}</label>
+              <input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} className="input-field" required />
+            </div>
+            <div>
+              <label className="label-text">Kod</label>
+              <input value={createForm.code} onChange={(e) => setCreateForm({ ...createForm, code: e.target.value })} className="input-field" required placeholder="np. MAG-A" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-text">{t('common.type')}</label>
+              <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="input-field">
+                <option value="warehouse">{t('locations.typeWarehouse')}</option>
+                <option value="zone">{t('locations.typeZone')}</option>
+                <option value="rack">{t('locations.typeRack')}</option>
+                <option value="shelf">{t('locations.typeShelf')}</option>
+                <option value="slot">{t('locations.typeSlot')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="label-text">Pojemność</label>
+              <input type="number" min={0} value={createForm.capacity} onChange={(e) => setCreateForm({ ...createForm, capacity: e.target.value })} className="input-field" placeholder="opcjonalnie" />
+            </div>
+          </div>
+          <div>
+            <label className="label-text">ID lokalizacji nadrzędnej</label>
+            <input value={createForm.parentId} onChange={(e) => setCreateForm({ ...createForm, parentId: e.target.value })} className="input-field" placeholder="opcjonalnie — UUID" />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="submit" disabled={creating} className="btn-primary">
+              {creating ? t('common.creating') : t('common.create')}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

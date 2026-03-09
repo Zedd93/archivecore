@@ -7,7 +7,11 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ActivityTimeline from '@/components/ui/ActivityTimeline';
 import ShareButton from '@/components/ui/ShareButton';
-import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2 } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import LocationPicker from '@/components/ui/LocationPicker';
+import { useQueryClient } from '@tanstack/react-query';
+import { DOC_TYPES } from '@archivecore/shared';
+import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2, Edit3, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BoxDetailPage() {
@@ -17,6 +21,12 @@ export default function BoxDetailPage() {
   const { data: box, isLoading } = useDetail('box', '/boxes', id);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [labelLoading, setLabelLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', docType: '', description: '', notes: '', locationId: '' });
+  const [newStatus, setNewStatus] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // Fetch QR code via authenticated API
   useEffect(() => {
@@ -46,6 +56,18 @@ export default function BoxDetailPage() {
     };
   }, [qrDataUrl]);
 
+  useEffect(() => {
+    if (box) {
+      setEditForm({
+        title: box.title || '',
+        docType: box.docType || '',
+        description: box.description || '',
+        notes: box.notes || '',
+        locationId: box.locationId || '',
+      });
+    }
+  }, [box]);
+
   // Download label PDF via authenticated API
   const handlePrintLabel = useCallback(async () => {
     if (!box?.id) return;
@@ -62,6 +84,36 @@ export default function BoxDetailPage() {
       setLabelLoading(false);
     }
   }, [box?.id, t]);
+
+  const handleEdit = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/boxes/${id}`, editForm);
+      toast.success(t('common.success'));
+      setShowEditModal(false);
+      queryClient.invalidateQueries({ queryKey: ['box'] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('common.genericError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStatusChange = async () => {
+    if (!newStatus) return;
+    setSaving(true);
+    try {
+      await api.patch(`/boxes/${id}/status`, { status: newStatus });
+      toast.success(t('common.success'));
+      setShowStatusModal(false);
+      setNewStatus('');
+      queryClient.invalidateQueries({ queryKey: ['box'] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('common.genericError'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="animate-spin" size={32} /></div>;
@@ -85,6 +137,20 @@ export default function BoxDetailPage() {
           <p className="text-gray-500 mt-1">{box.title}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowStatusModal(true)}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <RefreshCw size={16} />
+            {t('common.status')}
+          </button>
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Edit3 size={16} />
+            {t('common.edit')}
+          </button>
           <ShareButton entityType="box" entityId={box.id} />
           <button
             onClick={handlePrintLabel}
@@ -306,6 +372,67 @@ export default function BoxDetailPage() {
           </div>
         </div>
       </div>
+
+      <Modal isOpen={showStatusModal} onClose={() => setShowStatusModal(false)} title={t('boxes.bulk.changeStatus')}>
+        <div className="space-y-4">
+          <div>
+            <label className="label-text">{t('boxes.bulk.newStatus')}</label>
+            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="input-field">
+              <option value="">---</option>
+              <option value="active">{t('statuses.box.active')}</option>
+              <option value="checked_out">{t('statuses.box.checked_out')}</option>
+              <option value="pending_disposal">{t('statuses.box.pending_disposal')}</option>
+              <option value="disposed">{t('statuses.box.disposed')}</option>
+              <option value="lost">{t('statuses.box.lost')}</option>
+              <option value="damaged">{t('statuses.box.damaged')}</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button onClick={() => setShowStatusModal(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button onClick={handleStatusChange} disabled={!newStatus || saving} className="btn-primary">
+              {saving ? t('common.processing') : t('common.confirm')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title={t('common.edit')} size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className="label-text">{t('common.title')}</label>
+            <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="input-field" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-text">{t('boxes.documentType')}</label>
+              <select value={editForm.docType} onChange={(e) => setEditForm({ ...editForm, docType: e.target.value })} className="input-field">
+                <option value="">---</option>
+                {DOC_TYPES.map(dt => (
+                  <option key={dt} value={dt}>{t(`docTypes.${dt}`, { defaultValue: dt })}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label-text">{t('boxes.location')}</label>
+              <LocationPicker value={editForm.locationId} onChange={(id) => setEditForm({ ...editForm, locationId: id })} excludeTypes={['warehouse', 'zone', 'rack']} />
+            </div>
+          </div>
+          <div>
+            <label className="label-text">{t('common.description')}</label>
+            <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="input-field" rows={3} />
+          </div>
+          <div>
+            <label className="label-text">{t('common.notes')}</label>
+            <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} className="input-field" rows={2} />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button onClick={() => setShowEditModal(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button onClick={handleEdit} disabled={saving} className="btn-primary">
+              {saving ? t('common.processing') : t('common.save')}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

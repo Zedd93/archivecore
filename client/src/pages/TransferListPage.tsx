@@ -306,14 +306,14 @@ export default function TransferListPage() {
             <p className="text-sm text-gray-500">{t('transferLists.subtitle')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => exportData({ format: 'xlsx', search, status: statusFilter })}
             disabled={isExporting}
             className="btn-secondary flex items-center gap-2"
           >
             {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-            {t('common.export')}
+            <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
           {canImport && (
             <button
@@ -321,13 +321,13 @@ export default function TransferListPage() {
               className="btn-secondary flex items-center gap-2"
             >
               <Upload size={18} />
-              {t('transferLists.importFromFile')}
+              <span className="hidden sm:inline">{t('transferLists.importFromFile')}</span>
             </button>
           )}
           {canWrite && (
             <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
               <Plus size={18} />
-              {t('transferLists.newList')}
+              <span className="hidden sm:inline">{t('transferLists.newList')}</span>
             </button>
           )}
         </div>

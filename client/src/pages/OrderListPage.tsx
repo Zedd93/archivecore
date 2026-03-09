@@ -7,6 +7,7 @@ import DataTable, { Column } from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
+import BoxPicker from '@/components/ui/BoxPicker';
 import { Plus, AlertTriangle, Download, Loader2 } from 'lucide-react';
 
 export default function OrderListPage() {
@@ -14,6 +15,7 @@ export default function OrderListPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
   const [filters, setFilters] = useState({ search: '', status: '', orderType: '' });
 
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters });
@@ -84,15 +86,14 @@ export default function OrderListPage() {
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const boxIdsRaw = fd.get('boxIds') as string;
-    const boxIds = boxIdsRaw.split(',').map(s => s.trim()).filter(Boolean);
     await createOrder.mutateAsync({
       orderType: fd.get('orderType'),
       priority: fd.get('priority') || 'normal',
       notes: fd.get('notes') || undefined,
-      items: boxIds.map(boxId => ({ boxId })),
+      items: selectedBoxes.map(b => ({ boxId: b.id })),
     });
     setShowCreate(false);
+    setSelectedBoxes([]);
   };
 
   return (
@@ -102,17 +103,17 @@ export default function OrderListPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t('orders.title')}</h1>
           <p className="text-sm text-gray-500">{t('orders.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => exportData({ format: 'xlsx', ...filters })}
             disabled={isExporting}
             className="btn-secondary flex items-center gap-2"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            {t('common.export')}
+            <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
-            <Plus size={16} /> {t('orders.newOrder')}
+            <Plus size={16} /> <span className="hidden sm:inline">{t('orders.newOrder')}</span>
           </button>
         </div>
       </div>
@@ -159,7 +160,7 @@ export default function OrderListPage() {
       </div>
 
       {/* Create Modal */}
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title={t('orders.createModal.title')} size="lg">
+      <Modal isOpen={showCreate} onClose={() => { setShowCreate(false); setSelectedBoxes([]); }} title={t('orders.createModal.title')} size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -181,16 +182,19 @@ export default function OrderListPage() {
             </div>
           </div>
           <div>
-            <label htmlFor="order-create-boxIds" className="label-text">{t('orders.createModal.boxIds')}</label>
-            <input id="order-create-boxIds" name="boxIds" className="input-field" required placeholder="uuid1, uuid2, ..." />
-            <p className="text-xs text-gray-400 mt-1">{t('orders.createModal.boxIdsPlaceholder')}</p>
+            <label className="label-text">{t('orders.createModal.boxIds')}</label>
+            <BoxPicker
+              value={selectedBoxes}
+              onChange={setSelectedBoxes}
+              placeholder={t('orders.createModal.boxIdsPlaceholder')}
+            />
           </div>
           <div>
             <label htmlFor="order-create-notes" className="label-text">{t('orders.createModal.notes')}</label>
             <textarea id="order-create-notes" name="notes" className="input-field" rows={3} placeholder={t('orders.createModal.notesPlaceholder')} />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="button" onClick={() => { setShowCreate(false); setSelectedBoxes([]); }} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createOrder.isPending} className="btn-primary">
               {createOrder.isPending ? t('common.creating') : t('orders.createModal.submit')}
             </button>

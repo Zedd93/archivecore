@@ -759,6 +759,126 @@
     }
   },
 
+  "docTypes": {
+    "personnel_files": "Akta osobowe",
+    "financial_documents": "Dokumenty finansowe",
+    "contracts": "Umowy",
+    "correspondence": "Korespondencja",
+    "project_documents": "Dokumenty projektowe",
+    "technical_docs": "Dokumentacja techniczna",
+    "legal_documents": "Dokumenty prawne",
+    "other": "Inne"
+  },
+
+  "statuses": {
+    "box": {
+      "active": "Aktywny",
+      "checked_out": "Wydany",
+      "pending_disposal": "Do brakowania",
+      "disposed": "Zniszczony",
+      "lost": "Zagubiony",
+      "damaged": "Uszkodzony"
+    },
+    "order": {
+      "draft": "Szkic",
+      "submitted": "Złożone",
+      "approved": "Zaakceptowane",
+      "rejected": "Odrzucone",
+      "in_progress": "W realizacji",
+      "ready": "Gotowe",
+      "delivered": "Przekazane",
+      "completed": "Zakończone",
+      "cancelled": "Anulowane"
+    },
+    "orderType": {
+      "checkout": "Wydanie",
+      "return_order": "Zwrot",
+      "transfer": "Przesunięcie",
+      "disposal": "Brakowanie"
+    },
+    "priority": {
+      "normal": "Normalny",
+      "high": "Wysoki",
+      "urgent": "Pilny"
+    },
+    "employment": {
+      "active": "Zatrudniony",
+      "terminated": "Rozwiązana umowa",
+      "retired": "Emerytura",
+      "deceased": "Zmarły"
+    },
+    "disposal": {
+      "active": "Aktywne",
+      "pending_review": "Do przeglądu",
+      "approved": "Zatwierdzone",
+      "disposed": "Zniszczone"
+    },
+    "locationType": {
+      "warehouse": "Magazyn",
+      "zone": "Strefa",
+      "rack": "Regał",
+      "shelf": "Półka",
+      "level": "Poziom",
+      "slot": "Pozycja"
+    },
+    "confidentiality": {
+      "normal": "Normalny",
+      "confidential": "Poufny",
+      "strictly_confidential": "Ściśle tajny"
+    },
+    "hrPart": {
+      "A": "Część A — Ubieganie się o zatrudnienie",
+      "B": "Część B — Przebieg zatrudnienia",
+      "C": "Część C — Ustanie zatrudnienia",
+      "D": "Część D — Odpowiedzialność porządkowa",
+      "E": "Część E — Kontrola trzeźwości"
+    },
+    "transferList": {
+      "draft": "Roboczy",
+      "confirmed": "Zatwierdzony",
+      "archived": "Zarchiwizowany"
+    },
+    "auditAction": {
+      "box.create": "Utworzenie kartonu",
+      "box.update": "Edycja kartonu",
+      "box.move": "Przeniesienie kartonu",
+      "box.status": "Zmiana statusu kartonu",
+      "box.bulk_status": "Zmiana statusu (masowo)",
+      "box.bulk_move": "Przeniesienie (masowo)",
+      "order.create": "Utworzenie zlecenia",
+      "order.update": "Edycja zlecenia",
+      "order.approve": "Zatwierdzenie zlecenia",
+      "order.reject": "Odrzucenie zlecenia",
+      "order.assign": "Przypisanie zlecenia",
+      "order.complete": "Zakończenie zlecenia",
+      "order.cancel": "Anulowanie zlecenia",
+      "hr.create": "Utworzenie akt osobowych",
+      "hr.update": "Edycja akt",
+      "hr.add_document": "Dodanie dokumentu",
+      "transfer_list.create": "Utworzenie spisu ZO",
+      "transfer_list.update": "Edycja spisu",
+      "transfer_list.confirm": "Zatwierdzenie spisu",
+      "transfer_list.import": "Import pozycji",
+      "user.create": "Utworzenie użytkownika",
+      "user.update": "Edycja użytkownika",
+      "tenant.create": "Utworzenie tenanta",
+      "location.create": "Utworzenie lokalizacji",
+      "location.update": "Edycja lokalizacji",
+      "login": "Logowanie",
+      "logout": "Wylogowanie"
+    },
+    "auditEntity": {
+      "box": "Karton",
+      "order": "Zlecenie",
+      "hr_folder": "Teczka HR",
+      "transfer_list": "Spis ZO",
+      "user": "Użytkownik",
+      "tenant": "Tenant",
+      "location": "Lokalizacja",
+      "custody": "Custody"
+    }
+  },
+
   "shortcuts": {
     "focusSearch": "Fokus na wyszukiwarkę",
     "dashboard": "Dashboard",

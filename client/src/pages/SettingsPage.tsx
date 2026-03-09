@@ -26,10 +26,10 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-500">{t('settings.subtitle')}</p>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col md:flex-row gap-6">
         {/* Tabs sidebar */}
-        <nav className="w-48 shrink-0">
-          <div className="space-y-1">
+        <nav className="w-full md:w-48 md:shrink-0">
+          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
             {TABS.map(tab => (
               <button
                 key={tab.id}

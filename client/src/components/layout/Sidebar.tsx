@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -64,12 +64,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {/* Logo */}
       <div className="flex items-center justify-between px-4 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
             <Box size={18} className="text-white" />
           </div>
           <span className="font-bold text-lg text-gray-900">{t('layout.appName')}</span>
-        </div>
+        </Link>
         {/* Close button on mobile */}
         <button
           onClick={onClose}

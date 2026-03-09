@@ -67,7 +67,7 @@ After seeding, use these credentials:
 
 | Role | Email | Password |
 |------|-------|----------|
-| Super Admin | `admin@archivecore.pl` | `Admin123!@#456` |
+| Super Admin | `admin@archivecore.local` | `Admin123!@#` |
 
 ### Useful Commands
 

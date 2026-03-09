@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useCallback } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
@@ -23,58 +23,66 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  // Use a ref so the keydown handler always sees the latest onClose without
+  // re-running the effect (which would re-focus the first element).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  // Focus trap + Escape key
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-      return;
-    }
-
-    if (e.key === 'Tab' && dialogRef.current) {
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-      if (focusable.length === 0) return;
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey) {
-        if (document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    }
-  }, [onClose]);
-
+  // Focus trap + Escape key — depends only on `isOpen` so the effect runs
+  // once when the modal opens and cleans up when it closes.  The handler
+  // reads `onCloseRef.current` to always call the latest callback.
   useEffect(() => {
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      document.body.style.overflow = 'hidden';
-      document.addEventListener('keydown', handleKeyDown);
+    if (!isOpen) return;
 
-      // Focus the first focusable element inside the dialog
-      requestAnimationFrame(() => {
-        if (dialogRef.current) {
-          const focusable = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-          if (focusable.length > 0) {
-            focusable[0].focus();
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
           }
         }
-      });
-    }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Focus the first focusable element inside the dialog (only on open)
+    requestAnimationFrame(() => {
+      if (dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        }
+      }
+    });
+
     return () => {
       document.body.style.overflow = '';
       document.removeEventListener('keydown', handleKeyDown);
       // Restore focus to the previously focused element
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, handleKeyDown]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -1,12 +1,9 @@
-import {
-  BOX_STATUS_LABELS, BOX_STATUS_COLORS,
-  ORDER_STATUS_LABELS, ORDER_STATUS_COLORS,
-  EMPLOYMENT_STATUS_LABELS, PRIORITY_LABELS,
-} from '@archivecore/shared';
+import { useTranslation } from 'react-i18next';
+import { BOX_STATUS_COLORS, ORDER_STATUS_COLORS } from '@archivecore/shared';
 
 interface StatusBadgeProps {
   status: string;
-  type?: 'box' | 'order' | 'employment' | 'priority';
+  type?: 'box' | 'order' | 'employment' | 'priority' | 'disposal' | 'transferList';
 }
 
 const colorMap: Record<string, string> = {
@@ -20,26 +17,56 @@ const colorMap: Record<string, string> = {
   indigo: 'bg-indigo-100 text-indigo-800',
 };
 
-export default function StatusBadge({ status, type = 'box' }: StatusBadgeProps) {
-  let label = status;
-  let color = 'gray';
+const EMPLOYMENT_COLORS: Record<string, string> = {
+  active: 'green',
+  terminated: 'red',
+  retired: 'gray',
+  deceased: 'gray',
+};
 
+const PRIORITY_COLORS: Record<string, string> = {
+  normal: 'blue',
+  high: 'orange',
+  urgent: 'red',
+};
+
+const DISPOSAL_COLORS: Record<string, string> = {
+  active: 'green',
+  pending_review: 'orange',
+  approved: 'blue',
+  disposed: 'gray',
+};
+
+const TRANSFER_LIST_COLORS: Record<string, string> = {
+  draft: 'gray',
+  confirmed: 'green',
+  archived: 'blue',
+};
+
+export default function StatusBadge({ status, type = 'box' }: StatusBadgeProps) {
+  const { t } = useTranslation();
+
+  const label = t(`statuses.${type}.${status}`, { defaultValue: status });
+
+  let color = 'gray';
   switch (type) {
     case 'box':
-      label = BOX_STATUS_LABELS[status] || status;
       color = BOX_STATUS_COLORS[status] || 'gray';
       break;
     case 'order':
-      label = ORDER_STATUS_LABELS[status] || status;
       color = ORDER_STATUS_COLORS[status] || 'gray';
       break;
     case 'employment':
-      label = EMPLOYMENT_STATUS_LABELS[status] || status;
-      color = status === 'active' ? 'green' : status === 'terminated' ? 'red' : 'gray';
+      color = EMPLOYMENT_COLORS[status] || 'gray';
       break;
     case 'priority':
-      label = PRIORITY_LABELS[status] || status;
-      color = status === 'urgent' ? 'red' : status === 'high' ? 'orange' : 'blue';
+      color = PRIORITY_COLORS[status] || 'blue';
+      break;
+    case 'disposal':
+      color = DISPOSAL_COLORS[status] || 'gray';
+      break;
+    case 'transferList':
+      color = TRANSFER_LIST_COLORS[status] || 'gray';
       break;
   }
 

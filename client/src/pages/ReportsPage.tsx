@@ -68,7 +68,7 @@ export default function ReportsPage() {
               return (
                 <div key={item.status} className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} />
-                  <span className="text-sm flex-1">{item.status}</span>
+                  <span className="text-sm flex-1">{t(`statuses.box.${item.status}`, { defaultValue: item.status })}</span>
                   <span className="text-sm font-medium">{item._count}</span>
                   <div className="w-24 h-2 bg-gray-200 rounded-full">
                     <div className={`h-full rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
@@ -90,7 +90,7 @@ export default function ReportsPage() {
               return (
                 <div key={item.status} className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} />
-                  <span className="text-sm flex-1">{item.status}</span>
+                  <span className="text-sm flex-1">{t(`statuses.order.${item.status}`, { defaultValue: item.status })}</span>
                   <span className="text-sm font-medium">{item._count}</span>
                   <div className="w-24 h-2 bg-gray-200 rounded-full">
                     <div className={`h-full rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />

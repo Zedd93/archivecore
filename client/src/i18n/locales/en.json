@@ -759,6 +759,126 @@
     }
   },
 
+  "docTypes": {
+    "personnel_files": "Personnel files",
+    "financial_documents": "Financial documents",
+    "contracts": "Contracts",
+    "correspondence": "Correspondence",
+    "project_documents": "Project documents",
+    "technical_docs": "Technical documents",
+    "legal_documents": "Legal documents",
+    "other": "Other"
+  },
+
+  "statuses": {
+    "box": {
+      "active": "Active",
+      "checked_out": "Checked out",
+      "pending_disposal": "Pending disposal",
+      "disposed": "Disposed",
+      "lost": "Lost",
+      "damaged": "Damaged"
+    },
+    "order": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "in_progress": "In progress",
+      "ready": "Ready",
+      "delivered": "Delivered",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "orderType": {
+      "checkout": "Checkout",
+      "return_order": "Return",
+      "transfer": "Transfer",
+      "disposal": "Disposal"
+    },
+    "priority": {
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "employment": {
+      "active": "Employed",
+      "terminated": "Terminated",
+      "retired": "Retired",
+      "deceased": "Deceased"
+    },
+    "disposal": {
+      "active": "Active",
+      "pending_review": "Pending review",
+      "approved": "Approved",
+      "disposed": "Disposed"
+    },
+    "locationType": {
+      "warehouse": "Warehouse",
+      "zone": "Zone",
+      "rack": "Rack",
+      "shelf": "Shelf",
+      "level": "Level",
+      "slot": "Slot"
+    },
+    "confidentiality": {
+      "normal": "Normal",
+      "confidential": "Confidential",
+      "strictly_confidential": "Strictly confidential"
+    },
+    "hrPart": {
+      "A": "Part A — Pre-employment",
+      "B": "Part B — Employment",
+      "C": "Part C — Termination",
+      "D": "Part D — Disciplinary",
+      "E": "Part E — Sobriety checks"
+    },
+    "transferList": {
+      "draft": "Draft",
+      "confirmed": "Confirmed",
+      "archived": "Archived"
+    },
+    "auditAction": {
+      "box.create": "Box created",
+      "box.update": "Box updated",
+      "box.move": "Box moved",
+      "box.status": "Box status changed",
+      "box.bulk_status": "Status changed (bulk)",
+      "box.bulk_move": "Moved (bulk)",
+      "order.create": "Order created",
+      "order.update": "Order updated",
+      "order.approve": "Order approved",
+      "order.reject": "Order rejected",
+      "order.assign": "Order assigned",
+      "order.complete": "Order completed",
+      "order.cancel": "Order cancelled",
+      "hr.create": "HR record created",
+      "hr.update": "HR record updated",
+      "hr.add_document": "Document added",
+      "transfer_list.create": "Transfer list created",
+      "transfer_list.update": "Transfer list updated",
+      "transfer_list.confirm": "Transfer list confirmed",
+      "transfer_list.import": "Items imported",
+      "user.create": "User created",
+      "user.update": "User updated",
+      "tenant.create": "Tenant created",
+      "location.create": "Location created",
+      "location.update": "Location updated",
+      "login": "Login",
+      "logout": "Logout"
+    },
+    "auditEntity": {
+      "box": "Box",
+      "order": "Order",
+      "hr_folder": "HR folder",
+      "transfer_list": "Transfer list",
+      "user": "User",
+      "tenant": "Tenant",
+      "location": "Location",
+      "custody": "Custody"
+    }
+  },
+
   "shortcuts": {
     "focusSearch": "Focus search bar",
     "dashboard": "Dashboard",

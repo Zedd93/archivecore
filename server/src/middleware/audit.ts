@@ -18,7 +18,7 @@ export function auditLog(entityType: string, action: string) {
             entityType,
             entityId: entityId || undefined,
             newValues: body?.data ? JSON.parse(JSON.stringify(body.data)) : undefined,
-            ipAddress: req.ip || req.socket.remoteAddress,
+            ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || req.socket.remoteAddress,
             userAgent: req.headers['user-agent']?.substring(0, 500),
           },
         }).catch((err) => {

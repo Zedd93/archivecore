@@ -40,12 +40,12 @@ export default function AuditPage() {
     {
       key: 'action',
       header: t('admin.audit.colAction'),
-      render: (item) => <span className="badge-blue text-xs">{item.action}</span>,
+      render: (item) => <span className="badge-blue text-xs">{t(`statuses.auditAction.${item.action}`, { defaultValue: item.action })}</span>,
     },
     {
       key: 'entityType',
       header: t('admin.audit.colType'),
-      render: (item) => <span className="badge-gray text-xs">{item.entityType}</span>,
+      render: (item) => <span className="badge-gray text-xs">{t(`statuses.auditEntity.${item.entityType}`, { defaultValue: item.entityType })}</span>,
     },
     { key: 'entityId', header: t('admin.audit.colEntityId'), render: (item) => <span className="font-mono text-xs text-gray-500">{item.entityId?.slice(0, 8)}...</span> },
     { key: 'ipAddress', header: t('admin.audit.colIp'), render: (item) => <span className="text-xs text-gray-500">{item.ipAddress || '—'}</span> },

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createBoxSchema } from '@archivecore/shared';
+import { createBoxSchema, DOC_TYPES } from '@archivecore/shared';
 import { z } from 'zod';
 import { useList, useCreate } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
@@ -15,6 +15,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import BulkActionBar from '@/components/ui/BulkActionBar';
 import Modal from '@/components/ui/Modal';
 import FormField from '@/components/ui/FormField';
+import LocationPicker from '@/components/ui/LocationPicker';
 import toast from 'react-hot-toast';
 import { Plus, Download, Loader2, RefreshCw, MapPin } from 'lucide-react';
 
@@ -53,6 +54,8 @@ export default function BoxListPage() {
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    watch,
   } = useForm<CreateBoxForm>({
     resolver: zodResolver(createBoxSchema),
     defaultValues: {
@@ -162,18 +165,18 @@ export default function BoxListPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t('boxes.title')}</h1>
           <p className="text-sm text-gray-500">{t('boxes.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => exportData({ format: 'xlsx', ...filters })}
             disabled={isExporting}
             className="btn-secondary flex items-center gap-2"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            {t('common.export')}
+            <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
           <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
             <Plus size={16} />
-            {t('boxes.newBox')}
+            <span className="hidden sm:inline">{t('boxes.newBox')}</span>
           </button>
         </div>
       </div>
@@ -285,12 +288,10 @@ export default function BoxListPage() {
           <p className="text-sm text-gray-600">{t('boxes.bulk.selectedCount', { count: selectedIds.size })}</p>
           <div>
             <label htmlFor="bulk-locationId" className="label-text">{t('boxes.bulk.locationId')}</label>
-            <input
-              id="bulk-locationId"
+            <LocationPicker
               value={bulkLocationId}
-              onChange={(e) => setBulkLocationId(e.target.value)}
-              className="input-field"
-              placeholder={t('boxes.bulk.locationPlaceholder')}
+              onChange={setBulkLocationId}
+              excludeTypes={['warehouse', 'zone', 'rack']}
             />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
@@ -314,10 +315,19 @@ export default function BoxListPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <FormField label={t('boxes.createModal.fieldDocType')} error={errors.docType?.message}>
-              <input {...register('docType')} className="input-field" />
+              <select {...register('docType')} className="input-field">
+                <option value="">{t('common.all')}</option>
+                {DOC_TYPES.map(dt => (
+                  <option key={dt} value={dt}>{t(`docTypes.${dt}`, { defaultValue: dt })}</option>
+                ))}
+              </select>
             </FormField>
             <FormField label={t('boxes.bulk.locationId')} error={errors.locationId?.message}>
-              <input {...register('locationId')} className="input-field" placeholder={t('boxes.bulk.locationPlaceholder')} />
+              <LocationPicker
+                value={watch('locationId') || ''}
+                onChange={(id) => setValue('locationId', id)}
+                excludeTypes={['warehouse', 'zone', 'rack']}
+              />
             </FormField>
           </div>
 

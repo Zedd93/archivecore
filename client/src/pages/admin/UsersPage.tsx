@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useList, useCreate } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import DataTable, { Column } from '@/components/ui/DataTable';
@@ -15,6 +16,7 @@ export default function UsersPage() {
 
   const debouncedSearch = useDebouncedValue(filters.search, 300);
 
+  const queryClient = useQueryClient();
   const { data, isLoading } = useList('users', '/users', { page, limit: 20, search: debouncedSearch, isActive: filters.isActive });
   const createUser = useCreate('/users', ['users'], t('admin.users.created'));
 
@@ -83,6 +85,8 @@ export default function UsersPage() {
       tenantId: fd.get('tenantId') || undefined,
     });
     setShowCreate(false);
+    // Explicitly invalidate all user queries to ensure the list refreshes
+    await queryClient.invalidateQueries({ queryKey: ['users'] });
   };
 
   return (

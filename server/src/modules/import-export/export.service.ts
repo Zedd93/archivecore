@@ -1,6 +1,14 @@
 import * as XLSX from 'xlsx';
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
+import { BOX_STATUS_LABELS, ORDER_STATUS_LABELS, ORDER_TYPE_LABELS, PRIORITY_LABELS, EMPLOYMENT_STATUS_LABELS, DISPOSAL_STATUS_LABELS } from '@archivecore/shared';
+
+// Transfer list statuses are not in shared constants — define locally
+const TRANSFER_LIST_STATUS_LABELS: Record<string, string> = {
+  draft: 'Szkic',
+  confirmed: 'Zatwierdzony',
+  archived: 'Zarchiwizowany',
+};
 
 // ─── Column definition for export ────────────────────────
 interface ExportColumn {
@@ -14,7 +22,7 @@ const BOX_COLUMNS: ExportColumn[] = [
   { header: 'Numer kartonu', key: 'boxNumber' },
   { header: 'Tytuł', key: 'title' },
   { header: 'Typ dokumentów', key: 'docType' },
-  { header: 'Status', key: 'status' },
+  { header: 'Status', key: 'status', transform: (v) => BOX_STATUS_LABELS[v] || v },
   { header: 'Lokalizacja', key: 'location', transform: (_v, row) => row.location?.fullPath || '' },
   { header: 'Kod lokalizacji', key: 'locationCode', transform: (_v, row) => row.location?.code || '' },
   { header: 'Opis', key: 'description' },
@@ -29,9 +37,9 @@ const BOX_COLUMNS: ExportColumn[] = [
 // ─── Orders export ───────────────────────────────────────
 const ORDER_COLUMNS: ExportColumn[] = [
   { header: 'Numer zlecenia', key: 'orderNumber' },
-  { header: 'Typ', key: 'orderType' },
-  { header: 'Status', key: 'status' },
-  { header: 'Priorytet', key: 'priority' },
+  { header: 'Typ', key: 'orderType', transform: (v) => ORDER_TYPE_LABELS[v] || v },
+  { header: 'Status', key: 'status', transform: (v) => ORDER_STATUS_LABELS[v] || v },
+  { header: 'Priorytet', key: 'priority', transform: (v) => PRIORITY_LABELS[v] || v },
   { header: 'Zleceniodawca', key: 'requester', transform: (_v, row) => row.requester ? `${row.requester.firstName} ${row.requester.lastName}` : '' },
   { header: 'Zatwierdzający', key: 'approver', transform: (_v, row) => row.approver ? `${row.approver.firstName} ${row.approver.lastName}` : '' },
   { header: 'Realizujący', key: 'assignee', transform: (_v, row) => row.assignee ? `${row.assignee.firstName} ${row.assignee.lastName}` : '' },
@@ -47,14 +55,14 @@ const HR_COLUMNS: ExportColumn[] = [
   { header: 'Imię', key: 'employeeFirstName' },
   { header: 'Nazwisko', key: 'employeeLastName' },
   { header: 'Nr ewidencyjny', key: 'employeeIdNumber' },
-  { header: 'Status zatrudnienia', key: 'employmentStatus' },
+  { header: 'Status zatrudnienia', key: 'employmentStatus', transform: (v) => EMPLOYMENT_STATUS_LABELS[v] || v },
   { header: 'Dział', key: 'department' },
   { header: 'Stanowisko', key: 'position' },
   { header: 'Data zatrudnienia', key: 'employmentStart', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Data zakończenia', key: 'employmentEnd', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Okres retencji (lata)', key: 'retentionPeriod' },
   { header: 'Data końca retencji', key: 'retentionEndDate', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
-  { header: 'Status brakowania', key: 'disposalStatus' },
+  { header: 'Status brakowania', key: 'disposalStatus', transform: (v) => DISPOSAL_STATUS_LABELS[v] || v },
   { header: 'Forma przechowywania', key: 'storageForm' },
   { header: 'Blokada sądowa', key: 'litigationHold', transform: (v) => v ? 'Tak' : 'Nie' },
   { header: 'Karton', key: 'box', transform: (_v, row) => row.box?.boxNumber || '' },
@@ -66,7 +74,7 @@ const HR_COLUMNS: ExportColumn[] = [
 const TRANSFER_LIST_COLUMNS: ExportColumn[] = [
   { header: 'Numer spisu', key: 'listNumber' },
   { header: 'Tytuł', key: 'title' },
-  { header: 'Status', key: 'status' },
+  { header: 'Status', key: 'status', transform: (v) => TRANSFER_LIST_STATUS_LABELS[v] || v },
   { header: 'Jednostka przekazująca', key: 'transferringUnit' },
   { header: 'Jednostka przyjmująca', key: 'receivingUnit' },
   { header: 'Sporządził', key: 'createdBy', transform: (_v, row) => row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : '' },
@@ -90,13 +98,19 @@ export class ExportService {
       }, {} as Record<string, any>)
     );
 
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    // When there are no data rows, create a sheet with just headers;
+    // json_to_sheet([]) produces an empty sheet without header row.
+    const ws = sheetData.length > 0
+      ? XLSX.utils.json_to_sheet(sheetData)
+      : XLSX.utils.aoa_to_sheet([columns.map(c => c.header)]);
 
     // Auto-size columns (approximate)
+    // Guard against empty sheetData — spreading an empty array into Math.max
+    // returns -Infinity, which breaks column width calculation.
     const colWidths = columns.map(col => {
       const maxLen = Math.max(
         col.header.length,
-        ...sheetData.map(r => String(r[col.header] ?? '').length)
+        ...(sheetData.length > 0 ? sheetData.map(r => String(r[col.header] ?? '').length) : [0])
       );
       return { wch: Math.min(maxLen + 2, 50) };
     });
@@ -147,7 +161,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, BOX_COLUMNS, format),
-      filename: `kartony_${new Date().toISOString().split('T')[0]}.${ext}`,
+      filename: `kartony_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
       contentType,
     };
   }
@@ -183,7 +197,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, ORDER_COLUMNS, format),
-      filename: `zlecenia_${new Date().toISOString().split('T')[0]}.${ext}`,
+      filename: `zlecenia_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
       contentType,
     };
   }
@@ -232,7 +246,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, HR_COLUMNS, format),
-      filename: `akta_osobowe_${new Date().toISOString().split('T')[0]}.${ext}`,
+      filename: `akta_osobowe_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
       contentType,
     };
   }
@@ -264,7 +278,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, TRANSFER_LIST_COLUMNS, format),
-      filename: `spisy_zo_${new Date().toISOString().split('T')[0]}.${ext}`,
+      filename: `spisy_zo_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
       contentType,
     };
   }

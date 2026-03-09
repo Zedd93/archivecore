@@ -98,3 +98,15 @@ export const CONFIDENTIALITY_LABELS: Record<string, string> = {
   confidential: 'Poufny',
   strictly_confidential: 'Ściśle tajny',
 };
+
+// ======= Document Types =======
+export const DOC_TYPES = [
+  'personnel_files',
+  'financial_documents',
+  'contracts',
+  'correspondence',
+  'project_documents',
+  'technical_docs',
+  'legal_documents',
+  'other',
+] as const;

@@ -24,6 +24,19 @@ export class LocationService {
       }
     }
 
+    // Aggregate counts from children to parents
+    function aggregateCounts(node: any): number {
+      let total = node.currentCount || 0;
+      if (node.children) {
+        for (const child of node.children) {
+          total += aggregateCounts(child);
+        }
+      }
+      node.aggregatedCount = total;
+      return total;
+    }
+    roots.forEach(aggregateCounts);
+
     return roots;
   }
 

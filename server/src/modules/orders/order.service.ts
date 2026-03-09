@@ -229,7 +229,21 @@ export class OrderService {
   }
 
   async complete(id: string, tenantId: string, userId: string) {
-    return this.updateStatus(id, tenantId, 'completed', userId);
+    const updated = await this.updateStatus(id, tenantId, 'completed', userId);
+
+    // Mark all pending/picked items as delivered
+    await prisma.orderItem.updateMany({
+      where: {
+        orderId: id,
+        itemStatus: { in: ['pending', 'picked'] },
+      },
+      data: {
+        itemStatus: 'delivered',
+        deliveredAt: new Date(),
+      },
+    });
+
+    return updated;
   }
 
   async cancel(id: string, tenantId: string, userId: string, notes?: string) {

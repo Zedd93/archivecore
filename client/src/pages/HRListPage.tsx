@@ -95,17 +95,17 @@ export default function HRListPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t('hr.title')}</h1>
           <p className="text-sm text-gray-500">{t('hr.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => exportData({ format: 'xlsx', ...filters })}
             disabled={isExporting}
             className="btn-secondary flex items-center gap-2"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            {t('common.export')}
+            <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
-            <Plus size={16} /> {t('hr.newRecord')}
+            <Plus size={16} /> <span className="hidden sm:inline">{t('hr.newRecord')}</span>
           </button>
         </div>
       </div>
