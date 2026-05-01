@@ -1,0 +1,17 @@
+# Smoke test override — strips conflicting container_name + drops nginx/certbot
+# Usage: docker compose -p actest -f docker-compose.prod.yml -f docker-compose.smoketest.yml up -d app postgres redis minio
+services:
+  app:
+    container_name: actest-app
+    ports:
+      - "13001:3001"
+  postgres:
+    container_name: actest-db
+  redis:
+    container_name: actest-redis
+  minio:
+    container_name: actest-minio
+  nginx:
+    profiles: ["disabled"]
+  certbot:
+    profiles: ["disabled"]

@@ -17,6 +17,7 @@
     "build:shared": "npm run build --workspace=shared",
     "build:client": "npm run build --workspace=client",
     "typecheck": "npm run typecheck --workspace=shared && npm run typecheck --workspace=server && npm run typecheck --workspace=client",
+    "test": "npm run test --workspace=shared && npm run test --workspace=server",
     "db:migrate": "npx prisma migrate dev",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
@@ -30,7 +31,7 @@
     "typescript": "^5.4.5"
   },
   "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "seed": "node prisma/seed.cjs"
   },
   "engines": {
     "node": ">=18.0.0"

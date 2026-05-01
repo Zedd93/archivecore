@@ -35,15 +35,12 @@ sleep 10
 
 echo ""
 echo "4️⃣  Uruchamiam migrację bazy danych..."
-docker compose -f docker-compose.prod.yml exec app npx prisma db push --accept-data-loss
+docker compose -f docker-compose.prod.yml exec -T app prisma db push --accept-data-loss --skip-generate
 
 echo ""
-echo "5️⃣  Seeduję dane początkowe..."
-docker compose -f docker-compose.prod.yml exec app npx tsx prisma/seed.ts 2>/dev/null || \
-docker compose -f docker-compose.prod.yml exec app node -e "
-  const { execSync } = require('child_process');
-  execSync('npx prisma db seed', { stdio: 'inherit' });
-" 2>/dev/null || echo "   ⚠️  Seed wymaga ręcznego uruchomienia (patrz instrukcja)"
+echo "5️⃣  Seeduję dane początkowe (idempotentne — pomija istniejące)..."
+docker compose -f docker-compose.prod.yml exec -T app prisma db seed || \
+echo "   ⚠️  Seed nie powiódł się lub dane już istnieją — sprawdź logi powyżej."
 
 echo ""
 echo "6️⃣  Sprawdzam status..."

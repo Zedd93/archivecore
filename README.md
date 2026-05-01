@@ -129,7 +129,7 @@ See `.env.example` for all required variables. Key ones:
 
 ## API
 
-All endpoints are under `/api/v1/`. Authentication via `Authorization: Bearer <token>` header.
+All endpoints are under `/api/`. Authentication via `Authorization: Bearer <token>` header.
 
 | Module | Base Path | Description |
 |--------|-----------|-------------|
