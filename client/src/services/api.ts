@@ -8,6 +8,7 @@ const api = axios.create({
 
 // Access token stored in memory (not localStorage for security)
 let accessToken: string | null = null;
+export const AUTH_SESSION_EXPIRED_EVENT = 'auth:session-expired';
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -79,7 +80,7 @@ api.interceptors.response.use(
         processQueue(refreshError as AxiosError, null);
         setAccessToken(null);
         localStorage.removeItem('tenantId');
-        // Don't do full page reload — let React Router handle redirect
+        window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

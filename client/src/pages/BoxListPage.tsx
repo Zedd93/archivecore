@@ -61,6 +61,7 @@ export default function BoxListPage() {
     defaultValues: {
       title: '',
       docType: '',
+      department: '',
       description: '',
       notes: '',
     },
@@ -86,6 +87,7 @@ export default function BoxListPage() {
       ),
     },
     { key: 'docType', header: t('boxes.docType'), render: (item) => item.docType || '—' },
+    { key: 'department', header: t('boxes.department'), render: (item) => item.department || '—' },
     {
       key: '_count',
       header: t('boxes.folders'),
@@ -102,6 +104,7 @@ export default function BoxListPage() {
     await createBox.mutateAsync({
       title: formData.title,
       docType: formData.docType || undefined,
+      department: formData.department || undefined,
       description: formData.description || undefined,
       locationId: formData.locationId || undefined,
       notes: formData.notes || undefined,
@@ -330,6 +333,10 @@ export default function BoxListPage() {
               />
             </FormField>
           </div>
+
+          <FormField label={t('boxes.createModal.fieldDepartment')} error={errors.department?.message}>
+            <input {...register('department')} className="input-field" placeholder={t('admin.users.createModal.departmentPlaceholder')} />
+          </FormField>
 
           <FormField label={t('boxes.createModal.fieldDescription')} error={errors.description?.message}>
             <textarea {...register('description')} className="input-field" rows={3} />

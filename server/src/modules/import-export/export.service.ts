@@ -22,6 +22,7 @@ const BOX_COLUMNS: ExportColumn[] = [
   { header: 'Numer kartonu', key: 'boxNumber' },
   { header: 'Tytuł', key: 'title' },
   { header: 'Typ dokumentów', key: 'docType' },
+  { header: 'Dział', key: 'department' },
   { header: 'Status', key: 'status', transform: (v) => BOX_STATUS_LABELS[v] || v },
   { header: 'Lokalizacja', key: 'location', transform: (_v, row) => row.location?.fullPath || '' },
   { header: 'Kod lokalizacji', key: 'locationCode', transform: (_v, row) => row.location?.code || '' },

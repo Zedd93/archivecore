@@ -24,7 +24,7 @@ export default function BoxDetailPage() {
   const queryClient = useQueryClient();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [editForm, setEditForm] = useState({ title: '', docType: '', description: '', notes: '', locationId: '' });
+  const [editForm, setEditForm] = useState({ title: '', docType: '', department: '', description: '', notes: '', locationId: '' });
   const [newStatus, setNewStatus] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +61,7 @@ export default function BoxDetailPage() {
       setEditForm({
         title: box.title || '',
         docType: box.docType || '',
+        department: box.department || '',
         description: box.description || '',
         notes: box.notes || '',
         locationId: box.locationId || '',
@@ -180,6 +181,10 @@ export default function BoxDetailPage() {
               <div>
                 <dt className="text-sm text-gray-500">{t('boxes.documentType')}</dt>
                 <dd className="text-sm mt-1">{box.docType || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-gray-500">{t('boxes.department')}</dt>
+                <dd className="text-sm mt-1">{box.department || '—'}</dd>
               </div>
               <div>
                 <dt className="text-sm text-gray-500">{t('boxes.location')}</dt>
@@ -416,6 +421,10 @@ export default function BoxDetailPage() {
               <label className="label-text">{t('boxes.location')}</label>
               <LocationPicker value={editForm.locationId} onChange={(id) => setEditForm({ ...editForm, locationId: id })} excludeTypes={['warehouse', 'zone', 'rack']} />
             </div>
+          </div>
+          <div>
+            <label className="label-text">{t('boxes.createModal.fieldDepartment')}</label>
+            <input value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className="input-field" placeholder={t('admin.users.createModal.departmentPlaceholder')} />
           </div>
           <div>
             <label className="label-text">{t('common.description')}</label>

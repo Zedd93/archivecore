@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api, { setAccessToken, getAccessToken } from '@/services/api';
+import api, { AUTH_SESSION_EXPIRED_EVENT, setAccessToken } from '@/services/api';
 
 interface User {
   id: string;
@@ -7,6 +7,7 @@ interface User {
   firstName: string;
   lastName: string;
   tenantId: string | null;
+  department: string | null;
   roles: string[];
   permissions: string[];
   tenant?: { id: string; name: string; shortCode: string } | null;
@@ -29,6 +30,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setUser(null);
+      setAccessToken(null);
+    };
+
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, []);
+
   const fetchMe = useCallback(async () => {
     try {
       const { data } = await api.get('/users/me');
@@ -45,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         firstName: userData.firstName,
         lastName: userData.lastName,
         tenantId: userData.tenantId,
+        department: userData.department,
         roles,
         permissions: [...new Set(permissions)] as string[],
         tenant: userData.tenant,

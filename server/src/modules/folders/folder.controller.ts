@@ -8,7 +8,7 @@ export class FolderController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { skip, take, page, limit } = parsePagination(req.query as any);
-      const { data, total } = await folderService.list(req.params.boxId, req.tenantId, skip, take);
+      const { data, total } = await folderService.list(req.params.boxId, req.tenantId, skip, take, req.accessDepartment || undefined);
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }
@@ -16,7 +16,7 @@ export class FolderController {
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const folder = await folderService.getById(req.params.id, req.tenantId);
+      const folder = await folderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, folder);
     } catch (err) { next(err); }
   }

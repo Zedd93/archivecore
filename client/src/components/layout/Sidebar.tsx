@@ -119,7 +119,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               {user?.firstName} {user?.lastName}
             </div>
             <div className="text-xs text-gray-500 truncate">
-              {user?.tenant?.name || t('layout.superAdmin')}
+              {user?.tenant?.name || (user?.roles.includes('SA') ? t('layout.superAdmin') : t('layout.globalDoxart'))}
             </div>
           </div>
         </div>

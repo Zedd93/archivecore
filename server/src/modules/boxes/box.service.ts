@@ -3,9 +3,10 @@ import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export class BoxService {
-  async list(tenantId: string, filters: any, skip: number, take: number) {
+  async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
     const where: Prisma.BoxWhereInput = { tenantId };
 
+    if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
     if (filters.docType) where.docType = filters.docType;
     if (filters.locationId) where.locationId = filters.locationId;
@@ -35,9 +36,9 @@ export class BoxService {
     return { data, total };
   }
 
-  async getById(id: string, tenantId: string) {
+  async getById(id: string, tenantId: string, department?: string) {
     const box = await prisma.box.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}) },
       include: {
         location: { select: { id: true, fullPath: true, code: true, name: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
@@ -90,6 +91,7 @@ export class BoxService {
         boxNumber,
         qrCode,
         docType: data.docType,
+        department: data.department?.trim() || null,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
         keywords: data.keywords || [],
@@ -125,6 +127,7 @@ export class BoxService {
       data: {
         title: data.title,
         docType: data.docType,
+        department: data.department === undefined ? undefined : data.department.trim() || null,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
         keywords: data.keywords,

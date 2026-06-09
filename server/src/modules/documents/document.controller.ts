@@ -8,7 +8,7 @@ export class DocumentController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { skip, take, page, limit } = parsePagination(req.query as any);
-      const { data, total } = await documentService.list(req.tenantId, req.query, skip, take);
+      const { data, total } = await documentService.list(req.tenantId, req.query, skip, take, req.accessDepartment || undefined);
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }
@@ -16,7 +16,7 @@ export class DocumentController {
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const doc = await documentService.getById(req.params.id, req.tenantId);
+      const doc = await documentService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, doc);
     } catch (err) { next(err); }
   }

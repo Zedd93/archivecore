@@ -5,6 +5,7 @@ declare global {
     interface Request {
       user?: IJwtPayload;
       tenantId?: string | null;
+      accessDepartment?: string | null;
     }
   }
 }

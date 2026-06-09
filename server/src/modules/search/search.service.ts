@@ -19,7 +19,7 @@ export class SearchService {
     types?: string[];
     limit?: number;
     offset?: number;
-  } = {}): Promise<{ results: SearchResult[]; total: number }> {
+  } = {}, department?: string): Promise<{ results: SearchResult[]; total: number }> {
     const limit = options.limit || 20;
     const offset = options.offset || 0;
     const types = options.types || ['box', 'folder', 'document', 'hr_folder'];
@@ -31,6 +31,7 @@ export class SearchService {
       const boxes = await prisma.box.findMany({
         where: {
           tenantId,
+          ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
           OR: [
             { qrCode: trimmedQuery },
             { boxNumber: { equals: trimmedQuery, mode: 'insensitive' } },
@@ -64,13 +65,13 @@ export class SearchService {
     const searchPromises: Promise<void>[] = [];
 
     if (types.includes('box')) {
-      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('folder')) {
-      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
       searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
@@ -87,11 +88,12 @@ export class SearchService {
     return { results: paginated, total };
   }
 
-  private async searchBoxes(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
+  private async searchBoxes(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
     // Use pg_trgm similarity via raw query for better relevance scoring
     const boxes = await prisma.box.findMany({
       where: {
         tenantId,
+        ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
         OR: [
           { title: { contains: query, mode: 'insensitive' } },
           { boxNumber: { contains: query, mode: 'insensitive' } },
@@ -117,10 +119,11 @@ export class SearchService {
     }));
   }
 
-  private async searchFolders(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
+  private async searchFolders(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
     const folders = await prisma.folder.findMany({
       where: {
         tenantId,
+        ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
         OR: [
           { title: { contains: query, mode: 'insensitive' } },
           { folderNumber: { contains: query, mode: 'insensitive' } },
@@ -144,10 +147,11 @@ export class SearchService {
     }));
   }
 
-  private async searchDocuments(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
+  private async searchDocuments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
     const documents = await prisma.document.findMany({
       where: {
         tenantId,
+        ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
         OR: [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },

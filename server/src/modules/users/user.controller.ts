@@ -22,7 +22,7 @@ export class UserController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await userService.create(req.body, req.tenantId || null, req.user?.userId);
+      const user = await userService.create(req.body, req.tenantId || null, req.user!);
       return successResponse(res, user, 201);
     } catch (err) { next(err); }
   }
@@ -36,7 +36,14 @@ export class UserController {
 
   async assignRoles(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await userService.assignRoles(req.params.id, req.body.roleIds, req.user!.userId);
+      const user = await userService.assignRoles(req.params.id, req.body.roleIds, req.user!, req.tenantId || null);
+      return successResponse(res, user);
+    } catch (err) { next(err); }
+  }
+
+  async updateAccess(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await userService.updateAccess(req.params.id, req.body, req.tenantId || null, req.user!);
       return successResponse(res, user);
     } catch (err) { next(err); }
   }

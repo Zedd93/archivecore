@@ -5,7 +5,7 @@ import { tenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createUserSchema, updateUserSchema, assignRolesSchema } from '@archivecore/shared';
+import { Permissions, createUserSchema, updateUserSchema, assignRolesSchema, updateUserAccessSchema } from '@archivecore/shared';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -21,6 +21,7 @@ router.get('/', ...auth, requirePermission(Permissions.USER_MANAGE), (req, res, 
 router.get('/:id', ...auth, requirePermission(Permissions.USER_MANAGE), (req, res, next) => userController.getById(req, res, next));
 router.post('/', ...auth, requirePermission(Permissions.USER_MANAGE), validate(createUserSchema), auditLog('user', 'user.create'), (req, res, next) => userController.create(req, res, next));
 router.put('/:id', ...auth, requirePermission(Permissions.USER_MANAGE), validate(updateUserSchema), auditLog('user', 'user.update'), (req, res, next) => userController.update(req, res, next));
+router.patch('/:id/access', ...auth, requirePermission(Permissions.USER_MANAGE), validate(updateUserAccessSchema), auditLog('user', 'user.update_access'), (req, res, next) => userController.updateAccess(req, res, next));
 router.patch('/:id/roles', ...auth, requirePermission(Permissions.USER_MANAGE), validate(assignRolesSchema), auditLog('user', 'user.assign_roles'), (req, res, next) => userController.assignRoles(req, res, next));
 router.patch('/:id/deactivate', ...auth, requirePermission(Permissions.USER_MANAGE), auditLog('user', 'user.deactivate'), (req, res, next) => userController.deactivate(req, res, next));
 

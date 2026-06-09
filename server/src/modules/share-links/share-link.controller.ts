@@ -18,7 +18,9 @@ export class ShareLinkController {
       }
 
       const tenantId = (req as any).tenantId;
-      const userId = (req as any).userId;
+      const userId = req.user!.userId;
+
+      await ShareLinkService.verifyDepartmentAccess(entityType, entityId, tenantId, req.accessDepartment);
 
       const link = await ShareLinkService.create({
         tenantId,
@@ -36,7 +38,7 @@ export class ShareLinkController {
         shareUrl,
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(error.statusCode || 500).json({ error: error.message });
     }
   }
 
@@ -49,7 +51,7 @@ export class ShareLinkController {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 20;
 
-      const result = await ShareLinkService.list(tenantId, page, limit);
+      const result = await ShareLinkService.list(tenantId, page, limit, req.accessDepartment);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -64,10 +66,10 @@ export class ShareLinkController {
       const tenantId = (req as any).tenantId;
       const { id } = req.params;
 
-      await ShareLinkService.delete(id, tenantId);
+      await ShareLinkService.delete(id, tenantId, req.accessDepartment);
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(error.statusCode || 500).json({ error: error.message });
     }
   }
 

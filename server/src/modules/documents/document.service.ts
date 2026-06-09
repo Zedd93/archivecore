@@ -2,8 +2,8 @@ import { prisma } from '../../config/database';
 import { Prisma, Confidentiality } from '@prisma/client';
 
 export class DocumentService {
-  async list(tenantId: string, filters: any, skip: number, take: number) {
-    const where: Prisma.DocumentWhereInput = { tenantId };
+  async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
+    const where: Prisma.DocumentWhereInput = { tenantId, ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}) };
 
     if (filters.folderId) where.folderId = filters.folderId;
     if (filters.boxId) where.boxId = filters.boxId;
@@ -34,9 +34,9 @@ export class DocumentService {
     return { data, total };
   }
 
-  async getById(id: string, tenantId: string) {
+  async getById(id: string, tenantId: string, department?: string) {
     const doc = await prisma.document.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}) },
       include: {
         folder: { select: { id: true, folderNumber: true, title: true, boxId: true } },
         box: { select: { id: true, boxNumber: true, title: true } },

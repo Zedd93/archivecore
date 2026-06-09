@@ -2,8 +2,8 @@ import { prisma } from '../../config/database';
 import { Prisma, FolderStatus } from '@prisma/client';
 
 export class FolderService {
-  async list(boxId: string, tenantId: string, skip: number, take: number) {
-    const where: Prisma.FolderWhereInput = { boxId, tenantId };
+  async list(boxId: string, tenantId: string, skip: number, take: number, department?: string) {
+    const where: Prisma.FolderWhereInput = { boxId, tenantId, ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}) };
 
     const [data, total] = await Promise.all([
       prisma.folder.findMany({
@@ -21,9 +21,9 @@ export class FolderService {
     return { data, total };
   }
 
-  async getById(id: string, tenantId: string) {
+  async getById(id: string, tenantId: string, department?: string) {
     const folder = await prisma.folder.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}) },
       include: {
         box: { select: { id: true, boxNumber: true, title: true } },
         documents: {

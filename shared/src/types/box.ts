@@ -10,6 +10,7 @@ export interface IBox {
   title: string;
   description: string | null;
   docType: string | null;
+  department: string | null;
   dateFrom: string | null;
   dateTo: string | null;
   keywords: string[];
@@ -34,6 +35,7 @@ export interface IBoxWithDetails extends IBox {
 export interface ICreateBox {
   title: string;
   docType?: string;
+  department?: string;
   dateFrom?: string;
   dateTo?: string;
   keywords?: string[];

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useList } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
 import { Search, Bell, LogOut, Settings, ChevronDown, Menu } from 'lucide-react';
 
@@ -9,7 +10,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuToggle }: HeaderProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,6 +18,9 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   const [showBellTooltip, setShowBellTooltip] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const bellTooltipRef = useRef<HTMLDivElement>(null);
+  const canChooseTenant = !!user && !user.tenantId && (hasPermission('tenant.manage') || hasPermission('tenant.switch'));
+  const { data: tenants } = useList('header-tenants', '/tenants', { page: 1, limit: 100 }, { enabled: canChooseTenant });
+  const activeTenantId = localStorage.getItem('tenantId') || '';
 
   // Close bell tooltip when clicking outside
   useEffect(() => {
@@ -38,6 +42,15 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     if (searchQuery.trim().length >= 2) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
+  };
+
+  const handleTenantChange = (tenantId: string) => {
+    if (tenantId) {
+      localStorage.setItem('tenantId', tenantId);
+    } else {
+      localStorage.removeItem('tenantId');
+    }
+    window.location.reload();
   };
 
   return (
@@ -80,6 +93,19 @@ export default function Header({ onMenuToggle }: HeaderProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-2 lg:gap-4 ml-4">
+        {canChooseTenant && (
+          <select
+            value={activeTenantId}
+            onChange={(e) => handleTenantChange(e.target.value)}
+            className="input-field max-w-56 text-sm py-2"
+            aria-label={t('layout.activeTenant')}
+          >
+            <option value="">{t('layout.chooseTenant')}</option>
+            {tenants?.data?.map((tenant: any) => (
+              <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+            ))}
+          </select>
+        )}
         {/* Notifications */}
         <div className="relative">
           <button

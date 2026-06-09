@@ -195,6 +195,7 @@ model User {
   firstName     String    @db.VarChar(100)
   lastName      String    @db.VarChar(100)
   phone         String?   @db.VarChar(20)
+  department    String?   @db.VarChar(200)
   isActive      Boolean   @default(true)
   mfaEnabled    Boolean   @default(false)
   mfaSecret     String?   @db.VarChar(255)
@@ -299,6 +300,7 @@ model Box {
   title             String    @db.VarChar(500)
   description       String?   @db.Text
   docType           String?   @db.VarChar(100)
+  department        String?   @db.VarChar(200)
   dateFrom          DateTime? @db.Date
   dateTo            DateTime? @db.Date
   keywords          String[]  @default([])
@@ -326,6 +328,7 @@ model Box {
   transferListItems TransferListItem[]
 
   @@index([tenantId, status])
+  @@index([tenantId, department])
   @@index([qrCode])
   @@index([barcode])
   @@index([boxNumber])

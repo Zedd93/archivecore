@@ -27,7 +27,7 @@ export class AttachmentController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { skip, take, page, limit } = parsePagination(req.query as any);
-      const { data, total } = await attachmentService.list(req.tenantId, req.query, skip, take);
+      const { data, total } = await attachmentService.list(req.tenantId, req.query, skip, take, req.accessDepartment || undefined);
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }
@@ -35,7 +35,7 @@ export class AttachmentController {
   async getDownloadUrl(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const url = await attachmentService.getDownloadUrl(req.params.id, req.tenantId);
+      const url = await attachmentService.getDownloadUrl(req.params.id, req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, { url });
     } catch (err) { next(err); }
   }

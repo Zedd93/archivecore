@@ -8,7 +8,7 @@ export class BoxController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { skip, take, page, limit } = parsePagination(req.query as any);
-      const { data, total } = await boxService.list(req.tenantId, req.query, skip, take);
+      const { data, total } = await boxService.list(req.tenantId, req.query, skip, take, req.accessDepartment || undefined);
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }
@@ -16,7 +16,7 @@ export class BoxController {
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const box = await boxService.getById(req.params.id, req.tenantId);
+      const box = await boxService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, box);
     } catch (err) { next(err); }
   }
@@ -80,6 +80,7 @@ export class BoxController {
   async getHistory(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      await boxService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
       const history = await boxService.getHistory(req.params.id, req.tenantId);
       return successResponse(res, history);
     } catch (err) { next(err); }

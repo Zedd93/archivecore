@@ -9,6 +9,7 @@ import { encryptAES256, hmacSha256 } from '../../utils/crypto';
 const boxImportRowSchema = z.object({
   title: z.string().min(1, 'Tytuł jest wymagany').max(500),
   docType: z.string().max(100).optional(),
+  department: z.string().max(200).optional(),
   description: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -31,6 +32,7 @@ const hrImportRowSchema = z.object({
 const BOX_COLUMN_MAP: Record<string, string> = {
   'tytuł': 'title', 'tytul': 'title', 'title': 'title',
   'typ dokumentów': 'docType', 'typ dokumentow': 'docType', 'typ dok.': 'docType', 'doctype': 'docType', 'document type': 'docType',
+  'dział': 'department', 'dzial': 'department', 'department': 'department',
   'opis': 'description', 'description': 'description',
   'uwagi': 'notes', 'notes': 'notes',
 };
@@ -165,6 +167,7 @@ export class ImportService {
             qrCode,
             title: result.data.title,
             docType: result.data.docType || null,
+            department: result.data.department?.trim() || null,
             description: result.data.description || null,
             notes: result.data.notes || null,
             status: 'active',

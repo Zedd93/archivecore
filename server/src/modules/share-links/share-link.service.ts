@@ -4,6 +4,24 @@ import crypto from 'crypto';
 const prisma = new PrismaClient();
 
 export class ShareLinkService {
+  static async verifyDepartmentAccess(entityType: string, entityId: string, tenantId: string, department?: string | null) {
+    if (!department) return;
+    if (entityType !== 'box') {
+      throw Object.assign(new Error('Pracownik działu może udostępniać wyłącznie dostępne kartony'), { statusCode: 403 });
+    }
+    const box = await prisma.box.findFirst({
+      where: {
+        id: entityId,
+        tenantId,
+        department: { equals: department, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (!box) {
+      throw Object.assign(new Error('Brak dostępu do tego kartonu'), { statusCode: 403 });
+    }
+  }
+
   /**
    * Create a new share link for an entity
    */
@@ -35,12 +53,21 @@ export class ShareLinkService {
   /**
    * List share links for a tenant
    */
-  static async list(tenantId: string, page = 1, limit = 20) {
+  static async list(tenantId: string, page = 1, limit = 20, department?: string | null) {
     const skip = (page - 1) * limit;
+    const accessibleBoxes = department
+      ? await prisma.box.findMany({
+          where: { tenantId, department: { equals: department, mode: 'insensitive' } },
+          select: { id: true },
+        })
+      : [];
+    const where = department
+      ? { tenantId, entityType: 'box', entityId: { in: accessibleBoxes.map((box) => box.id) } }
+      : { tenantId };
 
     const [data, total] = await Promise.all([
       prisma.shareLink.findMany({
-        where: { tenantId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -48,7 +75,7 @@ export class ShareLinkService {
           creator: { select: { firstName: true, lastName: true, email: true } },
         },
       }),
-      prisma.shareLink.count({ where: { tenantId } }),
+      prisma.shareLink.count({ where }),
     ]);
 
     return {
@@ -141,7 +168,12 @@ export class ShareLinkService {
   /**
    * Delete a share link
    */
-  static async delete(id: string, tenantId: string) {
+  static async delete(id: string, tenantId: string, department?: string | null) {
+    if (department) {
+      const link = await prisma.shareLink.findFirst({ where: { id, tenantId } });
+      if (!link) return { count: 0 };
+      await this.verifyDepartmentAccess(link.entityType, link.entityId, tenantId, department);
+    }
     return prisma.shareLink.deleteMany({
       where: { id, tenantId },
     });

@@ -2,8 +2,22 @@ import { prisma } from '../../config/database';
 import { uploadFile, getPresignedUrl, deleteFile } from '../../config/minio';
 import crypto from 'crypto';
 import path from 'path';
+import { Prisma } from '@prisma/client';
 
 export class AttachmentService {
+  private accessWhere(tenantId: string, department?: string): Prisma.AttachmentWhereInput {
+    return {
+      tenantId,
+      ...(department ? {
+        OR: [
+          { box: { department: { equals: department, mode: 'insensitive' } } },
+          { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+          { document: { box: { department: { equals: department, mode: 'insensitive' } } } },
+        ],
+      } : {}),
+    };
+  }
+
   async upload(
     file: Express.Multer.File,
     tenantId: string,
@@ -43,9 +57,9 @@ export class AttachmentService {
     };
   }
 
-  async getById(id: string, tenantId: string) {
+  async getById(id: string, tenantId: string, department?: string) {
     const attachment = await prisma.attachment.findFirst({
-      where: { id, tenantId },
+      where: { id, ...this.accessWhere(tenantId, department) },
       include: {
         uploader: { select: { id: true, firstName: true, lastName: true } },
         document: { select: { id: true, title: true } },
@@ -57,13 +71,13 @@ export class AttachmentService {
     return attachment;
   }
 
-  async getDownloadUrl(id: string, tenantId: string): Promise<string> {
-    const attachment = await this.getById(id, tenantId);
+  async getDownloadUrl(id: string, tenantId: string, department?: string): Promise<string> {
+    const attachment = await this.getById(id, tenantId, department);
     return getPresignedUrl(attachment.filePath, 900); // 15 min
   }
 
-  async list(tenantId: string, filters: any, skip: number, take: number) {
-    const where: any = { tenantId };
+  async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
+    const where: Prisma.AttachmentWhereInput = this.accessWhere(tenantId, department);
     if (filters.boxId) where.boxId = filters.boxId;
     if (filters.folderId) where.folderId = filters.folderId;
     if (filters.documentId) where.documentId = filters.documentId;

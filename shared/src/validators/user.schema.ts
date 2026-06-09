@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ASSIGNABLE_ROLE_CODES } from '../constants/roles';
 
 export const createUserSchema = z.object({
   email: z.string().email('Nieprawidłowy adres email'),
@@ -7,7 +8,8 @@ export const createUserSchema = z.object({
   lastName: z.string().min(1, 'Nazwisko jest wymagane').max(100),
   phone: z.string().max(20).optional(),
   tenantId: z.string().uuid().optional(),
-  roleIds: z.array(z.string().uuid()).optional(),
+  department: z.string().min(1, 'Dział jest wymagany').max(200).optional(),
+  roleCode: z.enum(ASSIGNABLE_ROLE_CODES),
 });
 
 export const updateUserSchema = z.object({
@@ -29,6 +31,12 @@ export const changePasswordSchema = z.object({
 
 export const assignRolesSchema = z.object({
   roleIds: z.array(z.string().uuid()).min(1, 'At least one role required'),
+});
+
+export const updateUserAccessSchema = z.object({
+  tenantId: z.string().uuid().optional(),
+  department: z.string().min(1, 'Dział jest wymagany').max(200).optional(),
+  roleCode: z.enum(ASSIGNABLE_ROLE_CODES),
 });
 
 export const totpVerifySchema = z.object({

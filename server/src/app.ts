@@ -30,6 +30,9 @@ import { ShareLinkController } from './modules/share-links/share-link.controller
 const app = express();
 
 // ─── Global Middleware ────────────────────────────────────
+// Requests in production pass through the nginx service in docker-compose.
+// Trust one hop so req.secure follows X-Forwarded-Proto after TLS termination.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: config.corsOrigin,

@@ -1,6 +1,17 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, CookieOptions } from 'express';
 import { authService } from './auth.service';
 import { successResponse, errorResponse } from '../../utils/response';
+
+const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+function refreshTokenCookieOptions(req: Request): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: req.secure,
+    sameSite: 'strict',
+    path: '/',
+  };
+}
 
 export class AuthController {
   async login(req: Request, res: Response, next: NextFunction) {
@@ -17,10 +28,8 @@ export class AuthController {
 
       // Set refresh token as httpOnly cookie
       res.cookie('refreshToken', loginResult.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        ...refreshTokenCookieOptions(req),
+        maxAge: REFRESH_TOKEN_MAX_AGE,
       });
 
       return successResponse(res, {
@@ -38,10 +47,8 @@ export class AuthController {
       const result = await authService.validateTwoFactor(tempToken, totpCode);
 
       res.cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        ...refreshTokenCookieOptions(req),
+        maxAge: REFRESH_TOKEN_MAX_AGE,
       });
 
       return successResponse(res, {
@@ -80,10 +87,8 @@ export class AuthController {
       const result = await authService.refreshToken(token);
 
       res.cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        ...refreshTokenCookieOptions(req),
+        maxAge: REFRESH_TOKEN_MAX_AGE,
       });
 
       return successResponse(res, { accessToken: result.accessToken });
@@ -96,12 +101,7 @@ export class AuthController {
     try {
       const token = req.cookies?.refreshToken;
       if (token) await authService.logout(token);
-      res.clearCookie('refreshToken', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        path: '/',
-      });
+      res.clearCookie('refreshToken', refreshTokenCookieOptions(req));
       return successResponse(res, { message: 'Wylogowano' });
     } catch (err) {
       next(err);

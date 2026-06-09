@@ -5,6 +5,7 @@ export interface IUser {
   firstName: string;
   lastName: string;
   phone: string | null;
+  department: string | null;
   isActive: boolean;
   mfaEnabled: boolean;
   lastLoginAt: string | null;
@@ -24,7 +25,8 @@ export interface ICreateUser {
   lastName: string;
   phone?: string;
   tenantId?: string;
-  roleIds?: string[];
+  department?: string;
+  roleCode: string;
 }
 
 export interface IUpdateUser {

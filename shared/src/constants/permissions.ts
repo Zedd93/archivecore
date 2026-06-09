@@ -3,6 +3,7 @@ export const Permissions = {
   // System
   SYSTEM_CONFIG: 'system.config',
   TENANT_MANAGE: 'tenant.manage',
+  TENANT_SWITCH: 'tenant.switch',
   USER_MANAGE: 'user.manage',
 
   // Boxes
@@ -83,6 +84,42 @@ import { RoleCode } from './roles';
 
 export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
   [RoleCode.SUPER_ADMIN]: Object.values(Permissions),
+
+  [RoleCode.DOXART_ADMIN]: [
+    Permissions.TENANT_SWITCH,
+    Permissions.BOX_READ, Permissions.BOX_WRITE, Permissions.BOX_DELETE, Permissions.BOX_MOVE, Permissions.BOX_STATUS,
+    Permissions.FOLDER_READ, Permissions.FOLDER_WRITE,
+    Permissions.DOCUMENT_READ, Permissions.DOCUMENT_WRITE,
+    Permissions.LOCATION_READ, Permissions.LOCATION_WRITE,
+    Permissions.ORDER_READ, Permissions.ORDER_CREATE, Permissions.ORDER_APPROVE, Permissions.ORDER_PROCESS, Permissions.ORDER_COMPLETE,
+    Permissions.LABEL_READ, Permissions.LABEL_GENERATE,
+    Permissions.ATTACHMENT_READ, Permissions.ATTACHMENT_UPLOAD, Permissions.ATTACHMENT_DELETE,
+    Permissions.SEARCH_ALL, Permissions.SEARCH_OWN,
+    Permissions.REPORT_VIEW, Permissions.REPORT_EXPORT,
+    Permissions.AUDIT_VIEW,
+    Permissions.RETENTION_MANAGE, Permissions.DISPOSAL_INITIATE,
+    Permissions.IMPORT_DATA, Permissions.EXPORT_DATA,
+    Permissions.INVENTORY_MANAGE,
+    Permissions.TRANSFER_LIST_READ, Permissions.TRANSFER_LIST_WRITE, Permissions.TRANSFER_LIST_IMPORT,
+  ],
+
+  [RoleCode.TENANT_LEADERSHIP]: [
+    Permissions.BOX_READ,
+    Permissions.FOLDER_READ,
+    Permissions.DOCUMENT_READ,
+    Permissions.HR_VIEW,
+    Permissions.ATTACHMENT_READ,
+    Permissions.SEARCH_OWN,
+    Permissions.REPORT_VIEW,
+  ],
+
+  [RoleCode.TENANT_EMPLOYEE]: [
+    Permissions.BOX_READ,
+    Permissions.FOLDER_READ,
+    Permissions.DOCUMENT_READ,
+    Permissions.ATTACHMENT_READ,
+    Permissions.SEARCH_OWN,
+  ],
 
   [RoleCode.ADMIN_TENANT]: [
     Permissions.USER_MANAGE,

@@ -11,6 +11,7 @@ export interface ILoginResponse {
     firstName: string;
     lastName: string;
     tenantId: string | null;
+    department: string | null;
     roles: string[];
     permissions: string[];
   };
@@ -31,6 +32,7 @@ export interface ITwoFactorSetupResponse {
 export interface IJwtPayload {
   userId: string;
   tenantId: string | null;
+  department: string | null;
   email: string;
   roles: string[];
   permissions: string[];
