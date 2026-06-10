@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { DOC_TYPES } from '../constants/statuses';
+
+const optionalDocTypeSchema = z.enum(DOC_TYPES).optional();
 
 const retentionRuleSchema = z.object({
   conditionField: z.string().min(1),
@@ -10,7 +13,7 @@ const retentionRuleSchema = z.object({
 
 export const createRetentionPolicySchema = z.object({
   name: z.string().min(1, 'Nazwa jest wymagana').max(200),
-  docType: z.string().max(100).optional(),
+  docType: optionalDocTypeSchema,
   retentionYears: z.number().int().min(1, 'Okres retencji musi wynosić min. 1 rok').max(100),
   retentionTrigger: z.enum(['end_date', 'creation_date']).default('creation_date'),
   description: z.string().max(1000).optional(),

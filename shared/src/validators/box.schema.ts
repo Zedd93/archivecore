@@ -1,8 +1,11 @@
 import { z } from 'zod';
+import { DOC_TYPES } from '../constants/statuses';
+
+const optionalDocTypeSchema = z.enum(DOC_TYPES).optional();
 
 export const createBoxSchema = z.object({
   title: z.string().min(1, 'Tytuł jest wymagany').max(500),
-  docType: z.string().max(100).optional(),
+  docType: optionalDocTypeSchema,
   department: z.string().max(200).optional(),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -43,7 +46,7 @@ export const bulkBoxMoveSchema = z.object({
 export const boxFilterSchema = z.object({
   tenantId: z.string().uuid().optional(),
   status: z.enum(['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged']).optional(),
-  docType: z.string().optional(),
+  docType: optionalDocTypeSchema,
   locationId: z.string().uuid().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),

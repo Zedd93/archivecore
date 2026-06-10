@@ -60,7 +60,6 @@ export default function BoxListPage() {
     resolver: zodResolver(createBoxSchema),
     defaultValues: {
       title: '',
-      docType: '',
       department: '',
       description: '',
       notes: '',
@@ -318,7 +317,7 @@ export default function BoxListPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <FormField label={t('boxes.createModal.fieldDocType')} error={errors.docType?.message}>
-              <select {...register('docType')} className="input-field">
+              <select {...register('docType', { setValueAs: (value) => value || undefined })} className="input-field">
                 <option value="">{t('common.all')}</option>
                 {DOC_TYPES.map(dt => (
                   <option key={dt} value={dt}>{t(`docTypes.${dt}`, { defaultValue: dt })}</option>

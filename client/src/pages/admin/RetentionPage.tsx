@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useCreate } from '@/hooks/useApi';
+import { DOC_TYPES } from '@archivecore/shared';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { Plus, Clock, AlertTriangle, Loader2 } from 'lucide-react';
@@ -117,7 +118,15 @@ export default function RetentionPage() {
         <form onSubmit={handleCreatePolicy} className="space-y-4">
           <div><label htmlFor="retention-create-name" className="label-text">{t('common.name')} *</label><input id="retention-create-name" name="name" className="input-field" required /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label htmlFor="retention-create-docType" className="label-text">{t('admin.retention.createModal.docType')}</label><input id="retention-create-docType" name="docType" className="input-field" placeholder="Np. akta_osobowe" /></div>
+            <div>
+              <label htmlFor="retention-create-docType" className="label-text">{t('admin.retention.createModal.docType')}</label>
+              <select id="retention-create-docType" name="docType" className="input-field">
+                <option value="">{t('common.all')}</option>
+                {DOC_TYPES.map((dt) => (
+                  <option key={dt} value={dt}>{t(`docTypes.${dt}`, { defaultValue: dt })}</option>
+                ))}
+              </select>
+            </div>
             <div><label htmlFor="retention-create-period" className="label-text">{t('admin.retention.createModal.period')} *</label><input id="retention-create-period" name="retentionYears" type="number" className="input-field" required min={1} max={100} /></div>
           </div>
           <div>
