@@ -89,7 +89,14 @@ export default function BoxDetailPage() {
   const handleEdit = async () => {
     setSaving(true);
     try {
-      await api.put(`/boxes/${id}`, editForm);
+      await api.put(`/boxes/${id}`, {
+        title: editForm.title,
+        docType: editForm.docType || undefined,
+        department: editForm.department || undefined,
+        description: editForm.description || undefined,
+        notes: editForm.notes || undefined,
+        locationId: editForm.locationId || undefined,
+      });
       toast.success(t('common.success'));
       setShowEditModal(false);
       queryClient.invalidateQueries({ queryKey: ['box'] });

@@ -3,6 +3,25 @@ import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export class BoxService {
+  private async validateBoxLocation(locationId?: string | null) {
+    if (!locationId) return;
+
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: { type: true },
+    });
+    if (!location) {
+      const err = new Error('Lokalizacja nie znaleziona');
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    if (['warehouse', 'zone', 'rack'].includes(location.type)) {
+      const err = new Error('Cannot place box at warehouse/zone/rack level. Use shelf, level, or slot.');
+      (err as any).statusCode = 400;
+      throw err;
+    }
+  }
+
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
     const where: Prisma.BoxWhereInput = { tenantId };
 
@@ -121,8 +140,10 @@ export class BoxService {
   }
 
   async update(id: string, tenantId: string, data: any) {
-    await this.getById(id, tenantId); // Verify access
-    return prisma.box.update({
+    const box = await this.getById(id, tenantId); // Verify access
+    await this.validateBoxLocation(data.locationId);
+
+    const updated = await prisma.box.update({
       where: { id },
       data: {
         title: data.title,
@@ -131,6 +152,7 @@ export class BoxService {
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
         keywords: data.keywords,
+        locationId: data.locationId,
         notes: data.notes,
         description: data.description,
         customFields: data.customFields,
@@ -141,21 +163,27 @@ export class BoxService {
         tenant: { select: { id: true, name: true, shortCode: true } },
       },
     });
+
+    if (data.locationId !== undefined && data.locationId !== box.locationId) {
+      if (box.locationId) {
+        await prisma.location.update({
+          where: { id: box.locationId },
+          data: { currentCount: { decrement: 1 } },
+        });
+      }
+      if (data.locationId) {
+        await prisma.location.update({
+          where: { id: data.locationId },
+          data: { currentCount: { increment: 1 } },
+        });
+      }
+    }
+
+    return updated;
   }
 
   async move(id: string, tenantId: string, locationId: string, notes?: string) {
-    // Validate location type - boxes cannot be placed at warehouse/zone/rack level
-    if (locationId) {
-      const location = await prisma.location.findUnique({
-        where: { id: locationId },
-        select: { type: true },
-      });
-      if (location && ['warehouse', 'zone', 'rack'].includes(location.type)) {
-        const err = new Error('Cannot place box at warehouse/zone/rack level. Use shelf, level, or slot.');
-        (err as any).statusCode = 400;
-        throw err;
-      }
-    }
+    await this.validateBoxLocation(locationId);
 
     const box = await this.getById(id, tenantId);
     const oldLocationId = box.locationId;
