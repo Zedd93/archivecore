@@ -10,6 +10,17 @@ const TRANSFER_LIST_STATUS_LABELS: Record<string, string> = {
   archived: 'Zarchiwizowany',
 };
 
+const RETENTION_PERIOD_LABELS: Record<string, string> = {
+  ten_years: '10 lat',
+  fifty_years: '50 lat',
+};
+
+const STORAGE_FORM_LABELS: Record<string, string> = {
+  paper: 'Papierowa',
+  digital: 'Elektroniczna',
+  hybrid: 'Hybrydowa',
+};
+
 // ─── Column definition for export ────────────────────────
 interface ExportColumn {
   header: string;
@@ -61,10 +72,10 @@ const HR_COLUMNS: ExportColumn[] = [
   { header: 'Stanowisko', key: 'position' },
   { header: 'Data zatrudnienia', key: 'employmentStart', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Data zakończenia', key: 'employmentEnd', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
-  { header: 'Okres retencji (lata)', key: 'retentionPeriod' },
+  { header: 'Okres retencji', key: 'retentionPeriod', transform: (v) => RETENTION_PERIOD_LABELS[v] || v },
   { header: 'Data końca retencji', key: 'retentionEndDate', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Status brakowania', key: 'disposalStatus', transform: (v) => DISPOSAL_STATUS_LABELS[v] || v },
-  { header: 'Forma przechowywania', key: 'storageForm' },
+  { header: 'Forma przechowywania', key: 'storageForm', transform: (v) => STORAGE_FORM_LABELS[v] || v },
   { header: 'Blokada sądowa', key: 'litigationHold', transform: (v) => v ? 'Tak' : 'Nie' },
   { header: 'Karton', key: 'box', transform: (_v, row) => row.box?.boxNumber || '' },
   { header: 'Liczba części', key: 'partsCount', transform: (_v, row) => row._count?.parts ?? 0 },
