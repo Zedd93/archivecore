@@ -6,6 +6,7 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import Modal from '@/components/ui/Modal';
 import LocationPicker from '@/components/ui/LocationPicker';
+import { useAuth } from '@/contexts/AuthContext';
 import { MapPin, ChevronRight, ChevronDown, Box, Plus, Loader2 } from 'lucide-react';
 
 interface LocationNode {
@@ -120,8 +121,9 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
 
 export default function LocationsPage() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canWriteLocations = hasPermission('location.write');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
   const [creating, setCreating] = useState(false);
@@ -150,7 +152,8 @@ export default function LocationsPage() {
       setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
       queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('common.genericError'));
+      const details = err.response?.data?.details;
+      toast.error(details?.[0]?.message || err.response?.data?.error || t('common.genericError'));
     } finally {
       setCreating(false);
     }
@@ -163,9 +166,11 @@ export default function LocationsPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t('locations.title')}</h1>
           <p className="text-sm text-gray-500">{t('locations.subtitle')}</p>
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={16} /> {t('locations.add')}
-        </button>
+        {canWriteLocations && (
+          <button type="button" onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
+            <Plus size={16} /> {t('locations.add')}
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -201,6 +206,7 @@ export default function LocationsPage() {
                 <option value="zone">{t('locations.typeZone')}</option>
                 <option value="rack">{t('locations.typeRack')}</option>
                 <option value="shelf">{t('locations.typeShelf')}</option>
+                <option value="level">{t('locations.typeLevel')}</option>
                 <option value="slot">{t('locations.typeSlot')}</option>
               </select>
             </div>

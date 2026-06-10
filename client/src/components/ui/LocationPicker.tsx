@@ -37,6 +37,7 @@ const TYPE_LABEL_KEYS: Record<string, string> = {
   zone: 'locations.typeZone',
   rack: 'locations.typeRack',
   shelf: 'locations.typeShelf',
+  level: 'locations.typeLevel',
   slot: 'locations.typeSlot',
 };
 
@@ -45,6 +46,7 @@ const TYPE_ICONS: Record<string, string> = {
   zone: '\u{1F4E6}',
   rack: '\u{1F5C4}\uFE0F',
   shelf: '\u{1F4DA}',
+  level: '\u{21B3}',
   slot: '\u{1F4CD}',
 };
 
@@ -53,6 +55,7 @@ const TYPE_BADGE_COLORS: Record<string, string> = {
   zone: 'badge-blue',
   rack: 'badge-yellow',
   shelf: 'badge-green',
+  level: 'badge-green',
   slot: 'badge-gray',
 };
 
