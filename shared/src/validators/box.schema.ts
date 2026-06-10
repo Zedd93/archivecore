@@ -31,17 +31,25 @@ export const changeBoxStatusSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const bulkBoxStatusSchema = z.object({
-  boxIds: z.array(z.string().uuid()).min(1, 'At least one box ID required'),
+const bulkBoxIdsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').optional(),
+  boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').optional(),
+}).refine((data) => (data.ids?.length || data.boxIds?.length), {
+  message: 'Wymagane co najmniej jedno ID kartonu',
+  path: ['ids'],
+}).transform((data) => ({
+  ids: data.ids ?? data.boxIds ?? [],
+}));
+
+export const bulkBoxStatusSchema = bulkBoxIdsSchema.and(z.object({
   status: z.enum(['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged']),
   notes: z.string().optional(),
-});
+}));
 
-export const bulkBoxMoveSchema = z.object({
-  boxIds: z.array(z.string().uuid()).min(1, 'At least one box ID required'),
+export const bulkBoxMoveSchema = bulkBoxIdsSchema.and(z.object({
   locationId: z.string().uuid('Location is required'),
   notes: z.string().optional(),
-});
+}));
 
 export const boxFilterSchema = z.object({
   tenantId: z.string().uuid().optional(),
