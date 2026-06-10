@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
@@ -140,12 +140,21 @@ function ProfileTab({ user }: { user: any }) {
 
 // ─── Security Tab ────────────────────────────────────────
 function SecurityTab() {
+  const { user } = useAuth();
   const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPasswords, setShowPasswords] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [mfaEnabled, setMfaEnabled] = useState(!!user?.mfaEnabled);
+  const [mfaSetup, setMfaSetup] = useState<{ secret: string; qrCodeUrl: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+
+  useEffect(() => {
+    setMfaEnabled(!!user?.mfaEnabled);
+  }, [user?.mfaEnabled]);
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
@@ -158,7 +167,7 @@ function SecurityTab() {
     }
     setSaving(true);
     try {
-      await api.post('/auth/change-password', { currentPassword, newPassword });
+      await api.post('/auth/change-password', { oldPassword: currentPassword, newPassword });
       toast.success(t('settings.security.passwordChanged'));
       setCurrentPassword('');
       setNewPassword('');
@@ -167,6 +176,34 @@ function SecurityTab() {
       toast.error(getApiErrorMessage(err, t('settings.security.passwordError')));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSetupMfa = async () => {
+    setMfaLoading(true);
+    try {
+      const { data } = await api.post('/auth/2fa/setup');
+      setMfaSetup(data.data);
+      setMfaCode('');
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('settings.security.twoFaSetupError')));
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleVerifyMfa = async () => {
+    setMfaLoading(true);
+    try {
+      await api.post('/auth/2fa/verify', { totpCode: mfaCode });
+      toast.success(t('settings.security.twoFaEnabled'));
+      setMfaEnabled(true);
+      setMfaSetup(null);
+      setMfaCode('');
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('settings.security.twoFaVerifyError')));
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -237,12 +274,86 @@ function SecurityTab() {
         <p className="text-sm text-gray-500 mb-3">
           {t('settings.security.twoFaDesc')}
         </p>
-        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-          <div>
-            <div className="text-sm font-medium text-gray-900">{t('settings.security.totp')}</div>
-            <div className="text-xs text-gray-500">{t('settings.security.totpDesc')}</div>
+        <div className="p-4 bg-gray-50 rounded-lg space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-gray-900">{t('settings.security.totp')}</div>
+              <div className="text-xs text-gray-500">{t('settings.security.totpDesc')}</div>
+            </div>
+            <span className={mfaEnabled ? 'badge-green' : 'badge-gray'}>
+              {mfaEnabled ? t('settings.security.twoFaEnabledBadge') : t('settings.security.twoFaDisabledBadge')}
+            </span>
           </div>
-          <span className="badge badge-gray">{t('settings.security.comingSoon')}</span>
+
+          {!mfaEnabled && !mfaSetup && (
+            <button
+              type="button"
+              onClick={handleSetupMfa}
+              disabled={mfaLoading}
+              className="btn-primary flex items-center gap-2"
+            >
+              {mfaLoading && <Loader2 size={16} className="animate-spin" />}
+              {t('settings.security.twoFaSetupButton')}
+            </button>
+          )}
+
+          {!mfaEnabled && mfaSetup && (
+            <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-5 items-start">
+              <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-center">
+                <img src={mfaSetup.qrCodeUrl} alt={t('settings.security.twoFaQrAlt')} className="w-56 h-56" />
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{t('settings.security.twoFaScanTitle')}</div>
+                  <p className="text-xs text-gray-500 mt-1">{t('settings.security.twoFaScanDesc')}</p>
+                </div>
+                <div>
+                  <label htmlFor="settings-security-mfa-secret" className="label-text">{t('settings.security.twoFaManualKey')}</label>
+                  <input
+                    id="settings-security-mfa-secret"
+                    value={mfaSetup.secret}
+                    readOnly
+                    className="input-field font-mono text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-security-mfa-code" className="label-text">{t('settings.security.twoFaCode')}</label>
+                  <input
+                    id="settings-security-mfa-code"
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="input-field text-center text-xl tracking-widest"
+                    placeholder="000000"
+                    inputMode="numeric"
+                    maxLength={6}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleVerifyMfa}
+                    disabled={mfaLoading || mfaCode.length !== 6}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {mfaLoading && <Loader2 size={16} className="animate-spin" />}
+                    {t('settings.security.twoFaVerifyButton')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMfaSetup(null); setMfaCode(''); }}
+                    disabled={mfaLoading}
+                    className="btn-secondary"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {mfaEnabled && (
+            <p className="text-xs text-green-700">{t('settings.security.twoFaEnabledDesc')}</p>
+          )}
         </div>
       </div>
     </div>

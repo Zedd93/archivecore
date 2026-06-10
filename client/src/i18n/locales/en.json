@@ -653,7 +653,20 @@
       "twoFaDesc": "An additional security layer for your account.",
       "totp": "TOTP (Authenticator)",
       "totpDesc": "Google Authenticator, Authy, etc.",
-      "comingSoon": "Coming soon"
+      "comingSoon": "Coming soon",
+      "twoFaEnabledBadge": "Enabled",
+      "twoFaDisabledBadge": "Disabled",
+      "twoFaSetupButton": "Set up 2FA",
+      "twoFaQrAlt": "QR code for 2FA setup",
+      "twoFaScanTitle": "Scan the QR code with an Authenticator app",
+      "twoFaScanDesc": "Then enter the 6-digit code from the app to activate 2FA on this account.",
+      "twoFaManualKey": "Manual key",
+      "twoFaCode": "App code",
+      "twoFaVerifyButton": "Enable 2FA",
+      "twoFaEnabled": "2FA has been enabled",
+      "twoFaEnabledDesc": "The next login will require a code from your authenticator app.",
+      "twoFaSetupError": "Could not start 2FA setup",
+      "twoFaVerifyError": "Could not verify the 2FA code"
     },
     "notifications": {
       "title": "Notifications",

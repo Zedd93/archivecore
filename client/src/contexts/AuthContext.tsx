@@ -8,6 +8,7 @@ interface User {
   lastName: string;
   tenantId: string | null;
   department: string | null;
+  mfaEnabled: boolean;
   roles: string[];
   permissions: string[];
   tenant?: { id: string; name: string; shortCode: string } | null;
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastName: userData.lastName,
         tenantId: userData.tenantId,
         department: userData.department,
+        mfaEnabled: userData.mfaEnabled,
         roles,
         permissions: [...new Set(permissions)] as string[],
         tenant: userData.tenant,
@@ -99,8 +101,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data } = await api.post('/auth/login', { email, password });
     const result = data.data;
 
-    if (result.requiresMfa) {
-      return { requiresMfa: true, mfaSessionToken: result.mfaSessionToken };
+    if (result.requiresTwoFactor || result.requiresMfa) {
+      return { requiresMfa: true, mfaSessionToken: result.tempToken || result.mfaSessionToken };
     }
 
     setAccessToken(result.accessToken);
@@ -109,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const verifyMfa = async (mfaSessionToken: string, code: string) => {
-    const { data } = await api.post('/auth/2fa/validate', { mfaSessionToken, code });
+    const { data } = await api.post('/auth/2fa/validate', { tempToken: mfaSessionToken, totpCode: code });
     setAccessToken(data.data.accessToken);
     await fetchMe();
   };

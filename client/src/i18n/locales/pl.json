@@ -653,7 +653,20 @@
       "twoFaDesc": "Dodatkowa warstwa zabezpieczeń dla Twojego konta.",
       "totp": "TOTP (Authenticator)",
       "totpDesc": "Google Authenticator, Authy itp.",
-      "comingSoon": "Wkrótce"
+      "comingSoon": "Wkrótce",
+      "twoFaEnabledBadge": "Włączone",
+      "twoFaDisabledBadge": "Wyłączone",
+      "twoFaSetupButton": "Skonfiguruj 2FA",
+      "twoFaQrAlt": "Kod QR do konfiguracji 2FA",
+      "twoFaScanTitle": "Zeskanuj kod QR aplikacją Authenticator",
+      "twoFaScanDesc": "Następnie wpisz 6-cyfrowy kod z aplikacji, aby aktywować 2FA na tym koncie.",
+      "twoFaManualKey": "Klucz ręczny",
+      "twoFaCode": "Kod z aplikacji",
+      "twoFaVerifyButton": "Włącz 2FA",
+      "twoFaEnabled": "2FA zostało włączone",
+      "twoFaEnabledDesc": "Przy kolejnym logowaniu system poprosi o kod z aplikacji uwierzytelniającej.",
+      "twoFaSetupError": "Nie udało się rozpocząć konfiguracji 2FA",
+      "twoFaVerifyError": "Nie udało się zweryfikować kodu 2FA"
     },
     "notifications": {
       "title": "Powiadomienia",

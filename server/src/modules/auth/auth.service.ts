@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../../config/database';
 import { config } from '../../config/env';
@@ -73,15 +74,24 @@ export class AuthService {
   async setupTwoFactor(userId: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
+    if (user.mfaEnabled) {
+      throw Object.assign(new Error('2FA jest już włączone'), { statusCode: 400 });
+    }
 
     const { secret, otpauthUrl } = generateTotpSecret(user.email);
+    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 220,
+    });
+
     // Temporarily store encrypted secret (finalized on verify)
     await prisma.user.update({
       where: { id: userId },
       data: { mfaSecret: encryptAES256(secret) },
     });
 
-    return { secret, qrCodeUrl: otpauthUrl };
+    return { secret, otpauthUrl, qrCodeUrl: qrCodeDataUrl };
   }
 
   async verifyTwoFactorSetup(userId: string, totpCode: string) {

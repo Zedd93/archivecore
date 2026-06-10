@@ -43,7 +43,8 @@ export class AuthController {
 
   async validateTwoFactor(req: Request, res: Response, next: NextFunction) {
     try {
-      const { tempToken, totpCode } = req.body;
+      const tempToken = req.body.tempToken || req.body.mfaSessionToken;
+      const totpCode = req.body.totpCode || req.body.code;
       const result = await authService.validateTwoFactor(tempToken, totpCode);
 
       res.cookie('refreshToken', result.refreshToken, {
