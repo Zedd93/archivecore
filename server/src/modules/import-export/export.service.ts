@@ -91,27 +91,30 @@ export class ExportService {
    * Generic method: convert rows → XLSX buffer or CSV string
    */
   private toWorkbook(rows: any[], columns: ExportColumn[]): XLSX.WorkBook {
-    const sheetData = rows.map(row =>
-      columns.reduce((acc, col) => {
+    const sheetRows = rows.map(row =>
+      columns.map(col => {
         const rawValue = row[col.key];
-        acc[col.header] = col.transform ? col.transform(rawValue, row) : (rawValue ?? '');
-        return acc;
-      }, {} as Record<string, any>)
+        const value = col.transform ? col.transform(rawValue, row) : rawValue;
+        return value ?? '';
+      })
     );
 
-    // When there are no data rows, create a sheet with just headers;
-    // json_to_sheet([]) produces an empty sheet without header row.
-    const ws = sheetData.length > 0
-      ? XLSX.utils.json_to_sheet(sheetData)
-      : XLSX.utils.aoa_to_sheet([columns.map(c => c.header)]);
+    const ws = XLSX.utils.aoa_to_sheet([
+      columns.map(c => c.header),
+      ...sheetRows,
+    ]);
+    ws['!ref'] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: sheetRows.length, c: Math.max(columns.length - 1, 0) },
+    });
 
     // Auto-size columns (approximate)
-    // Guard against empty sheetData — spreading an empty array into Math.max
+    // Guard against empty rows — spreading an empty array into Math.max
     // returns -Infinity, which breaks column width calculation.
-    const colWidths = columns.map(col => {
+    const colWidths = columns.map((col, index) => {
       const maxLen = Math.max(
         col.header.length,
-        ...(sheetData.length > 0 ? sheetData.map(r => String(r[col.header] ?? '').length) : [0])
+        ...(sheetRows.length > 0 ? sheetRows.map(r => String(r[index] ?? '').length) : [0])
       );
       return { wch: Math.min(maxLen + 2, 50) };
     });
