@@ -92,6 +92,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
     Permissions.DOCUMENT_READ, Permissions.DOCUMENT_WRITE,
     Permissions.LOCATION_READ, Permissions.LOCATION_WRITE,
     Permissions.ORDER_READ, Permissions.ORDER_CREATE, Permissions.ORDER_APPROVE, Permissions.ORDER_PROCESS, Permissions.ORDER_COMPLETE,
+    Permissions.HR_VIEW, Permissions.HR_WRITE, Permissions.HR_VIEW_PESEL,
     Permissions.LABEL_READ, Permissions.LABEL_GENERATE,
     Permissions.ATTACHMENT_READ, Permissions.ATTACHMENT_UPLOAD, Permissions.ATTACHMENT_DELETE,
     Permissions.SEARCH_ALL, Permissions.SEARCH_OWN,
