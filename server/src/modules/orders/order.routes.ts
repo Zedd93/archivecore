@@ -5,7 +5,7 @@ import { tenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createOrderSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema } from '@archivecore/shared';
+import { Permissions, createOrderSchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema } from '@archivecore/shared';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -18,6 +18,7 @@ router.get('/:id/custody', ...auth, requirePermission(Permissions.ORDER_READ), (
 
 // Create
 router.post('/', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(createOrderSchema), auditLog('order', 'order.create'), (req, res, next) => orderController.create(req, res, next));
+router.post('/:id/items', ...auth, requirePermission(Permissions.ORDER_CREATE, Permissions.ORDER_PROCESS), validate(addOrderItemSchema), auditLog('order_item', 'order_item.create'), (req, res, next) => orderController.addItem(req, res, next));
 
 // Status transitions
 router.patch('/:id/submit', ...auth, requirePermission(Permissions.ORDER_CREATE), auditLog('order', 'order.submit'), (req, res, next) => orderController.submit(req, res, next));

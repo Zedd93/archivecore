@@ -45,7 +45,7 @@ export interface ICreateOrder {
   orderType: OrderType;
   priority?: OrderPriority;
   notes?: string;
-  items: { boxId?: string; folderId?: string; hrFolderId?: string }[];
+  items: { boxId?: string; boxNumber?: string; folderId?: string; hrFolderId?: string }[];
 }
 
 export interface ICustodyEvent {

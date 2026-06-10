@@ -25,8 +25,16 @@ export class OrderController {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.create(req.body, req.tenantId, req.user!.userId);
+      const order = await orderService.create(req.body, req.tenantId, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, order, 201);
+    } catch (err) { next(err); }
+  }
+
+  async addItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const item = await orderService.addItem(req.params.id, req.tenantId, req.body, req.accessDepartment || undefined);
+      return successResponse(res, item, 201);
     } catch (err) { next(err); }
   }
 

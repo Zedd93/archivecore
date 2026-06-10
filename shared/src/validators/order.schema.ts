@@ -1,15 +1,22 @@
 import { z } from 'zod';
 
+const orderItemSchema = z.object({
+  boxId: z.string().uuid().optional(),
+  boxNumber: z.string().min(1).max(50).optional(),
+  folderId: z.string().uuid().optional(),
+  hrFolderId: z.string().uuid().optional(),
+}).refine((item) => item.boxId || item.boxNumber || item.folderId || item.hrFolderId, {
+  message: 'Pozycja musi wskazywać karton, teczkę albo akta osobowe',
+});
+
 export const createOrderSchema = z.object({
   orderType: z.enum(['checkout', 'return_order', 'transfer', 'disposal']),
   priority: z.enum(['normal', 'high', 'urgent']).default('normal'),
   notes: z.string().optional(),
-  items: z.array(z.object({
-    boxId: z.string().uuid().optional(),
-    folderId: z.string().uuid().optional(),
-    hrFolderId: z.string().uuid().optional(),
-  })).min(1, 'Zlecenie musi zawierać co najmniej jedną pozycję'),
+  items: z.array(orderItemSchema).min(1, 'Zlecenie musi zawierać co najmniej jedną pozycję'),
 });
+
+export const addOrderItemSchema = orderItemSchema;
 
 export const assignOrderSchema = z.object({
   assigneeId: z.string().uuid('Valid user ID required'),

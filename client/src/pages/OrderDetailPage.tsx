@@ -1,12 +1,18 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ActivityTimeline from '@/components/ui/ActivityTimeline';
 import ShareButton from '@/components/ui/ShareButton';
-import { ArrowLeft, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import BoxPicker from '@/components/ui/BoxPicker';
+import { CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus } from 'lucide-react';
 
 // Status flow steps
 const STATUS_STEPS = ['draft', 'submitted', 'approved', 'in_progress', 'ready', 'delivered', 'completed'];
@@ -16,8 +22,12 @@ export default function OrderDetailPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { hasPermission } = useAuth();
+  const queryClient = useQueryClient();
   const { data: order, isLoading } = useDetail('order', '/orders', id);
   const patchOrder = usePatch(['order', 'orders'], t('orders.detail.statusChanged'));
+  const [showAddBox, setShowAddBox] = useState(false);
+  const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
+  const [addingBoxes, setAddingBoxes] = useState(false);
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'), return_order: t('orders.typeReturn'),
@@ -40,6 +50,30 @@ export default function OrderDetailPage() {
 
   const handleAction = async (action: string) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}` });
+  };
+
+  const canAddItems = hasPermission('order.create') || hasPermission('order.process');
+
+  const handleAddBoxes = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!id || selectedBoxes.length === 0) return;
+
+    setAddingBoxes(true);
+    try {
+      await Promise.all(
+        selectedBoxes.map((box) => api.post(`/orders/${id}/items`, { boxId: box.id }))
+      );
+      toast.success(t('orders.detail.itemAdded', 'Karton dodany do zlecenia'));
+      setSelectedBoxes([]);
+      setShowAddBox(false);
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    } catch (err: any) {
+      const details = err.response?.data?.details;
+      toast.error(details?.[0]?.message || err.response?.data?.error || t('common.genericError'));
+    } finally {
+      setAddingBoxes(false);
+    }
   };
 
   return (
@@ -138,7 +172,14 @@ export default function OrderDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Items */}
         <div className="lg:col-span-2 card">
-          <h2 className="text-lg font-semibold mb-4">{t('orders.detail.items', { count: order.items?.length || 0 })}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">{t('orders.detail.items', { count: order.items?.length || 0 })}</h2>
+            {canAddItems && !['completed', 'cancelled'].includes(order.status) && (
+              <button type="button" onClick={() => setShowAddBox(true)} className="btn-secondary flex items-center gap-2 text-sm">
+                <Plus size={14} /> {t('orders.detail.addBox', 'Dodaj karton')}
+              </button>
+            )}
+          </div>
           {order.items?.length > 0 ? (
             <div className="space-y-2">
               {order.items.map((item: any) => (
@@ -222,6 +263,36 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={showAddBox}
+        onClose={() => { setShowAddBox(false); setSelectedBoxes([]); }}
+        title={t('orders.detail.addBoxTitle', 'Dodaj karton do zlecenia')}
+        size="lg"
+      >
+        <form onSubmit={handleAddBoxes} className="space-y-4">
+          <div>
+            <label className="label-text">{t('orders.createModal.boxIds')}</label>
+            <BoxPicker
+              value={selectedBoxes}
+              onChange={setSelectedBoxes}
+              placeholder={t('orders.createModal.boxIdsPlaceholder')}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={() => { setShowAddBox(false); setSelectedBoxes([]); }}
+              className="btn-secondary"
+            >
+              {t('common.cancel')}
+            </button>
+            <button type="submit" disabled={addingBoxes || selectedBoxes.length === 0} className="btn-primary">
+              {addingBoxes ? t('common.saving', 'Zapisywanie...') : t('orders.detail.addBox', 'Dodaj karton')}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

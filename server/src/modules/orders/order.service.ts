@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { Prisma, OrderStatus, OrderType, OrderPriority } from '@prisma/client';
+import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '@prisma/client';
 import { isValidTransition } from './order-state-machine';
 import { custodyService } from './custody.service';
 import { SLA_LEVELS, BUSINESS_HOURS } from '@archivecore/shared';
@@ -27,6 +27,34 @@ function calculateSlaDeadline(priority: string): Date {
 }
 
 export class OrderService {
+  private async resolveOrderItem(item: any, tenantId: string, department?: string) {
+    if (item.boxId || item.boxNumber) {
+      const box = await prisma.box.findFirst({
+        where: {
+          tenantId,
+          ...(item.boxId ? { id: item.boxId } : { boxNumber: item.boxNumber }),
+          ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!box) {
+        throw Object.assign(new Error('Karton nie istnieje albo nie masz do niego dostępu'), { statusCode: 404 });
+      }
+
+      return {
+        boxId: box.id,
+        itemStatus: OrderItemStatus.pending,
+      };
+    }
+
+    return {
+      folderId: item.folderId,
+      hrFolderId: item.hrFolderId,
+      itemStatus: OrderItemStatus.pending,
+    };
+  }
+
   async list(tenantId: string, filters: any, skip: number, take: number) {
     const where: Prisma.OrderWhereInput = { tenantId };
 
@@ -90,7 +118,7 @@ export class OrderService {
     return order;
   }
 
-  async create(data: any, tenantId: string, userId: string) {
+  async create(data: any, tenantId: string, userId: string, department?: string) {
     // Generate order number
     const year = new Date().getFullYear();
     const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
@@ -103,6 +131,9 @@ export class OrderService {
 
     // Calculate SLA deadline
     const slaDeadline = calculateSlaDeadline(data.priority || 'normal');
+    const resolvedItems = await Promise.all(
+      data.items.map((item: any) => this.resolveOrderItem(item, tenantId, department))
+    );
 
     const order = await prisma.order.create({
       data: {
@@ -115,12 +146,7 @@ export class OrderService {
         slaDeadline,
         notes: data.notes,
         items: {
-          create: data.items.map((item: any) => ({
-            boxId: item.boxId,
-            folderId: item.folderId,
-            hrFolderId: item.hrFolderId,
-            itemStatus: 'pending',
-          })),
+          create: resolvedItems,
         },
       },
       include: {
@@ -131,6 +157,27 @@ export class OrderService {
     });
 
     return order;
+  }
+
+  async addItem(orderId: string, tenantId: string, item: any, department?: string) {
+    const order = await this.getById(orderId, tenantId);
+    if (['completed', 'cancelled'].includes(order.status)) {
+      throw Object.assign(new Error('Nie można dodawać pozycji do zakończonego albo anulowanego zlecenia'), { statusCode: 400 });
+    }
+
+    const resolvedItem = await this.resolveOrderItem(item, tenantId, department);
+    return prisma.orderItem.create({
+      data: {
+        orderId,
+        ...resolvedItem,
+      },
+      include: {
+        box: { select: { id: true, boxNumber: true, title: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
+        folder: { select: { id: true, folderNumber: true, title: true } },
+        hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
+        picker: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
   }
 
   async updateStatus(id: string, tenantId: string, newStatus: OrderStatus, userId: string, notes?: string) {
