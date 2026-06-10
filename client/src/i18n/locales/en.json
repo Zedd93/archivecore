@@ -678,7 +678,12 @@
       "retentionDesc": "Upcoming retention/destruction deadlines",
       "weeklyReport": "Weekly report",
       "weeklyReportDesc": "Weekly activity summary",
-      "comingSoon": "Notification feature coming soon"
+      "comingSoon": "Notification feature coming soon",
+      "inAppActive": "In-app notifications are active",
+      "inAppDesc": "New events will appear under the bell in the top-right corner of the app.",
+      "eventsTitle": "Supported events",
+      "channelInApp": "In app",
+      "futureChannels": "Email and browser push notifications can be added as additional channels if needed."
     },
     "appearance": {
       "title": "Appearance",
@@ -724,6 +729,13 @@
     "chooseTenant": "Select client company",
     "superAdmin": "Super Admin",
     "globalDoxart": "Doxart",
+    "notifications": {
+      "title": "Notifications",
+      "empty": "No notifications",
+      "noUnread": "No unread notifications",
+      "unreadCount": "Unread: {{count}}",
+      "markAllRead": "Mark all as read"
+    },
     "nav": {
       "dashboard": "Dashboard",
       "boxes": "Boxes",

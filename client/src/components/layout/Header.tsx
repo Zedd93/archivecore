@@ -1,12 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useList } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
+import api from '@/services/api';
 import { Search, Bell, LogOut, Settings, ChevronDown, Menu } from 'lucide-react';
 
 interface HeaderProps {
   onMenuToggle: () => void;
+}
+
+interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  actionUrl?: string | null;
+  readAt?: string | null;
+  createdAt: string;
 }
 
 export default function Header({ onMenuToggle }: HeaderProps) {
@@ -15,27 +26,47 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
-  const [showBellTooltip, setShowBellTooltip] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
-  const bellTooltipRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
   const canChooseTenant = !!user && !user.tenantId && (hasPermission('tenant.manage') || hasPermission('tenant.switch'));
   const { data: tenants } = useList('header-tenants', '/tenants', { page: 1, limit: 100 }, { enabled: canChooseTenant });
+  const { data: notificationsData } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const { data } = await api.get('/notifications', { params: { limit: 8 } });
+      return data.data as { items: NotificationItem[]; unreadCount: number };
+    },
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+  const markRead = useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+  const markAllRead = useMutation({
+    mutationFn: () => api.post('/notifications/read-all'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
   const activeTenantId = localStorage.getItem('tenantId') || '';
+  const notifications = notificationsData?.items ?? [];
+  const unreadCount = notificationsData?.unreadCount ?? 0;
 
-  // Close bell tooltip when clicking outside
+  // Close notifications dropdown when clicking outside
   useEffect(() => {
-    if (!showBellTooltip) return;
+    if (!showNotifications) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (
         bellRef.current && !bellRef.current.contains(e.target as Node) &&
-        bellTooltipRef.current && !bellTooltipRef.current.contains(e.target as Node)
+        notificationsRef.current && !notificationsRef.current.contains(e.target as Node)
       ) {
-        setShowBellTooltip(false);
+        setShowNotifications(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showBellTooltip]);
+  }, [showNotifications]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +82,14 @@ export default function Header({ onMenuToggle }: HeaderProps) {
       localStorage.removeItem('tenantId');
     }
     window.location.reload();
+  };
+
+  const handleNotificationClick = async (notification: NotificationItem) => {
+    if (!notification.readAt) {
+      markRead.mutate(notification.id);
+    }
+    setShowNotifications(false);
+    if (notification.actionUrl) navigate(notification.actionUrl);
   };
 
   return (
@@ -110,18 +149,67 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         <div className="relative">
           <button
             ref={bellRef}
-            onClick={() => setShowBellTooltip(!showBellTooltip)}
+            onClick={() => setShowNotifications(!showNotifications)}
             className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-            aria-label="Notifications"
+            aria-label={t('layout.notifications.title')}
           >
             <Bell size={20} />
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
-          {showBellTooltip && (
+          {showNotifications && (
             <div
-              ref={bellTooltipRef}
-              className="absolute right-0 top-full mt-1 px-3 py-2 bg-white rounded-lg shadow-lg border border-gray-200 text-sm text-gray-600 whitespace-nowrap z-50"
+              ref={notificationsRef}
+              className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden"
             >
-              {t('settings.notifications.comingSoon')}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">{t('layout.notifications.title')}</div>
+                  <div className="text-xs text-gray-500">
+                    {unreadCount > 0
+                      ? t('layout.notifications.unreadCount', { count: unreadCount })
+                      : t('layout.notifications.noUnread')}
+                  </div>
+                </div>
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => markAllRead.mutate()}
+                    className="text-xs text-primary-700 hover:text-primary-800 font-medium"
+                  >
+                    {t('layout.notifications.markAllRead')}
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-96 overflow-auto">
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-gray-500">
+                    {t('layout.notifications.empty')}
+                  </div>
+                ) : notifications.map((notification) => (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => handleNotificationClick(notification)}
+                    className={`w-full text-left px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 ${notification.readAt ? 'bg-white' : 'bg-primary-50/60'}`}
+                  >
+                    <div className="flex gap-3">
+                      <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${notification.readAt ? 'bg-gray-300' : 'bg-primary-600'}`} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">{notification.title}</div>
+                        <div className="text-xs text-gray-600 mt-0.5">{notification.message}</div>
+                        <div className="text-[11px] text-gray-400 mt-1">
+                          {new Date(notification.createdAt).toLocaleString('pl-PL')}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

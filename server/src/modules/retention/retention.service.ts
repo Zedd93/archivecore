@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
+import { Permissions } from '@archivecore/shared';
+import { notificationService } from '../notifications/notification.service';
 
 export class RetentionService {
   async listPolicies(tenantId: string) {
@@ -144,6 +146,18 @@ export class RetentionService {
       },
     });
 
+    if (updated.count > 0) {
+      await notificationService.notifyTenantUsers({
+        tenantId,
+        requiredPermissions: [Permissions.DISPOSAL_APPROVE],
+        type: 'disposal_pending',
+        title: 'Kartony oczekują na zatwierdzenie brakowania',
+        message: `Do zatwierdzenia brakowania przekazano ${updated.count} kartonów.`,
+        entityType: 'retention',
+        actionUrl: '/admin/retention',
+      });
+    }
+
     return { count: updated.count, boxIds };
   }
 
@@ -170,6 +184,18 @@ export class RetentionService {
           data: { currentCount: { decrement: 1 } },
         });
       }
+    }
+
+    if (updated.count > 0) {
+      await notificationService.notifyTenantUsers({
+        tenantId,
+        requiredPermissions: [Permissions.DISPOSAL_INITIATE, Permissions.REPORT_VIEW],
+        type: 'disposal_approved',
+        title: 'Brakowanie zatwierdzone',
+        message: `Zatwierdzono brakowanie ${updated.count} kartonów.`,
+        entityType: 'retention',
+        actionUrl: '/admin/retention',
+      });
     }
 
     return { count: updated.count };

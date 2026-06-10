@@ -1,7 +1,8 @@
 import { prisma } from '../../config/database';
 import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '@prisma/client';
 import { isValidTransition } from './order-state-machine';
-import { SLA_LEVELS, BUSINESS_HOURS } from '@archivecore/shared';
+import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS } from '@archivecore/shared';
+import { notificationService } from '../notifications/notification.service';
 
 function calculateSlaDeadline(priority: string): Date {
   const slaMap: Record<string, number> = {
@@ -26,6 +27,33 @@ function calculateSlaDeadline(priority: string): Date {
 }
 
 export class OrderService {
+  private async notifyOrderStatus(order: any, newStatus: OrderStatus, actorId: string) {
+    const permissionsByStatus: Partial<Record<OrderStatus, (typeof Permissions)[keyof typeof Permissions][]>> = {
+      submitted: [Permissions.ORDER_APPROVE],
+      approved: [Permissions.ORDER_PROCESS],
+      in_progress: [Permissions.ORDER_PROCESS],
+      ready: [Permissions.ORDER_PROCESS],
+      delivered: [Permissions.ORDER_COMPLETE],
+      completed: [Permissions.ORDER_READ],
+      rejected: [Permissions.ORDER_READ],
+      cancelled: [Permissions.ORDER_READ],
+    };
+    const requiredPermissions = permissionsByStatus[newStatus] ?? [Permissions.ORDER_READ];
+
+    await notificationService.notifyTenantUsers({
+      tenantId: order.tenantId,
+      requiredPermissions,
+      includeUserIds: [order.requestedBy, order.assignedTo, order.approvedBy].filter(Boolean),
+      excludeUserIds: [actorId],
+      type: 'order_status',
+      title: `Zlecenie ${order.orderNumber}: ${ORDER_STATUS_LABELS[newStatus] || newStatus}`,
+      message: `Status zlecenia ${order.orderNumber} zmieniono na "${ORDER_STATUS_LABELS[newStatus] || newStatus}".`,
+      entityType: 'order',
+      entityId: order.id,
+      actionUrl: `/orders/${order.id}`,
+    });
+  }
+
   private getStatusUpdateData(order: any, newStatus: OrderStatus, userId: string, notes?: string): Prisma.OrderUpdateInput {
     const updateData: Prisma.OrderUpdateInput = {
       status: newStatus,
@@ -223,6 +251,8 @@ export class OrderService {
       },
     });
 
+    await this.notifyOrderStatus(updated, newStatus, userId);
+
     return updated;
   }
 
@@ -305,6 +335,7 @@ export class OrderService {
     }
 
     await prisma.$transaction(operations);
+    await this.notifyOrderStatus(order, 'delivered', userId);
 
     return this.getById(id, tenantId);
   }

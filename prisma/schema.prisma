@@ -155,18 +155,18 @@ enum QrErrorLevel {
 // =============================================
 
 model Tenant {
-  id           String   @id @default(uuid()) @db.Uuid
-  name         String   @db.VarChar(255)
-  shortCode    String   @unique @db.VarChar(20)
-  nip          String?  @db.VarChar(13)
-  address      String?  @db.Text
-  contactPerson String? @db.VarChar(255)
-  contactEmail  String? @db.VarChar(255)
-  contactPhone  String? @db.VarChar(20)
-  isActive     Boolean  @default(true)
-  configJson   Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @db.VarChar(255)
+  shortCode     String   @unique @db.VarChar(20)
+  nip           String?  @db.VarChar(13)
+  address       String?  @db.Text
+  contactPerson String?  @db.VarChar(255)
+  contactEmail  String?  @db.VarChar(255)
+  contactPhone  String?  @db.VarChar(20)
+  isActive      Boolean  @default(true)
+  configJson    Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   users             User[]
   roles             Role[]
@@ -183,49 +183,73 @@ model Tenant {
   auditLogs         AuditLog[]
   shareLinks        ShareLink[]
   transferLists     TransferList[]
+  notifications     Notification[]
 
   @@map("tenants")
 }
 
 model User {
-  id            String    @id @default(uuid()) @db.Uuid
-  tenantId      String?   @db.Uuid
-  email         String    @unique @db.VarChar(255)
-  passwordHash  String    @db.VarChar(255)
-  firstName     String    @db.VarChar(100)
-  lastName      String    @db.VarChar(100)
-  phone         String?   @db.VarChar(20)
-  department    String?   @db.VarChar(200)
-  isActive      Boolean   @default(true)
-  mfaEnabled    Boolean   @default(false)
-  mfaSecret     String?   @db.VarChar(255)
-  totpRecoveryCodes String[] @default([])
-  ssoProvider   String?   @db.VarChar(50)
-  ssoExternalId String?   @db.VarChar(255)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String?   @db.Uuid
+  email             String    @unique @db.VarChar(255)
+  passwordHash      String    @db.VarChar(255)
+  firstName         String    @db.VarChar(100)
+  lastName          String    @db.VarChar(100)
+  phone             String?   @db.VarChar(20)
+  department        String?   @db.VarChar(200)
+  isActive          Boolean   @default(true)
+  mfaEnabled        Boolean   @default(false)
+  mfaSecret         String?   @db.VarChar(255)
+  totpRecoveryCodes String[]  @default([])
+  ssoProvider       String?   @db.VarChar(50)
+  ssoExternalId     String?   @db.VarChar(255)
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  tenant        Tenant?   @relation(fields: [tenantId], references: [id])
-  userRoles     UserRole[]
-  createdBoxes  Box[]     @relation("BoxCreator")
-  requestedOrders Order[] @relation("OrderRequester")
-  approvedOrders  Order[] @relation("OrderApprover")
-  assignedOrders  Order[] @relation("OrderAssignee")
-  pickedItems   OrderItem[] @relation("ItemPicker")
-  custodyFrom   CustodyEvent[] @relation("CustodyFrom")
-  custodyTo     CustodyEvent[] @relation("CustodyTo")
-  auditLogs     AuditLog[]
-  labels        Label[]
-  uploadedAttachments Attachment[] @relation("AttachmentUploader")
-  assignedRoles UserRole[] @relation("RoleAssigner")
-  shareLinks    ShareLink[]
-  refreshTokens RefreshToken[]
+  tenant               Tenant?        @relation(fields: [tenantId], references: [id])
+  userRoles            UserRole[]
+  createdBoxes         Box[]          @relation("BoxCreator")
+  requestedOrders      Order[]        @relation("OrderRequester")
+  approvedOrders       Order[]        @relation("OrderApprover")
+  assignedOrders       Order[]        @relation("OrderAssignee")
+  pickedItems          OrderItem[]    @relation("ItemPicker")
+  custodyFrom          CustodyEvent[] @relation("CustodyFrom")
+  custodyTo            CustodyEvent[] @relation("CustodyTo")
+  auditLogs            AuditLog[]
+  labels               Label[]
+  uploadedAttachments  Attachment[]   @relation("AttachmentUploader")
+  assignedRoles        UserRole[]     @relation("RoleAssigner")
+  shareLinks           ShareLink[]
+  refreshTokens        RefreshToken[]
   createdTransferLists TransferList[] @relation("TransferListCreator")
+  notifications        Notification[]
 
   @@index([tenantId])
   @@index([email])
   @@map("users")
+}
+
+model Notification {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String?   @db.Uuid
+  userId     String    @db.Uuid
+  type       String    @db.VarChar(50)
+  title      String    @db.VarChar(255)
+  message    String    @db.Text
+  entityType String?   @db.VarChar(50)
+  entityId   String?   @db.Uuid
+  actionUrl  String?   @db.VarChar(500)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
 }
 
 model Role {
@@ -276,10 +300,10 @@ model Location {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  parent   Location?  @relation("LocationHierarchy", fields: [parentId], references: [id])
-  children Location[] @relation("LocationHierarchy")
-  tenant   Tenant?    @relation(fields: [tenantId], references: [id])
-  boxes    Box[]
+  parent      Location?      @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children    Location[]     @relation("LocationHierarchy")
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id])
+  boxes       Box[]
   custodyFrom CustodyEvent[] @relation("CustodyFromLocation")
   custodyTo   CustodyEvent[] @relation("CustodyToLocation")
 
@@ -314,17 +338,17 @@ model Box {
   updatedAt         DateTime  @updatedAt
   createdById       String    @db.Uuid
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id])
-  location        Location?        @relation(fields: [locationId], references: [id])
-  retentionPolicy RetentionPolicy? @relation(fields: [retentionPolicyId], references: [id])
-  createdBy       User             @relation("BoxCreator", fields: [createdById], references: [id])
-  folders         Folder[]
-  documents       Document[]
-  attachments     Attachment[]     @relation("BoxAttachments")
-  hrFolders       HRFolder[]
-  orderItems      OrderItem[]
-  custodyEvents   CustodyEvent[]
-  labels          Label[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  location          Location?          @relation(fields: [locationId], references: [id])
+  retentionPolicy   RetentionPolicy?   @relation(fields: [retentionPolicyId], references: [id])
+  createdBy         User               @relation("BoxCreator", fields: [createdById], references: [id])
+  folders           Folder[]
+  documents         Document[]
+  attachments       Attachment[]       @relation("BoxAttachments")
+  hrFolders         HRFolder[]
+  orderItems        OrderItem[]
+  custodyEvents     CustodyEvent[]
+  labels            Label[]
   transferListItems TransferListItem[]
 
   @@index([tenantId, status])
@@ -422,33 +446,33 @@ model Attachment {
 }
 
 model HRFolder {
-  id                 String           @id @default(uuid()) @db.Uuid
-  tenantId           String           @db.Uuid
-  boxId              String?          @db.Uuid
-  employeeFirstName  String           @db.VarChar(100)
-  employeeLastName   String           @db.VarChar(100)
-  employeePesel      String           @db.VarChar(255) // AES-256 encrypted
-  employeePeselHmac  String           @db.VarChar(64)  // HMAC-SHA256 for search
-  employeeIdNumber   String?          @db.VarChar(50)
-  employmentStart    DateTime?        @db.Date
-  employmentEnd      DateTime?        @db.Date
-  employmentStatus   EmploymentStatus @default(active)
-  department         String?          @db.VarChar(200)
-  position           String?          @db.VarChar(200)
-  retentionPeriod    RetentionPeriodType @default(ten_years)
-  retentionBaseDate  DateTime?        @db.Date
-  retentionEndDate   DateTime?        @db.Date
-  disposalStatus     DisposalStatus   @default(active)
-  storageForm        StorageForm      @default(paper)
-  litigationHold     Boolean          @default(false)
-  litigationHoldUntil DateTime?       @db.Date
-  litigationNotes    String?          @db.Text
-  notes              String?          @db.Text
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  id                  String              @id @default(uuid()) @db.Uuid
+  tenantId            String              @db.Uuid
+  boxId               String?             @db.Uuid
+  employeeFirstName   String              @db.VarChar(100)
+  employeeLastName    String              @db.VarChar(100)
+  employeePesel       String              @db.VarChar(255) // AES-256 encrypted
+  employeePeselHmac   String              @db.VarChar(64) // HMAC-SHA256 for search
+  employeeIdNumber    String?             @db.VarChar(50)
+  employmentStart     DateTime?           @db.Date
+  employmentEnd       DateTime?           @db.Date
+  employmentStatus    EmploymentStatus    @default(active)
+  department          String?             @db.VarChar(200)
+  position            String?             @db.VarChar(200)
+  retentionPeriod     RetentionPeriodType @default(ten_years)
+  retentionBaseDate   DateTime?           @db.Date
+  retentionEndDate    DateTime?           @db.Date
+  disposalStatus      DisposalStatus      @default(active)
+  storageForm         StorageForm         @default(paper)
+  litigationHold      Boolean             @default(false)
+  litigationHoldUntil DateTime?           @db.Date
+  litigationNotes     String?             @db.Text
+  notes               String?             @db.Text
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
-  tenant     Tenant       @relation(fields: [tenantId], references: [id])
-  box        Box?         @relation(fields: [boxId], references: [id])
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  box        Box?           @relation(fields: [boxId], references: [id])
   parts      HRFolderPart[]
   orderItems OrderItem[]
 
@@ -475,18 +499,18 @@ model HRFolderPart {
 }
 
 model HRDocument {
-  id               String   @id @default(uuid()) @db.Uuid
-  hrFolderPartId   String   @db.Uuid
-  tenantId         String   @db.Uuid
-  title            String   @db.VarChar(500)
-  docType          String?  @db.VarChar(100)
-  docDate          DateTime? @db.Date
-  orderNumber      Int
-  pageCount        Int?
-  notes            String?  @db.Text
-  attachmentId     String?  @db.Uuid
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String    @id @default(uuid()) @db.Uuid
+  hrFolderPartId String    @db.Uuid
+  tenantId       String    @db.Uuid
+  title          String    @db.VarChar(500)
+  docType        String?   @db.VarChar(100)
+  docDate        DateTime? @db.Date
+  orderNumber    Int
+  pageCount      Int?
+  notes          String?   @db.Text
+  attachmentId   String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   hrFolderPart HRFolderPart @relation(fields: [hrFolderPartId], references: [id], onDelete: Cascade)
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
@@ -498,20 +522,20 @@ model HRDocument {
 }
 
 model Order {
-  id           String        @id @default(uuid()) @db.Uuid
-  tenantId     String        @db.Uuid
-  orderNumber  String        @unique @db.VarChar(50)
-  orderType    OrderType
-  status       OrderStatus   @default(draft)
-  priority     OrderPriority @default(normal)
-  requestedBy  String        @db.Uuid
-  approvedBy   String?       @db.Uuid
-  assignedTo   String?       @db.Uuid
-  slaDeadline  DateTime?
-  completedAt  DateTime?
-  notes        String?       @db.Text
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @db.Uuid
+  orderNumber String        @unique @db.VarChar(50)
+  orderType   OrderType
+  status      OrderStatus   @default(draft)
+  priority    OrderPriority @default(normal)
+  requestedBy String        @db.Uuid
+  approvedBy  String?       @db.Uuid
+  assignedTo  String?       @db.Uuid
+  slaDeadline DateTime?
+  completedAt DateTime?
+  notes       String?       @db.Text
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   requester     User           @relation("OrderRequester", fields: [requestedBy], references: [id])
@@ -600,15 +624,15 @@ model AuditLog {
 }
 
 model RetentionPolicy {
-  id              String           @id @default(uuid()) @db.Uuid
-  tenantId        String?          @db.Uuid
-  name            String           @db.VarChar(255)
-  docType         String?          @db.VarChar(100)
-  retentionYears  Int
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String?          @db.Uuid
+  name             String           @db.VarChar(255)
+  docType          String?          @db.VarChar(100)
+  retentionYears   Int
   retentionTrigger RetentionTrigger
-  description     String?          @db.Text
-  isActive        Boolean          @default(true)
-  createdAt       DateTime         @default(now())
+  description      String?          @db.Text
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
 
   tenant Tenant?         @relation(fields: [tenantId], references: [id])
   rules  RetentionRule[]
@@ -633,13 +657,13 @@ model RetentionRule {
 }
 
 model Label {
-  id           String   @id @default(uuid()) @db.Uuid
-  boxId        String   @db.Uuid
-  templateId   String   @db.Uuid
-  qrData       String   @db.Text
-  generatedBy  String   @db.Uuid
-  generatedAt  DateTime @default(now())
-  printCount   Int      @default(0)
+  id            String    @id @default(uuid()) @db.Uuid
+  boxId         String    @db.Uuid
+  templateId    String    @db.Uuid
+  qrData        String    @db.Text
+  generatedBy   String    @db.Uuid
+  generatedAt   DateTime  @default(now())
+  printCount    Int       @default(0)
   lastPrintedAt DateTime?
 
   box       Box           @relation(fields: [boxId], references: [id])
@@ -658,7 +682,7 @@ model LabelTemplate {
   heightMm     Decimal      @db.Decimal(6, 2)
   layoutJson   Json
   fields       String[]     @default([])
-  qrSizeMm    Decimal      @db.Decimal(6, 2)
+  qrSizeMm     Decimal      @db.Decimal(6, 2)
   qrErrorLevel QrErrorLevel @default(M)
   isDefault    Boolean      @default(false)
   createdAt    DateTime     @default(now())
@@ -670,17 +694,17 @@ model LabelTemplate {
 }
 
 model ShareLink {
-  id             String   @id @default(uuid()) @db.Uuid
-  tenantId       String   @db.Uuid
-  token          String   @unique @db.VarChar(255)
-  entityType     String   @db.VarChar(50)
-  entityId       String   @db.Uuid
-  createdById    String   @db.Uuid
-  recipientEmail String?  @db.VarChar(255)
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  token          String    @unique @db.VarChar(255)
+  entityType     String    @db.VarChar(50)
+  entityId       String    @db.Uuid
+  createdById    String    @db.Uuid
+  recipientEmail String?   @db.VarChar(255)
   expiresAt      DateTime
-  accessCount    Int      @default(0)
+  accessCount    Int       @default(0)
   lastAccessedAt DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   tenant  Tenant @relation(fields: [tenantId], references: [id])
   creator User   @relation(fields: [createdById], references: [id])
@@ -714,9 +738,9 @@ model TransferList {
   tenantId         String             @db.Uuid
   listNumber       String             @db.VarChar(50)
   title            String             @db.VarChar(500)
-  transferringUnit String?            @db.VarChar(255)  // Komórka przekazująca
-  receivingUnit    String?            @db.VarChar(255)  // Komórka przejmująca
-  transferDate     DateTime?          @db.Date          // Data przekazania
+  transferringUnit String?            @db.VarChar(255) // Komórka przekazująca
+  receivingUnit    String?            @db.VarChar(255) // Komórka przejmująca
+  transferDate     DateTime?          @db.Date // Data przekazania
   status           TransferListStatus @default(draft)
   notes            String?            @db.Text
   createdById      String             @db.Uuid
@@ -734,19 +758,19 @@ model TransferList {
 }
 
 model TransferListItem {
-  id                 String    @id @default(uuid()) @db.Uuid
-  transferListId     String    @db.Uuid
-  ordinalNumber      Int                             // Lp.
-  folderSignature    String    @db.VarChar(100)      // Znak teczki
-  folderTitle        String    @db.VarChar(1000)     // Tytuł teczki lub tomu
-  dateFrom           DateTime? @db.Date              // Daty skrajne — od
-  dateTo             DateTime? @db.Date              // Daty skrajne — do
-  categoryCode       String    @db.VarChar(20)       // Kat. akt (A, B5, B10, B25, BE5, BE10)
-  folderCount        Int       @default(1)           // Liczba teczek
-  storageLocation    String?   @db.VarChar(500)      // Miejsce przechowywania akt w archiwum
-  disposalOrTransferDate DateTime? @db.Date          // Data zniszczenia lub przekazania do AP
-  notes              String?   @db.Text
-  boxId              String?   @db.Uuid              // Powiązanie z kartonem
+  id                     String    @id @default(uuid()) @db.Uuid
+  transferListId         String    @db.Uuid
+  ordinalNumber          Int // Lp.
+  folderSignature        String    @db.VarChar(100) // Znak teczki
+  folderTitle            String    @db.VarChar(1000) // Tytuł teczki lub tomu
+  dateFrom               DateTime? @db.Date // Daty skrajne — od
+  dateTo                 DateTime? @db.Date // Daty skrajne — do
+  categoryCode           String    @db.VarChar(20) // Kat. akt (A, B5, B10, B25, BE5, BE10)
+  folderCount            Int       @default(1) // Liczba teczek
+  storageLocation        String?   @db.VarChar(500) // Miejsce przechowywania akt w archiwum
+  disposalOrTransferDate DateTime? @db.Date // Data zniszczenia lub przekazania do AP
+  notes                  String?   @db.Text
+  boxId                  String?   @db.Uuid // Powiązanie z kartonem
 
   transferList TransferList @relation(fields: [transferListId], references: [id], onDelete: Cascade)
   box          Box?         @relation(fields: [boxId], references: [id])

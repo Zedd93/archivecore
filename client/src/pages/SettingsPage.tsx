@@ -364,35 +364,41 @@ function SecurityTab() {
 function NotificationsTab() {
   const { t } = useTranslation();
 
-  const items = [
-    { label: t('settings.notifications.newOrders'), desc: t('settings.notifications.newOrdersDesc') },
-    { label: t('settings.notifications.orderStatus'), desc: t('settings.notifications.orderStatusDesc') },
-    { label: t('settings.notifications.retention'), desc: t('settings.notifications.retentionDesc') },
-    { label: t('settings.notifications.weeklyReport'), desc: t('settings.notifications.weeklyReportDesc') },
+  const activeEvents = [
+    t('settings.notifications.newOrders'),
+    t('settings.notifications.orderStatus'),
+    t('settings.notifications.retention'),
   ];
 
   return (
     <div className="card space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('settings.notifications.title')}</h2>
 
-      <div className="space-y-4">
-        {items.map((item, i) => (
-          <div key={i} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-            <div>
-              <div className="text-sm font-medium text-gray-900">{item.label}</div>
-              <div className="text-xs text-gray-500">{item.desc}</div>
-            </div>
-            <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
-              <input type="checkbox" className="sr-only peer" disabled />
-              <div className="w-9 h-5 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
-            </label>
+      <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-green-900">{t('settings.notifications.inAppActive')}</div>
+            <p className="text-sm text-green-800 mt-1">{t('settings.notifications.inAppDesc')}</p>
           </div>
-        ))}
+          <span className="badge-green">{t('common.active')}</span>
+        </div>
       </div>
 
-      <p className="text-xs text-gray-400 text-center">
-        {t('settings.notifications.comingSoon')}
-      </p>
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('settings.notifications.eventsTitle')}</h3>
+        <div className="space-y-2">
+          {activeEvents.map((label) => (
+            <div key={label} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+              <span className="text-sm text-gray-700">{label}</span>
+              <span className="badge-blue">{t('settings.notifications.channelInApp')}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">
+        {t('settings.notifications.futureChannels')}
+      </div>
     </div>
   );
 }

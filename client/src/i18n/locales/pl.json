@@ -678,7 +678,12 @@
       "retentionDesc": "Zbliżający się termin retencji/brakowania",
       "weeklyReport": "Raport tygodniowy",
       "weeklyReportDesc": "Podsumowanie aktywności co tydzień",
-      "comingSoon": "Funkcja powiadomień będzie dostępna wkrótce"
+      "comingSoon": "Funkcja powiadomień będzie dostępna wkrótce",
+      "inAppActive": "Powiadomienia w aplikacji są aktywne",
+      "inAppDesc": "Nowe zdarzenia pojawią się pod dzwonkiem w prawym górnym rogu aplikacji.",
+      "eventsTitle": "Obsługiwane zdarzenia",
+      "channelInApp": "W aplikacji",
+      "futureChannels": "Powiadomienia mailowe i systemowe push mogą zostać dodane jako kolejne kanały, jeśli będą potrzebne."
     },
     "appearance": {
       "title": "Wygląd",
@@ -724,6 +729,13 @@
     "chooseTenant": "Wybierz firmę klienta",
     "superAdmin": "Super Admin",
     "globalDoxart": "Doxart",
+    "notifications": {
+      "title": "Powiadomienia",
+      "empty": "Brak powiadomień",
+      "noUnread": "Brak nieprzeczytanych",
+      "unreadCount": "Nieprzeczytane: {{count}}",
+      "markAllRead": "Oznacz wszystkie jako przeczytane"
+    },
     "nav": {
       "dashboard": "Dashboard",
       "boxes": "Kartony",
