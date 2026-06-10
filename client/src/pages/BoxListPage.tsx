@@ -291,8 +291,10 @@ export default function BoxListPage() {
           <div>
             <label htmlFor="bulk-locationId" className="label-text">{t('boxes.bulk.locationId')}</label>
             <LocationPicker
+              id="bulk-locationId"
               value={bulkLocationId}
               onChange={setBulkLocationId}
+              placeholder={t('boxes.bulk.locationPlaceholder')}
               excludeTypes={['warehouse', 'zone', 'rack']}
             />
           </div>
@@ -324,10 +326,12 @@ export default function BoxListPage() {
                 ))}
               </select>
             </FormField>
-            <FormField label={t('boxes.bulk.locationId')} error={errors.locationId?.message}>
+            <FormField label={t('boxes.bulk.locationId')} htmlFor="box-create-locationId" error={errors.locationId?.message}>
               <LocationPicker
+                id="box-create-locationId"
                 value={watch('locationId') || ''}
                 onChange={(id) => setValue('locationId', id)}
+                placeholder={t('boxes.bulk.locationPlaceholder')}
                 excludeTypes={['warehouse', 'zone', 'rack']}
               />
             </FormField>

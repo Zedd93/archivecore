@@ -24,6 +24,7 @@ interface FlatLocation {
 }
 
 interface LocationPickerProps {
+  id?: string;
   value?: string;
   onChange: (locationId: string) => void;
   placeholder?: string;
@@ -80,6 +81,7 @@ function flattenTree(nodes: LocationNode[], excludeTypes: string[]): FlatLocatio
 }
 
 export default function LocationPicker({
+  id,
   value,
   onChange,
   placeholder,
@@ -169,6 +171,7 @@ export default function LocationPicker({
       <div className="relative">
         <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         <input
+          id={id}
           ref={inputRef}
           type="text"
           className="input-field pl-9 pr-16"

@@ -149,7 +149,7 @@
       "moveError": "Błąd przenoszenia",
       "moveTitle": "Przenieś kartony",
       "locationId": "Lokalizacja docelowa",
-      "locationPlaceholder": "Wybierz lokalizację",
+      "locationPlaceholder": "Kliknij i wybierz lokalizację z listy",
       "exportSelected": "Eksportuj wybrane"
     }
   },

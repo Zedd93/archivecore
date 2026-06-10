@@ -149,7 +149,7 @@
       "moveError": "Move error",
       "moveTitle": "Move boxes",
       "locationId": "Target location",
-      "locationPlaceholder": "Select location",
+      "locationPlaceholder": "Click and choose a location from the list",
       "exportSelected": "Export selected"
     }
   },
