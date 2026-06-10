@@ -10,6 +10,28 @@ interface UseExportOptions {
   defaultFilename?: string;
 }
 
+function createTimestamp(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join('-') + '_' + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('-');
+}
+
+function withTimestamp(filename: string): string {
+  const dotIndex = filename.lastIndexOf('.');
+  if (dotIndex <= 0) {
+    return `${filename}_${createTimestamp()}`;
+  }
+
+  return `${filename.slice(0, dotIndex)}_${createTimestamp()}${filename.slice(dotIndex)}`;
+}
+
 /**
  * Hook for downloading export files (CSV/XLSX) from the API.
  * Returns { exportData, isExporting } where exportData triggers the download.
@@ -28,7 +50,7 @@ export function useExport({ endpoint, defaultFilename = 'export.xlsx' }: UseExpo
 
       // Extract filename from Content-Disposition header
       const disposition = response.headers['content-disposition'];
-      let filename = defaultFilename;
+      let filename = withTimestamp(defaultFilename);
       if (disposition) {
         const match = disposition.match(/filename="?([^";\n]+)"?/);
         if (match?.[1]) filename = match[1];

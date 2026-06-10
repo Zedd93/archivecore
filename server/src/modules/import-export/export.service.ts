@@ -86,6 +86,22 @@ const TRANSFER_LIST_COLUMNS: ExportColumn[] = [
 
 // ─── Export service ──────────────────────────────────────
 export class ExportService {
+  private createTimestamp(date = new Date()): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return [
+      date.getFullYear(),
+      pad(date.getMonth() + 1),
+      pad(date.getDate()),
+    ].join('-') + '_' + [
+      pad(date.getHours()),
+      pad(date.getMinutes()),
+      pad(date.getSeconds()),
+    ].join('-');
+  }
+
+  private createFilename(prefix: string, ext: string): string {
+    return `${prefix}_${this.createTimestamp()}.${ext}`;
+  }
 
   /**
    * Generic method: convert rows → XLSX buffer or CSV string
@@ -165,7 +181,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, BOX_COLUMNS, format),
-      filename: `kartony_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
+      filename: this.createFilename('kartony', ext),
       contentType,
     };
   }
@@ -201,7 +217,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, ORDER_COLUMNS, format),
-      filename: `zlecenia_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
+      filename: this.createFilename('zlecenia', ext),
       contentType,
     };
   }
@@ -250,7 +266,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, HR_COLUMNS, format),
-      filename: `akta_osobowe_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
+      filename: this.createFilename('akta_osobowe', ext),
       contentType,
     };
   }
@@ -282,7 +298,7 @@ export class ExportService {
 
     return {
       buffer: this.generateBuffer(data, TRANSFER_LIST_COLUMNS, format),
-      filename: `spisy_zo_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`,
+      filename: this.createFilename('spisy_zo', ext),
       contentType,
     };
   }
