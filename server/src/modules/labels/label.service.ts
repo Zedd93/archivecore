@@ -1,7 +1,6 @@
 import { prisma, Prisma } from '../../config/database';
 import { pdfService, LabelLayout, LabelData, LabelField } from './pdf.service';
 import { qrService } from './qr.service';
-import { generateQrData } from '@archivecore/shared';
 
 // Default label template: 70mm x 36mm (standard archive label)
 const DEFAULT_LAYOUT: LabelLayout = {
@@ -22,6 +21,29 @@ const DEFAULT_LAYOUT: LabelLayout = {
 };
 
 export class LabelService {
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  private async findBoxByIdentifier(identifier: string, tenantId: string) {
+    const trimmed = identifier.trim();
+    if (!trimmed) return null;
+
+    return prisma.box.findFirst({
+      where: {
+        tenantId,
+        OR: [
+          ...(this.isUuid(trimmed) ? [{ id: trimmed }] : []),
+          { boxNumber: { equals: trimmed, mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        tenant: { select: { name: true, shortCode: true } },
+        location: { select: { fullPath: true, code: true } },
+      },
+    });
+  }
+
   async getTemplates(tenantId: string) {
     return prisma.labelTemplate.findMany({
       where: { OR: [{ tenantId }, { tenantId: null }] },
@@ -51,14 +73,8 @@ export class LabelService {
     });
   }
 
-  async generateForBox(boxId: string, tenantId: string, templateId?: string, userId?: string): Promise<Buffer> {
-    const box = await prisma.box.findFirst({
-      where: { id: boxId, tenantId },
-      include: {
-        tenant: { select: { name: true, shortCode: true } },
-        location: { select: { fullPath: true, code: true } },
-      },
-    });
+  async generateForBox(boxIdentifier: string, tenantId: string, templateId?: string, userId?: string): Promise<Buffer> {
+    const box = await this.findBoxByIdentifier(boxIdentifier, tenantId);
     if (!box) throw Object.assign(new Error('Karton nie znaleziony'), { statusCode: 404 });
 
     let layout = DEFAULT_LAYOUT;
@@ -87,13 +103,9 @@ export class LabelService {
 
     // Save label record
     if (userId) {
-      const defaultTemplate = templateId
-        ? { connect: { id: templateId } }
-        : await this.getOrCreateDefaultTemplate(tenantId);
-
       await prisma.label.create({
         data: {
-          boxId,
+          boxId: box.id,
           templateId: templateId || (await this.getDefaultTemplateId(tenantId)),
           qrData: box.qrCode,
           generatedBy: userId,
@@ -106,9 +118,21 @@ export class LabelService {
     return pdf;
   }
 
-  async generateForBoxes(boxIds: string[], tenantId: string, templateId?: string, userId?: string): Promise<Buffer> {
+  async generateForBoxes(boxIdentifiers: string[], tenantId: string, templateId?: string, userId?: string): Promise<Buffer> {
+    const identifiers = boxIdentifiers.map((id) => id.trim()).filter(Boolean);
+    if (identifiers.length === 0) {
+      throw Object.assign(new Error('Wymagana lista numerów kartonów'), { statusCode: 400 });
+    }
+
+    const uuidIdentifiers = identifiers.filter((id) => this.isUuid(id));
     const boxes = await prisma.box.findMany({
-      where: { id: { in: boxIds }, tenantId },
+      where: {
+        tenantId,
+        OR: [
+          ...identifiers.map((identifier) => ({ boxNumber: { equals: identifier, mode: 'insensitive' as const } })),
+          ...(uuidIdentifiers.length > 0 ? [{ id: { in: uuidIdentifiers } }] : []),
+        ],
+      },
       include: {
         tenant: { select: { name: true, shortCode: true } },
         location: { select: { fullPath: true, code: true } },
@@ -116,6 +140,16 @@ export class LabelService {
     });
 
     if (boxes.length === 0) throw Object.assign(new Error('Nie znaleziono kartonów'), { statusCode: 404 });
+
+    const foundIdentifiers = new Set<string>();
+    for (const box of boxes) {
+      foundIdentifiers.add(box.id.toLowerCase());
+      foundIdentifiers.add(box.boxNumber.toLowerCase());
+    }
+    const missing = identifiers.filter((identifier) => !foundIdentifiers.has(identifier.toLowerCase()));
+    if (missing.length > 0) {
+      throw Object.assign(new Error(`Nie znaleziono kartonów: ${missing.join(', ')}`), { statusCode: 404 });
+    }
 
     let layout = DEFAULT_LAYOUT;
     if (templateId) {
@@ -142,10 +176,8 @@ export class LabelService {
     return pdfService.generateMultipleLabels(layout, labelsData);
   }
 
-  async getQrCodeImage(boxId: string, tenantId: string, format: 'png' | 'svg' | 'dataurl' = 'png') {
-    const box = await prisma.box.findFirst({
-      where: { id: boxId, tenantId },
-    });
+  async getQrCodeImage(boxIdentifier: string, tenantId: string, format: 'png' | 'svg' | 'dataurl' = 'png') {
+    const box = await this.findBoxByIdentifier(boxIdentifier, tenantId);
     if (!box) throw Object.assign(new Error('Karton nie znaleziony'), { statusCode: 404 });
 
     switch (format) {

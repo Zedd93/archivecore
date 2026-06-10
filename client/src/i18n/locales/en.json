@@ -148,8 +148,8 @@
       "moveSuccess": "Moved {{count}} boxes",
       "moveError": "Move error",
       "moveTitle": "Move boxes",
-      "locationId": "Target location ID",
-      "locationPlaceholder": "Location UUID",
+      "locationId": "Target location",
+      "locationPlaceholder": "Select location",
       "exportSelected": "Export selected"
     }
   },
@@ -189,8 +189,8 @@
       "priorityNormal": "Normal (24h)",
       "priorityHigh": "High (8h)",
       "priorityUrgent": "Urgent (4h)",
-      "boxIds": "Box IDs * (comma-separated)",
-      "boxIdsPlaceholder": "Enter box UUIDs separated by commas",
+      "boxIds": "Boxes *",
+      "boxIdsPlaceholder": "Search by box number, e.g. K-2026-000001",
       "notes": "Notes",
       "notesPlaceholder": "Order notes...",
       "submit": "Create order"
@@ -447,7 +447,7 @@
         "role": "User rank *",
         "chooseRole": "Select a rank",
         "tenantId": "Client company *",
-        "tenantIdPlaceholder": "Tenant UUID",
+        "tenantIdPlaceholder": "Select client company",
         "chooseTenant": "Select client company",
         "tenantAssigned": "Client company: {{tenant}}",
         "department": "Department *",
@@ -553,7 +553,11 @@
     "typeZone": "Zone",
     "typeRack": "Rack",
     "typeShelf": "Shelf",
-    "typeSlot": "Slot"
+    "typeSlot": "Slot",
+    "parentLocation": "Parent location",
+    "parentLocationPlaceholder": "Optional — choose a warehouse, zone, or rack",
+    "pickLocation": "Select location...",
+    "noResults": "No locations found"
   },
 
   "labels": {
@@ -562,10 +566,11 @@
     "generateTab": "Generate labels",
     "scanTab": "Scan QR",
     "singleLabel": "Single label",
-    "boxId": "Box ID",
+    "boxId": "Box",
     "generatePdf": "Generate label (PDF)",
     "bulkPrint": "Bulk print",
-    "boxIds": "Box IDs (comma-separated)",
+    "boxIds": "Boxes",
+    "boxSearchPlaceholder": "Search box number, e.g. K-2026-000001",
     "generateA4": "Generate labels (A4)",
     "templates": "Label templates",
     "defaultTemplate": "Default",

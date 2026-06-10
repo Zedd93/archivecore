@@ -148,8 +148,8 @@
       "moveSuccess": "Przeniesiono {{count}} kartonów",
       "moveError": "Błąd przenoszenia",
       "moveTitle": "Przenieś kartony",
-      "locationId": "ID lokalizacji docelowej",
-      "locationPlaceholder": "UUID lokalizacji",
+      "locationId": "Lokalizacja docelowa",
+      "locationPlaceholder": "Wybierz lokalizację",
       "exportSelected": "Eksportuj wybrane"
     }
   },
@@ -189,8 +189,8 @@
       "priorityNormal": "Normalny (24h)",
       "priorityHigh": "Wysoki (8h)",
       "priorityUrgent": "Pilny (4h)",
-      "boxIds": "ID kartonów * (po przecinku)",
-      "boxIdsPlaceholder": "Wprowadź UUID kartonów oddzielone przecinkami",
+      "boxIds": "Kartony *",
+      "boxIdsPlaceholder": "Wyszukaj po numerze kartonu, np. K-2026-000001",
       "notes": "Notatki",
       "notesPlaceholder": "Uwagi do zlecenia...",
       "submit": "Utwórz zlecenie"
@@ -447,7 +447,7 @@
         "role": "Ranga użytkownika *",
         "chooseRole": "Wybierz rangę",
         "tenantId": "Firma klienta *",
-        "tenantIdPlaceholder": "UUID tenanta",
+        "tenantIdPlaceholder": "Wybierz firmę klienta",
         "chooseTenant": "Wybierz firmę klienta",
         "tenantAssigned": "Firma klienta: {{tenant}}",
         "department": "Dział *",
@@ -553,7 +553,11 @@
     "typeZone": "Strefa",
     "typeRack": "Regał",
     "typeShelf": "Półka",
-    "typeSlot": "Miejsce"
+    "typeSlot": "Miejsce",
+    "parentLocation": "Lokalizacja nadrzędna",
+    "parentLocationPlaceholder": "Opcjonalnie — wybierz magazyn, strefę lub regał",
+    "pickLocation": "Wybierz lokalizację...",
+    "noResults": "Nie znaleziono lokalizacji"
   },
 
   "labels": {
@@ -562,10 +566,11 @@
     "generateTab": "Generuj etykiety",
     "scanTab": "Skanuj QR",
     "singleLabel": "Pojedyncza etykieta",
-    "boxId": "ID kartonu",
+    "boxId": "Karton",
     "generatePdf": "Generuj etykietę (PDF)",
     "bulkPrint": "Druk zbiorczy",
-    "boxIds": "ID kartonów (po przecinku)",
+    "boxIds": "Kartony",
+    "boxSearchPlaceholder": "Wyszukaj numer kartonu, np. K-2026-000001",
     "generateA4": "Generuj etykiety (A4)",
     "templates": "Szablony etykiet",
     "defaultTemplate": "Domyślny",

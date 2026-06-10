@@ -4,12 +4,18 @@ import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import { QrCode, Printer, Camera, Loader2, ScanLine } from 'lucide-react';
 import toast from 'react-hot-toast';
+import BoxPicker from '@/components/ui/BoxPicker';
+
+interface SelectedBox {
+  id: string;
+  boxNumber: string;
+}
 
 export default function LabelsPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'generate' | 'scan'>('generate');
-  const [boxId, setBoxId] = useState('');
-  const [batchIds, setBatchIds] = useState('');
+  const [selectedSingleBox, setSelectedSingleBox] = useState<SelectedBox[]>([]);
+  const [selectedBatchBoxes, setSelectedBatchBoxes] = useState<SelectedBox[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -25,10 +31,11 @@ export default function LabelsPage() {
   });
 
   const handleGenerateSingle = async () => {
-    if (!boxId) return;
+    const box = selectedSingleBox[0];
+    if (!box) return;
     setIsGenerating(true);
     try {
-      const response = await api.get(`/labels/box/${boxId}`, { responseType: 'blob' });
+      const response = await api.get(`/labels/box/${encodeURIComponent(box.id)}`, { responseType: 'blob' });
       const url = URL.createObjectURL(response.data);
       window.open(url, '_blank');
       toast.success(t('common.success'));
@@ -40,11 +47,10 @@ export default function LabelsPage() {
   };
 
   const handleGenerateBatch = async () => {
-    const ids = batchIds.split(',').map(s => s.trim()).filter(Boolean);
-    if (ids.length === 0) return;
+    if (selectedBatchBoxes.length === 0) return;
     setIsGenerating(true);
     try {
-      const response = await api.post('/labels/batch', { boxIds: ids }, { responseType: 'blob' });
+      const response = await api.post('/labels/batch', { boxIds: selectedBatchBoxes.map((box) => box.id) }, { responseType: 'blob' });
       const url = URL.createObjectURL(response.data);
       window.open(url, '_blank');
       toast.success(t('common.success'));
@@ -112,19 +118,16 @@ export default function LabelsPage() {
             </h2>
             <div className="space-y-4">
               <div>
-                <label htmlFor="label-single-boxId" className="label-text">{t('labels.boxId')}</label>
-                <input
-                  id="label-single-boxId"
-                  type="text"
-                  value={boxId}
-                  onChange={(e) => setBoxId(e.target.value)}
-                  className="input-field"
-                  placeholder="UUID kartonu"
+                <label className="label-text">{t('labels.boxId')}</label>
+                <BoxPicker
+                  value={selectedSingleBox}
+                  onChange={(boxes) => setSelectedSingleBox(boxes.slice(-1))}
+                  placeholder={t('labels.boxSearchPlaceholder')}
                 />
               </div>
               <button
                 onClick={handleGenerateSingle}
-                disabled={!boxId || isGenerating}
+                disabled={selectedSingleBox.length === 0 || isGenerating}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
@@ -141,19 +144,16 @@ export default function LabelsPage() {
             </h2>
             <div className="space-y-4">
               <div>
-                <label htmlFor="label-batch-boxIds" className="label-text">{t('labels.boxIds')}</label>
-                <textarea
-                  id="label-batch-boxIds"
-                  value={batchIds}
-                  onChange={(e) => setBatchIds(e.target.value)}
-                  className="input-field"
-                  rows={4}
-                  placeholder="uuid1, uuid2, uuid3..."
+                <label className="label-text">{t('labels.boxIds')}</label>
+                <BoxPicker
+                  value={selectedBatchBoxes}
+                  onChange={setSelectedBatchBoxes}
+                  placeholder={t('labels.boxSearchPlaceholder')}
                 />
               </div>
               <button
                 onClick={handleGenerateBatch}
-                disabled={!batchIds.trim() || isGenerating}
+                disabled={selectedBatchBoxes.length === 0 || isGenerating}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}

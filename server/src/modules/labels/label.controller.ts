@@ -37,7 +37,7 @@ export class LabelController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { boxIds, templateId } = req.body;
       if (!boxIds || !Array.isArray(boxIds) || boxIds.length === 0) {
-        return errorResponse(res, 'Wymagana lista ID kartonów', 400);
+        return errorResponse(res, 'Wymagana lista numerów kartonów', 400);
       }
       const pdf = await labelService.generateForBoxes(boxIds, req.tenantId, templateId, req.user!.userId);
       res.setHeader('Content-Type', 'application/pdf');

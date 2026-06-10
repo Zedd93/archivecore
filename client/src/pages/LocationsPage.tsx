@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import Modal from '@/components/ui/Modal';
+import LocationPicker from '@/components/ui/LocationPicker';
 import { MapPin, ChevronRight, ChevronDown, Box, Plus, Loader2 } from 'lucide-react';
 
 interface LocationNode {
@@ -189,8 +190,12 @@ export default function LocationsPage() {
             </div>
           </div>
           <div>
-            <label className="label-text">ID lokalizacji nadrzędnej</label>
-            <input value={createForm.parentId} onChange={(e) => setCreateForm({ ...createForm, parentId: e.target.value })} className="input-field" placeholder="opcjonalnie — UUID" />
+            <label className="label-text">{t('locations.parentLocation', 'Lokalizacja nadrzędna')}</label>
+            <LocationPicker
+              value={createForm.parentId}
+              onChange={(parentId) => setCreateForm({ ...createForm, parentId })}
+              placeholder={t('locations.parentLocationPlaceholder', 'Opcjonalnie — wybierz magazyn, strefę lub regał')}
+            />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary">{t('common.cancel')}</button>
