@@ -124,7 +124,7 @@ export default function HRDetailPage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('hr.storageForm')}</dt>
-                <dd>{folder.storageForm === 'electronic' ? t('hr.formElectronic') : folder.storageForm === 'hybrid' ? t('hr.formHybrid') : t('hr.formPaper')}</dd>
+                <dd>{folder.storageForm === 'digital' ? t('hr.formElectronic') : folder.storageForm === 'hybrid' ? t('hr.formHybrid') : t('hr.formPaper')}</dd>
               </div>
             </dl>
           </div>

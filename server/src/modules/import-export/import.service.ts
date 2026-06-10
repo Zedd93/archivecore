@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 import { prisma } from '../../config/database';
-import { generateQrData } from '@archivecore/shared';
+import { generateQrData, peselSchema } from '@archivecore/shared';
 import { encryptAES256, hmacSha256 } from '../../utils/crypto';
 
 // ─── Row validation schemas (relaxed versions for import) ─
@@ -17,7 +17,7 @@ const boxImportRowSchema = z.object({
 const hrImportRowSchema = z.object({
   employeeFirstName: z.string().min(1, 'Imię jest wymagane').max(100),
   employeeLastName: z.string().min(1, 'Nazwisko jest wymagane').max(100),
-  employeePesel: z.string().length(11, 'PESEL musi mieć 11 znaków').regex(/^\d{11}$/, 'PESEL musi składać się z cyfr'),
+  employeePesel: peselSchema,
   employeeIdNumber: z.string().max(50).optional(),
   department: z.string().max(200).optional(),
   position: z.string().max(200).optional(),

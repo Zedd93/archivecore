@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useList, useCreate } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
+import { createHRFolderSchema } from '@archivecore/shared';
 import { useTranslation } from 'react-i18next';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
@@ -15,6 +16,7 @@ export default function HRListPage() {
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [filters, setFilters] = useState({ search: '', employmentStatus: '', department: '' });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useList('hr', '/hr', { page, limit: 20, ...filters });
   const createHR = useCreate('/hr', ['hr'], t('common.success'));
@@ -46,7 +48,7 @@ export default function HRListPage() {
     {
       key: 'storageForm',
       header: t('hr.form'),
-      render: (item) => item.storageForm === 'electronic' ? t('hr.formElectronic') : item.storageForm === 'hybrid' ? t('hr.formHybrid') : t('hr.formPaper'),
+      render: (item) => item.storageForm === 'digital' ? t('hr.formElectronic') : item.storageForm === 'hybrid' ? t('hr.formHybrid') : t('hr.formPaper'),
     },
     {
       key: 'litigationHold',
@@ -71,20 +73,41 @@ export default function HRListPage() {
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setFormErrors({});
     const fd = new FormData(e.currentTarget);
-    await createHR.mutateAsync({
-      employeeFirstName: fd.get('firstName'),
-      employeeLastName: fd.get('lastName'),
-      employeePesel: fd.get('pesel'),
-      employeeIdNumber: fd.get('idNumber') || undefined,
-      department: fd.get('department') || undefined,
-      position: fd.get('position') || undefined,
-      employmentStart: fd.get('employmentStart') || undefined,
-      employmentStatus: fd.get('employmentStatus') || 'active',
-      retentionPeriod: fd.get('retentionPeriod') || 'ten_years',
-      storageForm: fd.get('storageForm') || 'paper',
-      boxId: fd.get('boxId') || undefined,
-    });
+    const form = e.currentTarget;
+    const payload = {
+      employeeFirstName: String(fd.get('firstName') || '').trim(),
+      employeeLastName: String(fd.get('lastName') || '').trim(),
+      employeePesel: String(fd.get('pesel') || '').trim(),
+      employeeIdNumber: String(fd.get('idNumber') || '').trim() || undefined,
+      department: String(fd.get('department') || '').trim() || undefined,
+      position: String(fd.get('position') || '').trim() || undefined,
+      employmentStart: String(fd.get('employmentStart') || '').trim() || undefined,
+      employmentStatus: String(fd.get('employmentStatus') || 'active'),
+      retentionPeriod: String(fd.get('retentionPeriod') || 'ten_years'),
+      storageForm: String(fd.get('storageForm') || 'paper'),
+      boxId: String(fd.get('boxId') || '').trim() || undefined,
+    };
+    const validation = createHRFolderSchema.safeParse(payload);
+
+    if (!validation.success) {
+      const nextErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        const field = err.path[0]?.toString();
+        if (field && !nextErrors[field]) nextErrors[field] = err.message;
+      });
+      setFormErrors(nextErrors);
+      return;
+    }
+
+    await createHR.mutateAsync(validation.data);
+    form.reset();
+    setShowCreate(false);
+  };
+
+  const closeCreateModal = () => {
+    setFormErrors({});
     setShowCreate(false);
   };
 
@@ -127,22 +150,25 @@ export default function HRListPage() {
         {data?.meta && <div className="px-4 pb-4"><Pagination page={page} limit={20} total={data.meta.total} onPageChange={setPage} /></div>}
       </div>
 
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title={t('hr.createModal.title')} size="lg">
-        <form onSubmit={handleCreate} className="space-y-4">
+      <Modal isOpen={showCreate} onClose={closeCreateModal} title={t('hr.createModal.title')} size="lg">
+        <form onSubmit={handleCreate} className="space-y-4" noValidate>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="hr-create-firstName" className="label-text">{t('hr.createModal.firstName')} *</label>
-              <input id="hr-create-firstName" name="firstName" className="input-field" required />
+              <input id="hr-create-firstName" name="firstName" className="input-field" required aria-invalid={!!formErrors.employeeFirstName} />
+              {formErrors.employeeFirstName && <p className="text-xs text-red-600 mt-1">{formErrors.employeeFirstName}</p>}
             </div>
             <div>
               <label htmlFor="hr-create-lastName" className="label-text">{t('hr.createModal.lastName')} *</label>
-              <input id="hr-create-lastName" name="lastName" className="input-field" required />
+              <input id="hr-create-lastName" name="lastName" className="input-field" required aria-invalid={!!formErrors.employeeLastName} />
+              {formErrors.employeeLastName && <p className="text-xs text-red-600 mt-1">{formErrors.employeeLastName}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="hr-create-pesel" className="label-text">{t('hr.createModal.pesel')} *</label>
-              <input id="hr-create-pesel" name="pesel" className="input-field font-mono" required maxLength={11} pattern="\d{11}" placeholder="00000000000" />
+              <input id="hr-create-pesel" name="pesel" className="input-field font-mono" required maxLength={11} inputMode="numeric" pattern="\d{11}" placeholder="00000000000" aria-invalid={!!formErrors.employeePesel} />
+              {formErrors.employeePesel && <p className="text-xs text-red-600 mt-1">{formErrors.employeePesel}</p>}
               <p className="text-xs text-gray-400 mt-1">{t('hr.createModal.peselEncrypted')}</p>
             </div>
             <div>
@@ -176,13 +202,13 @@ export default function HRListPage() {
               <label htmlFor="hr-create-storageForm" className="label-text">{t('hr.storageForm')}</label>
               <select id="hr-create-storageForm" name="storageForm" className="input-field">
                 <option value="paper">{t('hr.formPaper')}</option>
-                <option value="electronic">{t('hr.formElectronic')}</option>
+                <option value="digital">{t('hr.formElectronic')}</option>
                 <option value="hybrid">{t('hr.formHybrid')}</option>
               </select>
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="button" onClick={closeCreateModal} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createHR.isPending} className="btn-primary">
               {createHR.isPending ? t('common.creating') : t('common.create')}
             </button>
