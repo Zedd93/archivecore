@@ -4,6 +4,7 @@ import api from '@/services/api';
 import Modal from '@/components/ui/Modal';
 import { Share2, Copy, Check, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 interface ShareButtonProps {
   entityType: 'box' | 'order' | 'hr' | 'transfer_list';
@@ -33,7 +34,7 @@ export default function ShareButton({ entityType, entityId, className = '' }: Sh
       setShareUrl(url);
       toast.success(t('share.linkGenerated'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('share.shareError'));
+      toast.error(getApiErrorMessage(err, t('share.shareError')));
     } finally {
       setLoading(false);
     }

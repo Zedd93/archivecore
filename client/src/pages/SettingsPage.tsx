@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { User, Shield, Bell, Palette, Loader2, Eye, EyeOff } from 'lucide-react';
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance';
@@ -72,7 +73,7 @@ function ProfileTab({ user }: { user: any }) {
       await api.patch('/auth/profile', { firstName, lastName });
       toast.success(t('auth.profileUpdated'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('auth.profileUpdateError'));
+      toast.error(getApiErrorMessage(err, t('auth.profileUpdateError')));
     } finally {
       setSaving(false);
     }
@@ -163,7 +164,7 @@ function SecurityTab() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('settings.security.passwordError'));
+      toast.error(getApiErrorMessage(err, t('settings.security.passwordError')));
     } finally {
       setSaving(false);
     }

@@ -5,6 +5,7 @@ import api from '@/services/api';
 import { QrCode, Printer, Camera, Loader2, ScanLine } from 'lucide-react';
 import toast from 'react-hot-toast';
 import BoxPicker from '@/components/ui/BoxPicker';
+import { getApiErrorMessageAsync } from '@/utils/apiError';
 
 interface SelectedBox {
   id: string;
@@ -40,7 +41,7 @@ export default function LabelsPage() {
       window.open(url, '_blank');
       toast.success(t('common.success'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('boxes.labelError'));
+      toast.error(await getApiErrorMessageAsync(err, t('boxes.labelError')));
     } finally {
       setIsGenerating(false);
     }
@@ -55,7 +56,7 @@ export default function LabelsPage() {
       window.open(url, '_blank');
       toast.success(t('common.success'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('common.genericError'));
+      toast.error(await getApiErrorMessageAsync(err, t('common.genericError')));
     } finally {
       setIsGenerating(false);
     }

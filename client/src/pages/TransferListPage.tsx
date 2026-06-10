@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { SkeletonTable } from '@/components/ui/Skeleton';
 import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/statusColors';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function TransferListPage() {
   const { t } = useTranslation();
@@ -135,7 +136,7 @@ export default function TransferListPage() {
       refetch();
       navigate(`/transfer-lists/${created.id}`);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.importModal.importError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.importModal.importError')));
     } finally {
       setImporting(false);
     }
@@ -198,18 +199,20 @@ export default function TransferListPage() {
     setDeleting(true);
     let successCount = 0;
     let errorCount = 0;
+    let firstError: string | null = null;
 
     for (const id of selectedIds) {
       try {
         await api.delete(`/transfer-lists/${id}`);
         successCount++;
-      } catch {
+      } catch (err: any) {
+        firstError ??= getApiErrorMessage(err, t('transferLists.deleteError', { count: 1 }));
         errorCount++;
       }
     }
 
     if (successCount > 0) toast.success(t('transferLists.deleted', { count: successCount }));
-    if (errorCount > 0) toast.error(t('transferLists.deleteError', { count: errorCount }));
+    if (errorCount > 0) toast.error(firstError || t('transferLists.deleteError', { count: errorCount }));
 
     setSelectedIds(new Set());
     setDeleting(false);

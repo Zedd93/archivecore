@@ -18,6 +18,7 @@ import Modal from '@/components/ui/Modal';
 import FormField from '@/components/ui/FormField';
 import LocationPicker from '@/components/ui/LocationPicker';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { Plus, Download, Loader2, RefreshCw, MapPin } from 'lucide-react';
 
 type CreateBoxForm = z.infer<typeof createBoxSchema>;
@@ -150,7 +151,7 @@ export default function BoxListPage() {
       setBulkStatus('');
       refetch();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('boxes.bulk.statusError'));
+      toast.error(getApiErrorMessage(err, t('boxes.bulk.statusError')));
     } finally {
       setBulkLoading(false);
     }
@@ -168,7 +169,7 @@ export default function BoxListPage() {
       queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
       refetch();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('boxes.bulk.moveError'));
+      toast.error(getApiErrorMessage(err, t('boxes.bulk.moveError')));
     } finally {
       setBulkLoading(false);
     }

@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DOC_TYPES } from '@archivecore/shared';
 import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2, Edit3, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 
 export default function BoxDetailPage() {
   const { id } = useParams();
@@ -79,8 +80,8 @@ export default function BoxDetailPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 30000);
-    } catch (err) {
-      toast.error(t('boxes.labelError'));
+    } catch (err: any) {
+      toast.error(await getApiErrorMessageAsync(err, t('boxes.labelError')));
     } finally {
       setLabelLoading(false);
     }
@@ -102,7 +103,7 @@ export default function BoxDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['box'] });
       queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('common.genericError'));
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setSaving(false);
     }
@@ -118,7 +119,7 @@ export default function BoxDetailPage() {
       setNewStatus('');
       queryClient.invalidateQueries({ queryKey: ['box'] });
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('common.genericError'));
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setSaving(false);
     }

@@ -3,12 +3,13 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { AxiosError } from 'axios';
 import i18n from '@/i18n/config';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 function getErrorMessage(error: AxiosError<any>): string {
   if (error.response?.status === 401 && error.config?.url?.includes('/auth/refresh')) {
     return i18n.t('auth.sessionExpired');
   }
-  return error.response?.data?.error || error.message || 'An error occurred';
+  return getApiErrorMessage(error, i18n.t('common.genericError'));
 }
 
 // ─── Generic list hook with filters and pagination ──────

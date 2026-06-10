@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
 import {
   Upload, FileSpreadsheet, AlertTriangle, CheckCircle2,
   Loader2, X, ArrowRight, Download,
@@ -99,7 +100,7 @@ export default function ImportPage() {
       });
       setPreview(data.data);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('common.genericError'));
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setPreviewing(false);
     }
@@ -126,7 +127,7 @@ export default function ImportPage() {
         toast.success(t('import.successWithErrors', { count: data.data.imported, errors: data.data.errors.length }));
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('common.genericError'));
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setImporting(false);
     }

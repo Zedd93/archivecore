@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Box, Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function LoginPage() {
   const { login, verifyMfa } = useAuth();
@@ -31,7 +32,7 @@ export default function LoginPage() {
         navigate('/');
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('auth.loginError'));
+      toast.error(getApiErrorMessage(err, t('auth.loginError')));
     } finally {
       setIsLoading(false);
     }
@@ -44,7 +45,7 @@ export default function LoginPage() {
       await verifyMfa(mfaToken, mfaCode);
       navigate('/');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('auth.twoFaInvalid'));
+      toast.error(getApiErrorMessage(err, t('auth.twoFaInvalid')));
     } finally {
       setIsLoading(false);
     }

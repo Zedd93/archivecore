@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/statusColors';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 
@@ -263,7 +264,7 @@ export default function TransferListDetailPage() {
       resetForm();
       refetchItems();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.detail.updateError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.updateError')));
     }
   };
 
@@ -313,7 +314,7 @@ export default function TransferListDetailPage() {
       refetchItems();
       refetchList();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.detail.importError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.importError')));
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -326,7 +327,7 @@ export default function TransferListDetailPage() {
       toast.success(t('transferLists.detail.statusChanged', { status: STATUS_LABELS[newStatus] }));
       refetchList();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.detail.statusError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.statusError')));
     }
   };
 
@@ -367,7 +368,7 @@ export default function TransferListDetailPage() {
       refetchItems();
       refetchList();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.detail.bulkDeleteError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.bulkDeleteError')));
     } finally {
       setBulkProcessing(false);
     }
@@ -390,7 +391,7 @@ export default function TransferListDetailPage() {
       setBulkBoxNumber('');
       refetchItems();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.detail.assignError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.assignError')));
     } finally {
       setBulkProcessing(false);
     }
@@ -414,7 +415,7 @@ export default function TransferListDetailPage() {
       setSelectedItemIds(new Set());
       refetchItems();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('transferLists.detail.unassignError'));
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.unassignError')));
     } finally {
       setBulkProcessing(false);
     }

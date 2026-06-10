@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { getApiErrorMessageAsync } from '@/utils/apiError';
 
 interface UseExportOptions {
   /** Endpoint path e.g. '/export/boxes' */
@@ -69,18 +70,7 @@ export function useExport({ endpoint, defaultFilename = 'export.xlsx' }: UseExpo
 
       toast.success(t('common.fileExported'));
     } catch (err: any) {
-      // Try to parse error from blob response
-      if (err.response?.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const json = JSON.parse(text);
-          toast.error(json.error || t('common.exportError'));
-        } catch {
-          toast.error(t('common.exportDataError'));
-        }
-      } else {
-        toast.error(err.response?.data?.error || t('common.exportDataError'));
-      }
+      toast.error(await getApiErrorMessageAsync(err, t('common.exportDataError')));
     } finally {
       setIsExporting(false);
     }

@@ -12,6 +12,7 @@ import ActivityTimeline from '@/components/ui/ActivityTimeline';
 import ShareButton from '@/components/ui/ShareButton';
 import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus } from 'lucide-react';
 
 // Status flow steps
@@ -69,8 +70,7 @@ export default function OrderDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['order'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     } catch (err: any) {
-      const details = err.response?.data?.details;
-      toast.error(details?.[0]?.message || err.response?.data?.error || t('common.genericError'));
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setAddingBoxes(false);
     }

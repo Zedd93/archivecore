@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import Modal from '@/components/ui/Modal';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { useAuth } from '@/contexts/AuthContext';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { MapPin, ChevronRight, ChevronDown, Box, Plus, Loader2 } from 'lucide-react';
 
 interface LocationNode {
@@ -152,8 +153,7 @@ export default function LocationsPage() {
       setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
       queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
     } catch (err: any) {
-      const details = err.response?.data?.details;
-      toast.error(details?.[0]?.message || err.response?.data?.error || t('common.genericError'));
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setCreating(false);
     }

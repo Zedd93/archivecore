@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { Loader2, Box, FileText, User, FileSpreadsheet, Clock, ShieldAlert, Link2Off, MapPin } from 'lucide-react';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 interface ShareData {
   entityType: string;
@@ -31,7 +32,7 @@ export default function PublicSharePage() {
         if (err.response?.data?.expired) {
           setExpired(true);
         }
-        setError(err.response?.data?.error || t('share.error'));
+        setError(getApiErrorMessage(err, t('share.error')));
       })
       .finally(() => setLoading(false));
   }, [token, t]);
