@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createBoxSchema, DOC_TYPES } from '@archivecore/shared';
@@ -25,6 +26,7 @@ const BOX_STATUS_OPTIONS = ['active', 'checked_out', 'pending_disposal', 'dispos
 
 export default function BoxListPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(searchParams.get('action') === 'create');
@@ -48,7 +50,7 @@ export default function BoxListPage() {
     ...filters,
   });
 
-  const createBox = useCreate('/boxes', ['boxes'], t('common.success'));
+  const createBox = useCreate('/boxes', ['boxes', 'locations-tree'], t('common.success'));
   const { exportData, isExporting } = useExport({ endpoint: '/export/boxes', defaultFilename: 'kartony.xlsx' });
 
   const {
@@ -154,6 +156,7 @@ export default function BoxListPage() {
       setSelectedIds(new Set());
       setShowBulkMoveModal(false);
       setBulkLocationId('');
+      queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
       refetch();
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('boxes.bulk.moveError'));

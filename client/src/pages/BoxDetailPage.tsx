@@ -100,6 +100,7 @@ export default function BoxDetailPage() {
       toast.success(t('common.success'));
       setShowEditModal(false);
       queryClient.invalidateQueries({ queryKey: ['box'] });
+      queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('common.genericError'));
     } finally {

@@ -228,16 +228,42 @@ export class BoxService {
   }
 
   async bulkMove(ids: string[], tenantId: string, locationId: string) {
-    const result = await prisma.box.updateMany({
+    await this.validateBoxLocation(locationId);
+
+    const boxes = await prisma.box.findMany({
       where: { id: { in: ids }, tenantId },
-      data: { locationId },
+      select: { id: true, locationId: true },
     });
-    // Update location counter
-    await prisma.location.update({
-      where: { id: locationId },
-      data: { currentCount: { increment: result.count } },
-    });
-    return { updated: result.count };
+    const movedBoxes = boxes.filter(box => box.locationId !== locationId);
+
+    const decrementByLocation = movedBoxes.reduce<Record<string, number>>((acc, box) => {
+      if (!box.locationId) return acc;
+      acc[box.locationId] = (acc[box.locationId] || 0) + 1;
+      return acc;
+    }, {});
+
+    await prisma.$transaction([
+      prisma.box.updateMany({
+        where: { id: { in: movedBoxes.map(box => box.id) }, tenantId },
+        data: { locationId },
+      }),
+      ...Object.entries(decrementByLocation).map(([oldLocationId, count]) =>
+        prisma.location.update({
+          where: { id: oldLocationId },
+          data: { currentCount: { decrement: count } },
+        })
+      ),
+      ...(movedBoxes.length > 0
+        ? [
+            prisma.location.update({
+              where: { id: locationId },
+              data: { currentCount: { increment: movedBoxes.length } },
+            }),
+          ]
+        : []),
+    ]);
+
+    return { updated: boxes.length, moved: movedBoxes.length };
   }
 
   async getHistory(id: string, tenantId: string) {

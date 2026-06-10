@@ -16,6 +16,7 @@ interface LocationNode {
   fullPath: string;
   capacity: number | null;
   currentCount: number;
+  aggregatedCount?: number;
   children: LocationNode[];
 }
 
@@ -42,7 +43,8 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children && node.children.length > 0;
-  const occupancy = node.capacity ? Math.round((node.currentCount / node.capacity) * 100) : null;
+  const displayCount = node.aggregatedCount ?? node.currentCount;
+  const occupancy = node.capacity ? Math.round((displayCount / node.capacity) * 100) : null;
 
   return (
     <div>
@@ -73,7 +75,7 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
           {node.capacity && (
             <span className="flex items-center gap-1">
               <Box size={12} />
-              {node.currentCount}/{node.capacity}
+              {displayCount}/{node.capacity}
             </span>
           )}
           {occupancy !== null && (
