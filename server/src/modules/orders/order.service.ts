@@ -244,7 +244,9 @@ export class OrderService {
 
   async deliver(id: string, tenantId: string, userId: string) {
     const order = await this.getById(id, tenantId);
-    const updated = await this.updateStatus(id, tenantId, 'delivered', userId);
+    await this.updateStatus(id, tenantId, 'delivered', userId);
+    const deliveredAt = new Date();
+    const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
 
     // Create custody events for each box in the order
     for (const item of order.items) {
@@ -272,25 +274,36 @@ export class OrderService {
       }
     }
 
-    return updated;
+    await prisma.orderItem.updateMany({
+      where: {
+        orderId: id,
+        itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
+      },
+      data: {
+        itemStatus: nextItemStatus,
+        deliveredAt,
+      },
+    });
+
+    return this.getById(id, tenantId);
   }
 
   async complete(id: string, tenantId: string, userId: string) {
-    const updated = await this.updateStatus(id, tenantId, 'completed', userId);
+    await this.updateStatus(id, tenantId, 'completed', userId);
 
     // Mark all pending/picked items as delivered
     await prisma.orderItem.updateMany({
       where: {
         orderId: id,
-        itemStatus: { in: ['pending', 'picked'] },
+        itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
       },
       data: {
-        itemStatus: 'delivered',
+        itemStatus: OrderItemStatus.delivered,
         deliveredAt: new Date(),
       },
     });
 
-    return updated;
+    return this.getById(id, tenantId);
   }
 
   async cancel(id: string, tenantId: string, userId: string, notes?: string) {

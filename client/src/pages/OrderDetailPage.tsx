@@ -51,6 +51,7 @@ export default function OrderDetailPage() {
 
   const handleAction = async (action: string) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}` });
+    await queryClient.invalidateQueries({ queryKey: ['order', id] });
   };
 
   const canAddItems = hasPermission('order.create') || hasPermission('order.process');
@@ -68,6 +69,7 @@ export default function OrderDetailPage() {
       setSelectedBoxes([]);
       setShowAddBox(false);
       queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
