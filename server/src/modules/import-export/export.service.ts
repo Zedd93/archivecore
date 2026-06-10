@@ -86,6 +86,40 @@ const TRANSFER_LIST_COLUMNS: ExportColumn[] = [
 
 // ─── Export service ──────────────────────────────────────
 export class ExportService {
+  private async getLocationAndDescendantIds(locationId: string, tenantId: string): Promise<string[]> {
+    const locations = await prisma.location.findMany({
+      where: {
+        isActive: true,
+        OR: [{ tenantId }, { tenantId: null }],
+      },
+      select: { id: true, parentId: true },
+    });
+
+    if (!locations.some(location => location.id === locationId)) {
+      const err = new Error('Lokalizacja nie znaleziona');
+      (err as any).statusCode = 404;
+      throw err;
+    }
+
+    const childrenByParent = new Map<string, string[]>();
+    for (const location of locations) {
+      if (!location.parentId) continue;
+      const children = childrenByParent.get(location.parentId) ?? [];
+      children.push(location.id);
+      childrenByParent.set(location.parentId, children);
+    }
+
+    const result: string[] = [];
+    const stack = [locationId];
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      result.push(currentId);
+      stack.push(...(childrenByParent.get(currentId) ?? []));
+    }
+
+    return result;
+  }
+
   private createTimestamp(date = new Date()): string {
     const pad = (value: number) => String(value).padStart(2, '0');
     return [
@@ -154,10 +188,14 @@ export class ExportService {
   }
 
   // ─── BOXES ─────────────────────────────────────────────
-  async exportBoxes(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx'): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  async exportBoxes(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx', department?: string): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const where: Prisma.BoxWhereInput = { tenantId };
+    if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
     if (filters.docType) where.docType = filters.docType;
+    if (filters.locationId) {
+      where.locationId = { in: await this.getLocationAndDescendantIds(String(filters.locationId), tenantId) };
+    }
     if (filters.search) {
       where.OR = [
         { title: { contains: filters.search, mode: 'insensitive' } },

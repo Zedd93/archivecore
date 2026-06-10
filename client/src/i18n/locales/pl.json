@@ -553,6 +553,7 @@
     "typeZone": "Strefa",
     "typeRack": "Regał",
     "typeShelf": "Półka",
+    "typeLevel": "Poziom",
     "typeSlot": "Miejsce",
     "parentLocation": "Lokalizacja nadrzędna",
     "parentLocationPlaceholder": "Opcjonalnie — wybierz magazyn, strefę lub regał",

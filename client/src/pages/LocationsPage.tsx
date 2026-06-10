@@ -22,10 +22,10 @@ interface LocationNode {
 
 // Translation keys for location types - resolved via t() at render time
 const TYPE_LABEL_KEYS: Record<string, string> = {
-  warehouse: 'locations.typeWarehouse', zone: 'locations.typeZone', rack: 'locations.typeRack', shelf: 'locations.typeShelf', slot: 'locations.typeSlot',
+  warehouse: 'locations.typeWarehouse', zone: 'locations.typeZone', rack: 'locations.typeRack', shelf: 'locations.typeShelf', level: 'locations.typeLevel', slot: 'locations.typeSlot',
 };
 const TYPE_ICONS: Record<string, string> = {
-  warehouse: '🏢', zone: '📦', rack: '🗄️', shelf: '📚', slot: '📍',
+  warehouse: '🏢', zone: '📦', rack: '🗄️', shelf: '📚', level: '↳', slot: '📍',
 };
 
 function LocationTree({ nodes, depth = 0 }: { nodes: LocationNode[]; depth?: number }) {
@@ -45,21 +45,39 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
   const hasChildren = node.children && node.children.length > 0;
   const displayCount = node.aggregatedCount ?? node.currentCount;
   const occupancy = node.capacity ? Math.round((displayCount / node.capacity) * 100) : null;
+  const openBoxes = () => navigate(`/boxes?locationId=${node.id}`);
+  const toggleExpanded = () => setExpanded(prev => !prev);
 
   return (
     <div>
       <div
         className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors`}
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
-        onClick={() => setExpanded(!expanded)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
+        onClick={openBoxes}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            openBoxes();
+          }
+          if (e.key === ' ') {
+            e.preventDefault();
+            toggleExpanded();
+          }
+        }}
         role="treeitem"
         tabIndex={0}
         aria-expanded={hasChildren ? expanded : undefined}
-        aria-label={`${node.name} (${t(TYPE_LABEL_KEYS[node.type])})`}
+        aria-label={`${node.name} (${t(TYPE_LABEL_KEYS[node.type])}) - ${t('boxes.title')}`}
       >
         {hasChildren ? (
-          expanded ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
+            className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            aria-label={expanded ? t('common.collapse', 'Zwiń') : t('common.expand', 'Rozwiń')}
+          >
+            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
         ) : (
           <span className="w-4" />
         )}

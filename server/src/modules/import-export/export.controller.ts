@@ -8,7 +8,7 @@ export class ExportController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const format = (req.query.format as string) === 'csv' ? 'csv' : 'xlsx';
-      const { buffer, filename, contentType } = await exportService.exportBoxes(req.tenantId, req.query, format);
+      const { buffer, filename, contentType } = await exportService.exportBoxes(req.tenantId, req.query, format, req.accessDepartment || undefined);
 
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

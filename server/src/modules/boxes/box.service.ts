@@ -3,6 +3,40 @@ import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export class BoxService {
+  private async getLocationAndDescendantIds(locationId: string, tenantId: string): Promise<string[]> {
+    const locations = await prisma.location.findMany({
+      where: {
+        isActive: true,
+        OR: [{ tenantId }, { tenantId: null }],
+      },
+      select: { id: true, parentId: true },
+    });
+
+    if (!locations.some(location => location.id === locationId)) {
+      const err = new Error('Lokalizacja nie znaleziona');
+      (err as any).statusCode = 404;
+      throw err;
+    }
+
+    const childrenByParent = new Map<string, string[]>();
+    for (const location of locations) {
+      if (!location.parentId) continue;
+      const children = childrenByParent.get(location.parentId) ?? [];
+      children.push(location.id);
+      childrenByParent.set(location.parentId, children);
+    }
+
+    const result: string[] = [];
+    const stack = [locationId];
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      result.push(currentId);
+      stack.push(...(childrenByParent.get(currentId) ?? []));
+    }
+
+    return result;
+  }
+
   private async validateBoxLocation(locationId: string | undefined | null, tenantId: string) {
     if (!locationId) return;
 
@@ -32,7 +66,9 @@ export class BoxService {
     if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
     if (filters.docType) where.docType = filters.docType;
-    if (filters.locationId) where.locationId = filters.locationId;
+    if (filters.locationId) {
+      where.locationId = { in: await this.getLocationAndDescendantIds(String(filters.locationId), tenantId) };
+    }
     if (filters.search) {
       where.OR = [
         { title: { contains: filters.search, mode: 'insensitive' } },

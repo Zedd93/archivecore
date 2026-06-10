@@ -553,6 +553,7 @@
     "typeZone": "Zone",
     "typeRack": "Rack",
     "typeShelf": "Shelf",
+    "typeLevel": "Level",
     "typeSlot": "Slot",
     "parentLocation": "Parent location",
     "parentLocationPlaceholder": "Optional — choose a warehouse, zone, or rack",

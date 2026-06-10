@@ -28,7 +28,7 @@ export default function BoxListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(searchParams.get('action') === 'create');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -42,6 +42,7 @@ export default function BoxListPage() {
     search: searchParams.get('search') || '',
     status: searchParams.get('status') || '',
     docType: searchParams.get('docType') || '',
+    locationId: searchParams.get('locationId') || '',
   });
 
   const { data, isLoading, refetch } = useList('boxes', '/boxes', {
@@ -121,6 +122,14 @@ export default function BoxListPage() {
     reset();
   };
 
+  const clearLocationFilter = () => {
+    setFilters(prev => ({ ...prev, locationId: '' }));
+    setPage(1);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('locationId');
+    setSearchParams(nextParams, { replace: true });
+  };
+
   // ─── Bulk actions ─────────────────────────────────────
   const handleBulkStatusChange = async () => {
     if (!bulkStatus) return;
@@ -197,14 +206,14 @@ export default function BoxListPage() {
               type="text"
               placeholder={t('boxes.searchPlaceholder')}
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => { setPage(1); setFilters({ ...filters, search: e.target.value }); }}
               className="input-field"
               aria-label={t('boxes.searchPlaceholder')}
             />
           </div>
           <select
             value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            onChange={(e) => { setPage(1); setFilters({ ...filters, status: e.target.value }); }}
             className="input-field w-40"
             aria-label={t('boxes.allStatuses')}
           >
@@ -215,6 +224,14 @@ export default function BoxListPage() {
             <option value="disposed">{t('boxes.statusDestroyed')}</option>
           </select>
         </div>
+        {filters.locationId && (
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2 text-sm text-primary-800">
+            <span>{t('boxes.locationFilterActive', 'Pokazujesz kartony z wybranej lokalizacji i jej podlokalizacji')}</span>
+            <button type="button" onClick={clearLocationFilter} className="font-medium hover:text-primary-950">
+              {t('common.clear', 'Wyczyść')}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Table */}
