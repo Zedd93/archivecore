@@ -820,6 +820,13 @@
       "completed": "Completed",
       "cancelled": "Cancelled"
     },
+    "orderItem": {
+      "pending": "Pending",
+      "picked": "Picked",
+      "delivered": "Delivered",
+      "returned": "Returned",
+      "issue": "Issue"
+    },
     "orderType": {
       "checkout": "Checkout",
       "return_order": "Return",

@@ -199,7 +199,7 @@ export default function OrderDetailPage() {
                       </div>
                     )}
                   </div>
-                  <StatusBadge status={item.itemStatus} type="order" />
+                  <StatusBadge status={item.itemStatus} type="orderItem" />
                 </div>
               ))}
             </div>

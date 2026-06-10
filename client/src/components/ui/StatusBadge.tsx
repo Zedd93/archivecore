@@ -3,7 +3,7 @@ import { BOX_STATUS_COLORS, ORDER_STATUS_COLORS } from '@archivecore/shared';
 
 interface StatusBadgeProps {
   status: string;
-  type?: 'box' | 'order' | 'employment' | 'priority' | 'disposal' | 'transferList';
+  type?: 'box' | 'order' | 'orderItem' | 'employment' | 'priority' | 'disposal' | 'transferList';
 }
 
 const colorMap: Record<string, string> = {
@@ -28,6 +28,14 @@ const PRIORITY_COLORS: Record<string, string> = {
   normal: 'blue',
   high: 'orange',
   urgent: 'red',
+};
+
+const ORDER_ITEM_COLORS: Record<string, string> = {
+  pending: 'gray',
+  picked: 'blue',
+  delivered: 'green',
+  returned: 'indigo',
+  issue: 'red',
 };
 
 const DISPOSAL_COLORS: Record<string, string> = {
@@ -55,6 +63,9 @@ export default function StatusBadge({ status, type = 'box' }: StatusBadgeProps) 
       break;
     case 'order':
       color = ORDER_STATUS_COLORS[status] || 'gray';
+      break;
+    case 'orderItem':
+      color = ORDER_ITEM_COLORS[status] || 'gray';
       break;
     case 'employment':
       color = EMPLOYMENT_COLORS[status] || 'gray';
