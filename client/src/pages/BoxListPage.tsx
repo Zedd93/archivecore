@@ -21,6 +21,8 @@ import { Plus, Download, Loader2, RefreshCw, MapPin } from 'lucide-react';
 
 type CreateBoxForm = z.infer<typeof createBoxSchema>;
 
+const BOX_STATUS_OPTIONS = ['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged'] as const;
+
 export default function BoxListPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -120,9 +122,10 @@ export default function BoxListPage() {
   // ─── Bulk actions ─────────────────────────────────────
   const handleBulkStatusChange = async () => {
     if (!bulkStatus) return;
+    const statusLabel = t(`statuses.box.${bulkStatus}`, { defaultValue: bulkStatus });
     const ok = await confirm({
       title: t('boxes.bulk.confirmStatus'),
-      message: t('boxes.bulk.confirmStatusMsg', { count: selectedIds.size, status: bulkStatus }),
+      message: t('boxes.bulk.confirmStatusMsg', { count: selectedIds.size, status: statusLabel }),
       confirmLabel: t('boxes.bulk.change'),
       variant: 'warning',
     });
@@ -269,10 +272,9 @@ export default function BoxListPage() {
             <label htmlFor="bulk-newStatus" className="label-text">{t('boxes.bulk.newStatus')}</label>
             <select id="bulk-newStatus" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} className="input-field">
               <option value="">---</option>
-              <option value="active">{t('boxes.statusActive')}</option>
-              <option value="checked_out">{t('boxes.statusIssued')}</option>
-              <option value="pending_disposal">{t('boxes.statusForDestruction')}</option>
-              <option value="disposed">{t('boxes.statusDestroyed')}</option>
+              {BOX_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>{t(`statuses.box.${status}`)}</option>
+              ))}
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
