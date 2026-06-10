@@ -3,11 +3,15 @@ import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export class BoxService {
-  private async validateBoxLocation(locationId?: string | null) {
+  private async validateBoxLocation(locationId: string | undefined | null, tenantId: string) {
     if (!locationId) return;
 
-    const location = await prisma.location.findUnique({
-      where: { id: locationId },
+    const location = await prisma.location.findFirst({
+      where: {
+        id: locationId,
+        isActive: true,
+        OR: [{ tenantId }, { tenantId: null }],
+      },
       select: { type: true },
     });
     if (!location) {
@@ -15,8 +19,8 @@ export class BoxService {
       (err as any).statusCode = 404;
       throw err;
     }
-    if (['warehouse', 'zone', 'rack'].includes(location.type)) {
-      const err = new Error('Cannot place box at warehouse/zone/rack level. Use shelf, level, or slot.');
+    if (!['shelf', 'level', 'slot'].includes(location.type)) {
+      const err = new Error('Karton można przypisać tylko do półki, poziomu albo pozycji. Wybierz konkretną lokalizację odkładczą.');
       (err as any).statusCode = 400;
       throw err;
     }
@@ -76,18 +80,7 @@ export class BoxService {
   }
 
   async create(data: any, tenantId: string, userId: string) {
-    // Validate location type - boxes cannot be placed at warehouse/zone/rack level
-    if (data.locationId) {
-      const location = await prisma.location.findUnique({
-        where: { id: data.locationId },
-        select: { type: true },
-      });
-      if (location && ['warehouse', 'zone', 'rack'].includes(location.type)) {
-        const err = new Error('Cannot place box at warehouse/zone/rack level. Use shelf, level, or slot.');
-        (err as any).statusCode = 400;
-        throw err;
-      }
-    }
+    await this.validateBoxLocation(data.locationId, tenantId);
 
     // Get tenant for QR code generation
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -141,7 +134,7 @@ export class BoxService {
 
   async update(id: string, tenantId: string, data: any) {
     const box = await this.getById(id, tenantId); // Verify access
-    await this.validateBoxLocation(data.locationId);
+    await this.validateBoxLocation(data.locationId, tenantId);
 
     const updated = await prisma.box.update({
       where: { id },
@@ -183,7 +176,7 @@ export class BoxService {
   }
 
   async move(id: string, tenantId: string, locationId: string, notes?: string) {
-    await this.validateBoxLocation(locationId);
+    await this.validateBoxLocation(locationId, tenantId);
 
     const box = await this.getById(id, tenantId);
     const oldLocationId = box.locationId;
@@ -228,7 +221,7 @@ export class BoxService {
   }
 
   async bulkMove(ids: string[], tenantId: string, locationId: string) {
-    await this.validateBoxLocation(locationId);
+    await this.validateBoxLocation(locationId, tenantId);
 
     const boxes = await prisma.box.findMany({
       where: { id: { in: ids }, tenantId },

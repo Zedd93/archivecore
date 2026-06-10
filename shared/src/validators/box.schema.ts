@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { DOC_TYPES } from '../constants/statuses';
 
 const optionalDocTypeSchema = z.enum(DOC_TYPES).optional();
+const boxLocationIdSchema = z.string({
+  required_error: 'Lokalizacja jest wymagana',
+  invalid_type_error: 'Lokalizacja jest wymagana',
+}).uuid('Lokalizacja jest wymagana');
 
 export const createBoxSchema = z.object({
   title: z.string().min(1, 'Tytuł jest wymagany').max(500),
@@ -10,7 +14,7 @@ export const createBoxSchema = z.object({
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   keywords: z.array(z.string()).optional(),
-  locationId: z.string().uuid().optional(),
+  locationId: boxLocationIdSchema,
   retentionPolicyId: z.string().uuid().optional(),
   notes: z.string().optional(),
   description: z.string().optional(),
@@ -22,7 +26,7 @@ export const updateBoxSchema = createBoxSchema.partial().extend({
 });
 
 export const moveBoxSchema = z.object({
-  locationId: z.string().uuid('Lokalizacja jest wymagana'),
+  locationId: boxLocationIdSchema,
   notes: z.string().optional(),
 });
 
@@ -47,7 +51,7 @@ export const bulkBoxStatusSchema = bulkBoxIdsSchema.and(z.object({
 }));
 
 export const bulkBoxMoveSchema = bulkBoxIdsSchema.and(z.object({
-  locationId: z.string().uuid('Location is required'),
+  locationId: boxLocationIdSchema,
   notes: z.string().optional(),
 }));
 

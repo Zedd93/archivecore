@@ -331,11 +331,11 @@ export default function BoxListPage() {
                 ))}
               </select>
             </FormField>
-            <FormField label={t('boxes.bulk.locationId')} htmlFor="box-create-locationId" error={errors.locationId?.message}>
+            <FormField label={t('boxes.bulk.locationId')} htmlFor="box-create-locationId" required error={errors.locationId?.message}>
               <LocationPicker
                 id="box-create-locationId"
                 value={watch('locationId') || ''}
-                onChange={(id) => setValue('locationId', id)}
+                onChange={(id) => setValue('locationId', id, { shouldValidate: true })}
                 placeholder={t('boxes.bulk.locationPlaceholder')}
                 excludeTypes={['warehouse', 'zone', 'rack']}
               />
