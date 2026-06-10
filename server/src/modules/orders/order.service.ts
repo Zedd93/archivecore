@@ -1,7 +1,6 @@
 import { prisma } from '../../config/database';
 import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '@prisma/client';
 import { isValidTransition } from './order-state-machine';
-import { custodyService } from './custody.service';
 import { SLA_LEVELS, BUSINESS_HOURS } from '@archivecore/shared';
 
 function calculateSlaDeadline(priority: string): Date {
@@ -27,6 +26,27 @@ function calculateSlaDeadline(priority: string): Date {
 }
 
 export class OrderService {
+  private getStatusUpdateData(order: any, newStatus: OrderStatus, userId: string, notes?: string): Prisma.OrderUpdateInput {
+    const updateData: Prisma.OrderUpdateInput = {
+      status: newStatus,
+      notes: notes || order.notes,
+    };
+
+    switch (newStatus) {
+      case 'approved':
+        updateData.approver = { connect: { id: userId } };
+        break;
+      case 'in_progress':
+        updateData.assignee = { connect: { id: userId } };
+        break;
+      case 'completed':
+        updateData.completedAt = new Date();
+        break;
+    }
+
+    return updateData;
+  }
+
   private async resolveOrderItem(item: any, tenantId: string, department?: string) {
     if (item.boxId || item.boxNumber) {
       const box = await prisma.box.findFirst({
@@ -98,7 +118,7 @@ export class OrderService {
         assignee: { select: { id: true, firstName: true, lastName: true } },
         items: {
           include: {
-            box: { select: { id: true, boxNumber: true, title: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
+            box: { select: { id: true, boxNumber: true, title: true, status: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
             folder: { select: { id: true, folderNumber: true, title: true } },
             hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
             picker: { select: { id: true, firstName: true, lastName: true } },
@@ -172,7 +192,7 @@ export class OrderService {
         ...resolvedItem,
       },
       include: {
-        box: { select: { id: true, boxNumber: true, title: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
+        box: { select: { id: true, boxNumber: true, title: true, status: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
         folder: { select: { id: true, folderNumber: true, title: true } },
         hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
         picker: { select: { id: true, firstName: true, lastName: true } },
@@ -190,23 +210,7 @@ export class OrderService {
       );
     }
 
-    const updateData: Prisma.OrderUpdateInput = {
-      status: newStatus,
-      notes: notes || order.notes,
-    };
-
-    // Set role-specific fields on transition
-    switch (newStatus) {
-      case 'approved':
-        updateData.approver = { connect: { id: userId } };
-        break;
-      case 'in_progress':
-        updateData.assignee = { connect: { id: userId } };
-        break;
-      case 'completed':
-        updateData.completedAt = new Date();
-        break;
-    }
+    const updateData = this.getStatusUpdateData(order, newStatus, userId, notes);
 
     const updated = await prisma.order.update({
       where: { id },
@@ -244,46 +248,63 @@ export class OrderService {
 
   async deliver(id: string, tenantId: string, userId: string) {
     const order = await this.getById(id, tenantId);
-    await this.updateStatus(id, tenantId, 'delivered', userId);
-    const deliveredAt = new Date();
-    const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
-
-    // Create custody events for each box in the order
-    for (const item of order.items) {
-      if (item.boxId) {
-        await custodyService.create({
-          orderId: id,
-          boxId: item.boxId,
-          eventType: order.orderType === 'return_order' ? 'return_event' : 'handover',
-          fromUserId: userId,
-          toUserId: order.requestedBy,
-        }, tenantId);
-
-        // Update box status
-        if (order.orderType === 'checkout') {
-          await prisma.box.update({
-            where: { id: item.boxId },
-            data: { status: 'checked_out' },
-          });
-        } else if (order.orderType === 'return_order') {
-          await prisma.box.update({
-            where: { id: item.boxId },
-            data: { status: 'active' },
-          });
-        }
-      }
+    if (!isValidTransition(order.status as OrderStatus, 'delivered')) {
+      throw Object.assign(
+        new Error(`Niedozwolona zmiana statusu z "${order.status}" na "delivered"`),
+        { statusCode: 400 }
+      );
     }
 
-    await prisma.orderItem.updateMany({
-      where: {
-        orderId: id,
-        itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
-      },
-      data: {
-        itemStatus: nextItemStatus,
-        deliveredAt,
-      },
-    });
+    const deliveredAt = new Date();
+    const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
+    const boxIds = order.items.map((item: any) => item.boxId).filter(Boolean);
+    const boxStatus = order.orderType === 'checkout'
+      ? 'checked_out'
+      : order.orderType === 'return_order'
+        ? 'active'
+        : undefined;
+
+    const operations: Prisma.PrismaPromise<any>[] = [
+      prisma.order.update({
+        where: { id },
+        data: this.getStatusUpdateData(order, 'delivered', userId),
+      }),
+      prisma.orderItem.updateMany({
+        where: {
+          orderId: id,
+          itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
+        },
+        data: {
+          itemStatus: nextItemStatus,
+          deliveredAt,
+        },
+      }),
+    ];
+
+    if (boxIds.length > 0) {
+      operations.push(
+        prisma.custodyEvent.createMany({
+          data: boxIds.map((boxId: string) => ({
+            orderId: id,
+            boxId,
+            eventType: order.orderType === 'return_order' ? 'return_event' : 'handover',
+            fromUserId: userId,
+            toUserId: order.requestedBy,
+          })),
+        })
+      );
+    }
+
+    if (boxIds.length > 0 && boxStatus) {
+      operations.push(
+        prisma.box.updateMany({
+          where: { id: { in: boxIds }, tenantId },
+          data: { status: boxStatus },
+        })
+      );
+    }
+
+    await prisma.$transaction(operations);
 
     return this.getById(id, tenantId);
   }

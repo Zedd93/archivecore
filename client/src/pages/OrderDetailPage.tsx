@@ -25,7 +25,10 @@ export default function OrderDetailPage() {
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { data: order, isLoading } = useDetail('order', '/orders', id);
-  const patchOrder = usePatch(['order', 'orders'], t('orders.detail.statusChanged'));
+  const patchOrder = usePatch(
+    ['order', 'orders', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
+    t('orders.detail.statusChanged')
+  );
   const [showAddBox, setShowAddBox] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
   const [addingBoxes, setAddingBoxes] = useState(false);
@@ -52,6 +55,8 @@ export default function OrderDetailPage() {
   const handleAction = async (action: string) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}` });
     await queryClient.invalidateQueries({ queryKey: ['order', id] });
+    await queryClient.invalidateQueries({ queryKey: ['box'] });
+    await queryClient.invalidateQueries({ queryKey: ['boxes'] });
   };
 
   const canAddItems = hasPermission('order.create') || hasPermission('order.process');
