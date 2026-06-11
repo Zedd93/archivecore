@@ -68,6 +68,7 @@ export default function SettingsPage() {
 // ─── Profile Tab ─────────────────────────────────────────
 function ProfileTab({ user }: { user: any }) {
   const { t } = useTranslation();
+  const { refreshUser } = useAuth();
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [saving, setSaving] = useState(false);
@@ -75,7 +76,8 @@ function ProfileTab({ user }: { user: any }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch('/auth/profile', { firstName, lastName });
+      await api.patch('/auth/profile', { firstName: firstName.trim(), lastName: lastName.trim() });
+      await refreshUser();
       toast.success(t('auth.profileUpdated'));
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('auth.profileUpdateError')));

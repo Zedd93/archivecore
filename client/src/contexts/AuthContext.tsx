@@ -21,6 +21,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ requiresMfa: boolean; mfaSessionToken?: string }>;
   verifyMfa: (token: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   hasRole: (role: string) => boolean;
 }
@@ -140,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, isAuthenticated: !!user, login, verifyMfa, logout, hasPermission, hasRole }}
+      value={{ user, isLoading, isAuthenticated: !!user, login, verifyMfa, logout, refreshUser: fetchMe, hasPermission, hasRole }}
     >
       {children}
     </AuthContext.Provider>

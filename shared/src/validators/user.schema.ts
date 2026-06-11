@@ -25,6 +25,11 @@ export const updateUserSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const updateProfileSchema = z.object({
+  firstName: z.string().min(1, 'Imię jest wymagane').max(100),
+  lastName: z.string().min(1, 'Nazwisko jest wymagane').max(100),
+});
+
 export const loginSchema = z.object({
   email: z.string().email('Nieprawidłowy adres email'),
   password: z.string().min(1, 'Hasło jest wymagane'),

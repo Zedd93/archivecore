@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authController } from './auth.controller';
 import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import { loginSchema, changePasswordSchema, totpVerifySchema } from '@archivecore/shared';
+import { loginSchema, changePasswordSchema, totpVerifySchema, updateProfileSchema } from '@archivecore/shared';
 
 const router = Router();
 
@@ -13,5 +13,6 @@ router.post('/2fa/setup', authenticate, (req, res, next) => authController.setup
 router.post('/2fa/verify', authenticate, validate(totpVerifySchema), (req, res, next) => authController.verifyTwoFactorSetup(req, res, next));
 router.post('/2fa/validate', (req, res, next) => authController.validateTwoFactor(req, res, next));
 router.post('/change-password', authenticate, validate(changePasswordSchema), (req, res, next) => authController.changePassword(req, res, next));
+router.patch('/profile', authenticate, validate(updateProfileSchema), (req, res, next) => authController.updateProfile(req, res, next));
 
 export default router;

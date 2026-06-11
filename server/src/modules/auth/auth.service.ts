@@ -156,6 +156,27 @@ export class AuthService {
     await prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
   }
 
+  async updateProfile(userId: string, data: { firstName: string; lastName: string }) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        firstName: data.firstName,
+        lastName: data.lastName,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        tenantId: true,
+        department: true,
+      },
+    });
+  }
+
   private async generateTokens(user: any) {
     const roles = user.userRoles.map((ur: any) => ur.role.code);
     const permissions = this.collectPermissions(roles);
