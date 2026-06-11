@@ -47,29 +47,56 @@ export class LabelService {
   async getTemplates(tenantId: string) {
     return prisma.labelTemplate.findMany({
       where: { OR: [{ tenantId }, { tenantId: null }] },
-      orderBy: { isDefault: 'desc' },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
-  async getTemplate(id: string) {
-    const template = await prisma.labelTemplate.findUnique({ where: { id } });
+  async getTemplate(id: string, tenantId: string) {
+    const template = await prisma.labelTemplate.findFirst({
+      where: {
+        id,
+        OR: [{ tenantId }, { tenantId: null }],
+      },
+    });
     if (!template) throw Object.assign(new Error('Szablon etykiety nie znaleziony'), { statusCode: 404 });
     return template;
   }
 
   async createTemplate(tenantId: string, data: any) {
-    return prisma.labelTemplate.create({
-      data: {
-        tenantId,
-        name: data.name,
-        widthMm: data.widthMm,
-        heightMm: data.heightMm,
-        qrSizeMm: data.qrSizeMm || 20,
-        qrErrorLevel: data.qrErrorLevel || 'M',
-        layoutJson: data.layoutJson || DEFAULT_LAYOUT.fields,
-        fields: data.fields || DEFAULT_LAYOUT.fields.map(f => f.key),
-        isDefault: data.isDefault || false,
-      },
+    const name = String(data.name || '').trim();
+    const widthMm = Number(data.widthMm);
+    const heightMm = Number(data.heightMm);
+    const qrSizeMm = Number(data.qrSizeMm || 20);
+
+    if (!name) throw Object.assign(new Error('Nazwa szablonu jest wymagana'), { statusCode: 400 });
+    if (!Number.isFinite(widthMm) || widthMm <= 0) throw Object.assign(new Error('Szerokość etykiety musi być większa od 0'), { statusCode: 400 });
+    if (!Number.isFinite(heightMm) || heightMm <= 0) throw Object.assign(new Error('Wysokość etykiety musi być większa od 0'), { statusCode: 400 });
+    if (!Number.isFinite(qrSizeMm) || qrSizeMm <= 0) throw Object.assign(new Error('Rozmiar QR musi być większy od 0'), { statusCode: 400 });
+    if (qrSizeMm > widthMm || qrSizeMm > heightMm) throw Object.assign(new Error('Rozmiar QR nie może być większy niż etykieta'), { statusCode: 400 });
+
+    const isDefault = Boolean(data.isDefault);
+    const createData = {
+      tenantId,
+      name,
+      widthMm,
+      heightMm,
+      qrSizeMm,
+      qrErrorLevel: data.qrErrorLevel || 'M',
+      layoutJson: data.layoutJson || DEFAULT_LAYOUT.fields,
+      fields: data.fields || DEFAULT_LAYOUT.fields.map(f => f.key),
+      isDefault,
+    };
+
+    if (!isDefault) {
+      return prisma.labelTemplate.create({ data: createData });
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await tx.labelTemplate.updateMany({
+        where: { tenantId, isDefault: true },
+        data: { isDefault: false },
+      });
+      return tx.labelTemplate.create({ data: createData });
     });
   }
 
@@ -77,17 +104,10 @@ export class LabelService {
     const box = await this.findBoxByIdentifier(boxIdentifier, tenantId);
     if (!box) throw Object.assign(new Error('Karton nie znaleziony'), { statusCode: 404 });
 
-    let layout = DEFAULT_LAYOUT;
-    if (templateId) {
-      const template = await this.getTemplate(templateId);
-      layout = {
-        widthMm: Number(template.widthMm),
-        heightMm: Number(template.heightMm),
-        qrSizeMm: Number(template.qrSizeMm),
-        fields: template.layoutJson as unknown as LabelField[],
-        fontSize: 7,
-      };
-    }
+    const template = templateId
+      ? await this.getTemplate(templateId, tenantId)
+      : await this.getDefaultTemplate(tenantId);
+    const layout = this.templateToLayout(template);
 
     const labelData: LabelData = {
       qrData: box.qrCode,
@@ -106,7 +126,7 @@ export class LabelService {
       await prisma.label.create({
         data: {
           boxId: box.id,
-          templateId: templateId || (await this.getDefaultTemplateId(tenantId)),
+          templateId: template.id,
           qrData: box.qrCode,
           generatedBy: userId,
           printCount: 1,
@@ -151,17 +171,10 @@ export class LabelService {
       throw Object.assign(new Error(`Nie znaleziono kartonów: ${missing.join(', ')}`), { statusCode: 404 });
     }
 
-    let layout = DEFAULT_LAYOUT;
-    if (templateId) {
-      const template = await this.getTemplate(templateId);
-      layout = {
-        widthMm: Number(template.widthMm),
-        heightMm: Number(template.heightMm),
-        qrSizeMm: Number(template.qrSizeMm),
-        fields: template.layoutJson as unknown as LabelField[],
-        fontSize: 7,
-      };
-    }
+    const template = templateId
+      ? await this.getTemplate(templateId, tenantId)
+      : await this.getDefaultTemplate(tenantId);
+    const layout = this.templateToLayout(template);
 
     const labelsData: LabelData[] = boxes.map(box => ({
       qrData: box.qrCode,
@@ -190,10 +203,29 @@ export class LabelService {
     }
   }
 
-  private async getDefaultTemplateId(tenantId: string): Promise<string> {
+  private templateToLayout(template: Awaited<ReturnType<typeof this.getDefaultTemplate>>): LabelLayout {
+    return {
+      widthMm: Number(template.widthMm),
+      heightMm: Number(template.heightMm),
+      qrSizeMm: Number(template.qrSizeMm),
+      fields: template.layoutJson as unknown as LabelField[],
+      fontSize: 7,
+    };
+  }
+
+  private async getDefaultTemplate(tenantId: string) {
     let template = await prisma.labelTemplate.findFirst({
-      where: { OR: [{ tenantId }, { tenantId: null }], isDefault: true },
+      where: { tenantId, isDefault: true },
+      orderBy: { createdAt: 'desc' },
     });
+
+    if (!template) {
+      template = await prisma.labelTemplate.findFirst({
+        where: { tenantId: null, isDefault: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
     if (!template) {
       template = await prisma.labelTemplate.create({
         data: {
@@ -209,12 +241,7 @@ export class LabelService {
         },
       });
     }
-    return template.id;
-  }
-
-  private async getOrCreateDefaultTemplate(tenantId: string) {
-    const id = await this.getDefaultTemplateId(tenantId);
-    return { connect: { id } };
+    return template;
   }
 }
 
