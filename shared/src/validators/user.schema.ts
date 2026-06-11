@@ -1,9 +1,15 @@
 import { z } from 'zod';
 import { ASSIGNABLE_ROLE_CODES } from '../constants/roles';
 
+const passwordRequirementsMessage = 'Hasło musi mieć minimum 8 znaków, wielką literę i znak specjalny';
+const strongPasswordSchema = z.string()
+  .min(8, passwordRequirementsMessage)
+  .regex(/[A-ZĄĆĘŁŃÓŚŹŻ]/, passwordRequirementsMessage)
+  .regex(/[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]/, passwordRequirementsMessage);
+
 export const createUserSchema = z.object({
   email: z.string().email('Nieprawidłowy adres email'),
-  password: z.string().min(12, 'Hasło musi mieć minimum 12 znaków'),
+  password: strongPasswordSchema,
   firstName: z.string().min(1, 'Imię jest wymagane').max(100),
   lastName: z.string().min(1, 'Nazwisko jest wymagane').max(100),
   phone: z.string().max(20).optional(),
@@ -26,7 +32,7 @@ export const loginSchema = z.object({
 
 export const changePasswordSchema = z.object({
   oldPassword: z.string().min(1, 'Stare hasło jest wymagane'),
-  newPassword: z.string().min(12, 'Nowe hasło musi mieć minimum 12 znaków'),
+  newPassword: strongPasswordSchema,
 });
 
 export const assignRolesSchema = z.object({

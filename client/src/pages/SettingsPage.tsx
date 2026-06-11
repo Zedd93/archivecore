@@ -8,6 +8,10 @@ import { User, Shield, Bell, Palette, Loader2, Eye, EyeOff } from 'lucide-react'
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance';
 
+function meetsPasswordRequirements(password: string) {
+  return password.length >= 8 && /[A-ZĄĆĘŁŃÓŚŹŻ]/.test(password) && /[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]/.test(password);
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -161,8 +165,8 @@ function SecurityTab() {
       toast.error(t('settings.security.passwordMismatch'));
       return;
     }
-    if (newPassword.length < 8) {
-      toast.error(t('settings.security.passwordTooShort'));
+    if (!meetsPasswordRequirements(newPassword)) {
+      toast.error(t('settings.security.passwordRequirements'));
       return;
     }
     setSaving(true);

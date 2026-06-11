@@ -175,7 +175,7 @@ export default function UsersPage() {
             <div><label htmlFor="user-create-lastName" className="label-text">{t('admin.users.createModal.lastName')}</label><input id="user-create-lastName" name="lastName" className="input-field" required /></div>
           </div>
           <div><label htmlFor="user-create-email" className="label-text">{t('admin.users.createModal.email')}</label><input id="user-create-email" name="email" type="email" className="input-field" required /></div>
-          <div><label htmlFor="user-create-password" className="label-text">{t('admin.users.createModal.password')}</label><input id="user-create-password" name="password" type="password" className="input-field" required minLength={12} /></div>
+          <div><label htmlFor="user-create-password" className="label-text">{t('admin.users.createModal.password')}</label><input id="user-create-password" name="password" type="password" className="input-field" required minLength={8} /></div>
           <div><label htmlFor="user-create-phone" className="label-text">{t('admin.users.createModal.phone')}</label><input id="user-create-phone" name="phone" className="input-field" /></div>
           <div>
             <label htmlFor="user-create-role" className="label-text">{t('admin.users.createModal.role')}</label>
