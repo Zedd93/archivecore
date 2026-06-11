@@ -4,6 +4,238 @@ import { successResponse, paginatedResponse, errorResponse } from '../../utils/r
 import { parsePagination } from '../../utils/pagination';
 import * as XLSX from 'xlsx';
 
+const TRANSFER_LIST_COLUMN_MAP: Record<string, string> = {
+  // Polish names (including common variations)
+  'lp': '_ordinal',
+  'l p': '_ordinal',
+  'nr': '_ordinal',
+  'znak teczki': 'folderSignature',
+  'sygnatura': 'folderSignature',
+  'sygn': 'folderSignature',
+  'tytuł teczki': 'folderTitle',
+  'tytul teczki': 'folderTitle',
+  'tytuł teczki lub tomu': 'folderTitle',
+  'tytul teczki lub tomu': 'folderTitle',
+  'tytuł teczki tomu': 'folderTitle',
+  'tytul teczki tomu': 'folderTitle',
+  'tytuł': 'folderTitle',
+  'tytul': 'folderTitle',
+  'nazwa': 'folderTitle',
+  'data od': 'dateFrom',
+  'daty skrajne od': 'dateFrom',
+  'od': 'dateFrom',
+  'roczniki od': 'dateFrom',
+  'data do': 'dateTo',
+  'daty skrajne do': 'dateTo',
+  'do': 'dateTo',
+  'roczniki do': 'dateTo',
+  'daty skrajne': '_dateRange',
+  'daty skrajne od do': '_dateRange',
+  'daty skrajne oddo': '_dateRange',
+  'daty': '_dateRange',
+  'kat akt': 'categoryCode',
+  'kat': 'categoryCode',
+  'kategoria': 'categoryCode',
+  'kategoria akt': 'categoryCode',
+  'kategoria archiwalna': 'categoryCode',
+  'liczba teczek': 'folderCount',
+  'ilość': 'folderCount',
+  'ilosc': 'folderCount',
+  'ilość teczek': 'folderCount',
+  'ilosc teczek': 'folderCount',
+  'liczba': 'folderCount',
+  'l teczek': 'folderCount',
+  'miejsce przechowywania': 'storageLocation',
+  'miejsce przechowywania akt': 'storageLocation',
+  'miejsce przechowywania akt w archiwum': 'storageLocation',
+  'lokalizacja': 'storageLocation',
+  'data zniszczenia': 'disposalOrTransferDate',
+  'data zniszczenia lub przekazania': 'disposalOrTransferDate',
+  'data zniszczenia lub przekazania do archiwum państwowego': 'disposalOrTransferDate',
+  'data zniszczenia lub przekazania do archiwum panstwowego': 'disposalOrTransferDate',
+  'data przekazania': 'disposalOrTransferDate',
+  'numer kartonu': 'boxNumber',
+  'nr kartonu': 'boxNumber',
+  'karton': 'boxNumber',
+  'box number': 'boxNumber',
+  'uwagi': 'notes',
+  'notatki': 'notes',
+  // English names (fallback)
+  'folder signature': 'folderSignature',
+  'signature': 'folderSignature',
+  'folder title': 'folderTitle',
+  'title': 'folderTitle',
+  'date from': 'dateFrom',
+  'date to': 'dateTo',
+  'category': 'categoryCode',
+  'category code': 'categoryCode',
+  'folder count': 'folderCount',
+  'count': 'folderCount',
+  'storage location': 'storageLocation',
+  'location': 'storageLocation',
+  'disposal date': 'disposalOrTransferDate',
+  'transfer date': 'disposalOrTransferDate',
+  'notes': 'notes',
+};
+
+function normalizeHeader(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/(?<=\p{L})[-‑‐](?=\p{L})/gu, '')
+    .replace(/[–—-]+/g, ' ')
+    .replace(/[.,:;]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getWorksheetRows(sheet: XLSX.WorkSheet): any[][] {
+  return XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: '',
+    blankrows: true,
+    raw: true,
+  }) as any[][];
+}
+
+function detectHeaderRow(rows: any[][]): { headerIndex: number; headerMap: Record<number, string> } | null {
+  for (let headerIndex = 0; headerIndex < rows.length; headerIndex++) {
+    const headerMap: Record<number, string> = {};
+    const fields = new Set<string>();
+
+    rows[headerIndex].forEach((cell, columnIndex) => {
+      const field = TRANSFER_LIST_COLUMN_MAP[normalizeHeader(cell)];
+      if (field) {
+        headerMap[columnIndex] = field;
+        fields.add(field);
+      }
+    });
+
+    if (fields.has('folderSignature') && fields.has('folderTitle') && fields.has('categoryCode')) {
+      return { headerIndex, headerMap };
+    }
+  }
+
+  return null;
+}
+
+function selectTransferListSheet(workbook: XLSX.WorkBook) {
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows = getWorksheetRows(sheet);
+    if (rows.length === 0) continue;
+    const header = detectHeaderRow(rows);
+    if (header) return { sheetName, rows, ...header };
+  }
+
+  return null;
+}
+
+function parseDate(val: any): string | null {
+  if (val === null || val === undefined || val === '') return null;
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return val.toISOString().split('T')[0];
+  }
+  if (typeof val === 'number' && Number.isInteger(val) && val >= 1000 && val <= 3000) {
+    return `${val}-01-01`;
+  }
+  if (typeof val === 'number' && val > 1000 && val < 100000) {
+    try {
+      const date = new Date((val - 25569) * 86400 * 1000);
+      if (!isNaN(date.getTime())) return date.toISOString().split('T')[0];
+    } catch { /* fall through */ }
+  }
+
+  const s = String(val).trim();
+  if (!s || /^brak\s+dat$/i.test(s)) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  if (/^\d{4}$/.test(s)) return `${s}-01-01`;
+  const ym = s.match(/^(\d{4})[./](\d{1,2})$/);
+  if (ym) return `${ym[1]}-${ym[2].padStart(2, '0')}-01`;
+  return null;
+}
+
+function parseDateRange(val: any): { from: string | null; to: string | null } {
+  if (val === null || val === undefined || val === '') return { from: null, to: null };
+  const s = String(val).trim();
+  if (!s || /^brak\s+dat$/i.test(s)) return { from: null, to: null };
+
+  const year = s.match(/^(\d{4})$/);
+  if (year) return { from: `${year[1]}-01-01`, to: `${year[1]}-12-31` };
+
+  const yearRange = s.match(/^(\d{4})\s*[-–—]\s*(\d{4})$/);
+  if (yearRange) return { from: `${yearRange[1]}-01-01`, to: `${yearRange[2]}-12-31` };
+
+  const parts = s.split(/\s*[-–—]\s*/);
+  if (parts.length === 2) {
+    return { from: parseDate(parts[0]), to: parseDate(parts[1]) };
+  }
+
+  return { from: parseDate(s), to: null };
+}
+
+function isColumnNumberingRow(mapped: any): boolean {
+  return /^\d+$/.test(String(mapped.folderSignature ?? '').trim())
+    && /^\d+$/.test(String(mapped.folderTitle ?? '').trim())
+    && /^\d+$/.test(String(mapped.categoryCode ?? '').trim());
+}
+
+export function parseTransferListImport(buffer: Buffer) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  const selected = selectTransferListSheet(workbook);
+  if (!selected) {
+    throw Object.assign(new Error('Nie rozpoznano arkusza ze spisem zdawczo-odbiorczym. Oczekiwane nagłówki to m.in. "Znak teczki", "Tytuł teczki lub tomu", "Kat. akt".'), { statusCode: 400 });
+  }
+
+  const items = selected.rows.slice(selected.headerIndex + 1).map((row, rowIndex) => {
+    const mapped: any = {};
+    for (const [columnIndex, fieldName] of Object.entries(selected.headerMap)) {
+      mapped[fieldName] = row[Number(columnIndex)];
+    }
+
+    if (isColumnNumberingRow(mapped)) return null;
+
+    if (mapped._dateRange && !mapped.dateFrom && !mapped.dateTo) {
+      const range = parseDateRange(mapped._dateRange);
+      mapped.dateFrom = range.from;
+      mapped.dateTo = range.to;
+    }
+
+    const folderSignature = String(mapped.folderSignature ?? '').trim();
+    const folderTitle = String(mapped.folderTitle ?? '').trim();
+
+    if (!folderSignature && !folderTitle) return null;
+    if (normalizeHeader(folderSignature) === 'znak teczki' || normalizeHeader(folderTitle).startsWith('tytuł teczki')) return null;
+
+    const boxNumber = String(mapped.boxNumber ?? '').trim();
+
+    return {
+      folderSignature: folderSignature || `Poz. ${rowIndex + 1}`,
+      folderTitle: folderTitle || 'Bez tytułu',
+      dateFrom: parseDate(mapped.dateFrom),
+      dateTo: parseDate(mapped.dateTo),
+      categoryCode: String(mapped.categoryCode ?? '').trim() || 'B10',
+      folderCount: Math.max(1, parseInt(String(mapped.folderCount), 10) || 1),
+      storageLocation: mapped.storageLocation ? String(mapped.storageLocation).trim() || null : null,
+      disposalOrTransferDate: parseDate(mapped.disposalOrTransferDate),
+      boxNumber: boxNumber || null,
+      notes: mapped.notes ? String(mapped.notes).trim() || null : null,
+    };
+  }).filter((item: any) => item !== null);
+
+  return {
+    sheetName: selected.sheetName,
+    headerRow: selected.headerIndex + 1,
+    items,
+  };
+}
+
 export class TransferListController {
   // ─── Lists ─────────────────────────────────────────────
   async list(req: Request, res: Response, next: NextFunction) {
@@ -127,204 +359,20 @@ export class TransferListController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!req.file) return errorResponse(res, 'Nie przesłano pliku', 400);
 
-      let workbook: XLSX.WorkBook;
+      let parsed: ReturnType<typeof parseTransferListImport>;
       try {
-        workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+        parsed = parseTransferListImport(req.file.buffer);
       } catch (parseErr: any) {
         return errorResponse(res, `Nie udało się odczytać pliku: ${parseErr.message}`, 400);
       }
 
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return errorResponse(res, 'Plik nie zawiera żadnych arkuszy', 400);
-      }
-      const sheet = workbook.Sheets[sheetName];
-      const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-      if (rawRows.length === 0) {
-        return errorResponse(res, 'Plik jest pusty lub nie zawiera danych', 400);
-      }
-
-      // Map Excel columns to our fields (supports Polish header names)
-      const columnMap: Record<string, string> = {
-        // Polish names (including common variations)
-        'lp': '_ordinal',
-        'lp.': '_ordinal',
-        'l.p.': '_ordinal',
-        'nr': '_ordinal',
-        'znak teczki': 'folderSignature',
-        'sygnatura': 'folderSignature',
-        'sygn.': 'folderSignature',
-        'tytuł teczki': 'folderTitle',
-        'tytuł teczki lub tomu': 'folderTitle',
-        'tytuł teczki (tomu)': 'folderTitle',
-        'tytuł': 'folderTitle',
-        'nazwa': 'folderTitle',
-        'data od': 'dateFrom',
-        'daty skrajne od': 'dateFrom',
-        'od': 'dateFrom',
-        'roczniki od': 'dateFrom',
-        'data do': 'dateTo',
-        'daty skrajne do': 'dateTo',
-        'do': 'dateTo',
-        'roczniki do': 'dateTo',
-        'daty skrajne': '_dateRange',
-        'daty': '_dateRange',
-        'kat. akt': 'categoryCode',
-        'kat akt': 'categoryCode',
-        'kat.': 'categoryCode',
-        'kategoria': 'categoryCode',
-        'kategoria akt': 'categoryCode',
-        'kategoria archiwalna': 'categoryCode',
-        'liczba teczek': 'folderCount',
-        'ilość': 'folderCount',
-        'ilość teczek': 'folderCount',
-        'liczba': 'folderCount',
-        'l. teczek': 'folderCount',
-        'miejsce przechowywania': 'storageLocation',
-        'miejsce przechowywania akt': 'storageLocation',
-        'miejsce przechowywania akt w archiwum': 'storageLocation',
-        'lokalizacja': 'storageLocation',
-        'data zniszczenia': 'disposalOrTransferDate',
-        'data zniszczenia lub przekazania': 'disposalOrTransferDate',
-        'data zniszczenia lub przekazania do archiwum państwowego': 'disposalOrTransferDate',
-        'data przekazania': 'disposalOrTransferDate',
-        'uwagi': 'notes',
-        'notatki': 'notes',
-        // English names (fallback)
-        'folder signature': 'folderSignature',
-        'signature': 'folderSignature',
-        'folder title': 'folderTitle',
-        'title': 'folderTitle',
-        'date from': 'dateFrom',
-        'date to': 'dateTo',
-        'category': 'categoryCode',
-        'category code': 'categoryCode',
-        'folder count': 'folderCount',
-        'count': 'folderCount',
-        'storage location': 'storageLocation',
-        'location': 'storageLocation',
-        'disposal date': 'disposalOrTransferDate',
-        'transfer date': 'disposalOrTransferDate',
-        'notes': 'notes',
-      };
-
-      // Detect which columns map to which fields
-      const firstRow = rawRows[0];
-      const headerMap: Record<string, string> = {};
-      for (const key of Object.keys(firstRow)) {
-        const normalized = key.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[.,]+$/, '');
-        if (columnMap[normalized]) {
-          headerMap[key] = columnMap[normalized];
-        }
-      }
-
-      // If no columns matched, try to map by position (Lp, Znak teczki, Tytuł...)
-      const fieldOrder = [
-        'folderSignature', 'folderTitle', 'dateFrom', 'dateTo',
-        'categoryCode', 'folderCount', 'storageLocation', 'disposalOrTransferDate',
-      ];
-
-      // Parse dates safely
-      const parseDate = (val: any): string | null => {
-        if (val === null || val === undefined || val === '') return null;
-        // Handle Excel Date objects
-        if (val instanceof Date) {
-          if (isNaN(val.getTime())) return null;
-          return val.toISOString().split('T')[0];
-        }
-        // Handle Excel serial numbers (number type)
-        if (typeof val === 'number' && val > 1000 && val < 100000) {
-          try {
-            // Excel serial date: days since 1900-01-01 (with 1900 leap year bug)
-            const date = new Date((val - 25569) * 86400 * 1000);
-            if (!isNaN(date.getTime())) return date.toISOString().split('T')[0];
-          } catch { /* fall through */ }
-        }
-        const s = String(val).trim();
-        if (!s) return null;
-        // Try YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-        // Try DD.MM.YYYY or DD/MM/YYYY
-        const m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
-        if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-        // Try YYYY
-        if (/^\d{4}$/.test(s)) return `${s}-01-01`;
-        // Try YYYY.MM or YYYY/MM
-        const ym = s.match(/^(\d{4})[./](\d{1,2})$/);
-        if (ym) return `${ym[1]}-${ym[2].padStart(2, '0')}-01`;
-        return null;
-      };
-
-      // Parse "date range" column that combines from-to in one cell (e.g. "2020-2024" or "2020.01-2024.12")
-      const parseDateRange = (val: any): { from: string | null; to: string | null } => {
-        if (!val) return { from: null, to: null };
-        const s = String(val).trim();
-        // "2020-2024" or "2020 - 2024"
-        const rangeMatch = s.match(/^(\d{4})\s*[-–—]\s*(\d{4})$/);
-        if (rangeMatch) return { from: `${rangeMatch[1]}-01-01`, to: `${rangeMatch[2]}-12-31` };
-        // More complex ranges
-        const parts = s.split(/\s*[-–—]\s*/);
-        if (parts.length === 2) {
-          return { from: parseDate(parts[0]), to: parseDate(parts[1]) };
-        }
-        return { from: parseDate(s), to: null };
-      };
-
-      const items = rawRows.map((row: any, rowIndex: number) => {
-        const mapped: any = {};
-
-        if (Object.keys(headerMap).length > 0) {
-          // Map by detected headers
-          for (const [originalKey, fieldName] of Object.entries(headerMap)) {
-            mapped[fieldName] = row[originalKey];
-          }
-        } else {
-          // Map by column position (skip first column if it looks like Lp.)
-          const values = Object.values(row);
-          const startIdx = (typeof values[0] === 'number' || /^\d+$/.test(String(values[0]))) ? 1 : 0;
-          fieldOrder.forEach((field, i) => {
-            if (values[startIdx + i] !== undefined) {
-              mapped[field] = values[startIdx + i];
-            }
-          });
-        }
-
-        // Handle combined date range column
-        if (mapped._dateRange && !mapped.dateFrom && !mapped.dateTo) {
-          const range = parseDateRange(mapped._dateRange);
-          mapped.dateFrom = range.from;
-          mapped.dateTo = range.to;
-        }
-
-        const folderSignature = String(mapped.folderSignature ?? '').trim();
-        const folderTitle = String(mapped.folderTitle ?? '').trim();
-
-        // Skip rows that are clearly empty or headers repeated in data
-        if (!folderSignature && !folderTitle) return null;
-
-        return {
-          folderSignature: folderSignature || `Poz. ${rowIndex + 1}`,
-          folderTitle: folderTitle || 'Bez tytułu',
-          dateFrom: parseDate(mapped.dateFrom),
-          dateTo: parseDate(mapped.dateTo),
-          categoryCode: String(mapped.categoryCode ?? '').trim() || 'B10',
-          folderCount: Math.max(1, parseInt(String(mapped.folderCount)) || 1),
-          storageLocation: mapped.storageLocation ? String(mapped.storageLocation).trim() || null : null,
-          disposalOrTransferDate: parseDate(mapped.disposalOrTransferDate),
-          notes: mapped.notes ? String(mapped.notes).trim() || null : null,
-        };
-      }).filter((item: any) => item !== null);
+      const items = parsed.items;
 
       if (items.length === 0) {
-        const detectedHeaders = Object.keys(headerMap);
-        const hint = detectedHeaders.length > 0
-          ? `Rozpoznano kolumny: ${detectedHeaders.join(', ')}, ale wszystkie wiersze są puste.`
-          : `Nie rozpoznano nagłówków. Kolumny w pliku: ${Object.keys(firstRow).join(', ')}`;
-        return errorResponse(res, `Nie udało się zaimportować żadnych pozycji. ${hint}`, 400);
+        return errorResponse(res, `Rozpoznano arkusz "${parsed.sheetName}" i nagłówki w wierszu ${parsed.headerRow}, ale nie znaleziono żadnych pozycji do importu.`, 400);
       }
 
-      const result = await transferListService.importItems(req.params.id, req.tenantId, items);
+      const result = await transferListService.importItems(req.params.id, req.tenantId, req.user!.userId, items);
       return successResponse(res, result, 201);
     } catch (err: any) {
       next(err);

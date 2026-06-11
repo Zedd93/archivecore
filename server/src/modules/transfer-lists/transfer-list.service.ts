@@ -228,7 +228,7 @@ export class TransferListService {
   }
 
   // ─── Import items from parsed data (Excel/CSV) ────────
-  async importItems(listId: string, tenantId: string, items: any[]) {
+  async importItems(listId: string, tenantId: string, userId: string, items: any[]) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list, 'Można importować pozycje tylko do spisu o statusie roboczym');
 
@@ -247,6 +247,8 @@ export class TransferListService {
       ordinalNumber++;
 
       try {
+        const boxId = await this.resolveBoxId(list.tenantId, userId, item);
+
         // Safely parse dates
         const safeDate = (val: any): Date | null => {
           if (!val) return null;
@@ -267,7 +269,7 @@ export class TransferListService {
             storageLocation: item.storageLocation ? String(item.storageLocation).trim().substring(0, 500) : null,
             disposalOrTransferDate: safeDate(item.disposalOrTransferDate),
             notes: item.notes ? String(item.notes).trim() : null,
-            boxId: item.boxId || null,
+            boxId,
           },
           include: {
             box: { select: { id: true, boxNumber: true, title: true, qrCode: true } },
