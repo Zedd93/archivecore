@@ -144,7 +144,7 @@ export class SearchService {
       title: `${folder.folderNumber} — ${folder.title}`,
       subtitle: `Karton: ${folder.box.boxNumber}`,
       relevance: this.calculateRelevance(query, [folder.title, folder.folderNumber]),
-      metadata: { folderNumber: folder.folderNumber, boxNumber: folder.box.boxNumber },
+      metadata: { folderNumber: folder.folderNumber, boxId: folder.boxId, boxNumber: folder.box.boxNumber },
     }));
   }
 
@@ -160,8 +160,8 @@ export class SearchService {
         ],
       },
       include: {
-        folder: { select: { folderNumber: true, box: { select: { boxNumber: true } } } },
-        box: { select: { boxNumber: true } },
+        folder: { select: { folderNumber: true, box: { select: { id: true, boxNumber: true } } } },
+        box: { select: { id: true, boxNumber: true } },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -175,7 +175,7 @@ export class SearchService {
         ? `Teczka: ${doc.folder.folderNumber} | Karton: ${doc.folder.box?.boxNumber || '-'}`
         : `Karton: ${doc.box?.boxNumber || '-'}`,
       relevance: this.calculateRelevance(query, [doc.title, doc.description || '']),
-      metadata: { docType: doc.docType, docDate: doc.docDate },
+      metadata: { docType: doc.docType, docDate: doc.docDate, boxId: doc.boxId || doc.folder?.box?.id },
     }));
   }
 

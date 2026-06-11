@@ -15,10 +15,6 @@ const TYPE_LABEL_KEYS: Record<string, string> = {
   box: 'search.typeBox', folder: 'search.typeFolder', document: 'search.typeDocument', hr_folder: 'search.typeHr',
 };
 
-const TYPE_ROUTES: Record<string, string> = {
-  box: '/boxes', folder: '/boxes', document: '/boxes', hr_folder: '/hr',
-};
-
 export default function SearchPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,14 +23,21 @@ export default function SearchPage() {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
 
+  useEffect(() => {
+    const nextQuery = searchParams.get('q') || '';
+    setQuery((current) => current === nextQuery ? current : nextQuery);
+    setDebouncedQuery((current) => current === nextQuery ? current : nextQuery);
+  }, [searchParams]);
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query);
-      if (query) setSearchParams({ q: query });
+      if (query) setSearchParams({ q: query }, { replace: true });
+      else setSearchParams({}, { replace: true });
     }, 400);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, setSearchParams]);
 
   const { data: results, isLoading } = useSearch(debouncedQuery, selectedTypes.length > 0 ? selectedTypes : undefined);
 
@@ -43,8 +46,16 @@ export default function SearchPage() {
   };
 
   const handleResultClick = (result: any) => {
-    const route = TYPE_ROUTES[result.type] || '/';
-    navigate(`${route}/${result.id}`);
+    if (result.type === 'box') {
+      navigate(`/boxes/${result.id}`);
+      return;
+    }
+    if (result.type === 'hr_folder') {
+      navigate(`/hr/${result.id}`);
+      return;
+    }
+    const boxId = result.metadata?.boxId;
+    if (boxId) navigate(`/boxes/${boxId}`);
   };
 
   return (

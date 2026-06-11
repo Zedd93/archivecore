@@ -10,6 +10,6 @@ const router = Router();
 const auth = [authenticate, tenantContext];
 
 // GET /api/search?q=query&types=box,folder&limit=20&offset=0
-router.get('/', ...auth, requirePermission(Permissions.SEARCH_OWN), validate(searchQuerySchema, 'query'), (req, res, next) => searchController.search(req, res, next));
+router.get('/', ...auth, requirePermission(Permissions.SEARCH_OWN, Permissions.SEARCH_ALL), validate(searchQuerySchema, 'query'), (req, res, next) => searchController.search(req, res, next));
 
 export default router;
