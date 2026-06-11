@@ -19,7 +19,7 @@ export default function BoxDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { data: box, isLoading } = useDetail('box', '/boxes', id);
+  const { data: box, isLoading, refetch } = useDetail('box', '/boxes', id);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [labelLoading, setLabelLoading] = useState(false);
   const queryClient = useQueryClient();
@@ -100,8 +100,15 @@ export default function BoxDetailPage() {
       });
       toast.success(t('common.success'));
       setShowEditModal(false);
-      queryClient.invalidateQueries({ queryKey: ['box'] });
-      queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['box', id] }),
+        queryClient.invalidateQueries({ queryKey: ['boxes'] }),
+        queryClient.invalidateQueries({ queryKey: ['locations-tree'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['report-boxes-doc-type'] }),
+        queryClient.invalidateQueries({ queryKey: ['report-occupancy'] }),
+        refetch(),
+      ]);
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
@@ -117,7 +124,14 @@ export default function BoxDetailPage() {
       toast.success(t('common.success'));
       setShowStatusModal(false);
       setNewStatus('');
-      queryClient.invalidateQueries({ queryKey: ['box'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['box', id] }),
+        queryClient.invalidateQueries({ queryKey: ['boxes'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['report-boxes-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['search'] }),
+        refetch(),
+      ]);
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {

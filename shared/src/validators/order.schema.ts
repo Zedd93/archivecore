@@ -38,7 +38,7 @@ export const createCustodyEventSchema = z.object({
   boxId: z.string().uuid(),
   eventType: z.enum(['handover', 'receipt', 'return_event', 'transfer']),
   toUserId: z.string().uuid().optional(),
-  toLocationId: z.string().uuid().optional(),
+  toLocationId: z.string().uuid('Wybierz lokalizację docelową z listy').optional(),
   notes: z.string().optional(),
   signatureData: z.string().optional(),
 });

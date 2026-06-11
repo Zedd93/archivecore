@@ -2,6 +2,30 @@ import { prisma } from '../../config/database';
 import { CustodyEventType } from '@prisma/client';
 
 export class CustodyService {
+  private async validateTargetLocation(locationId: string | undefined, tenantId: string) {
+    if (!locationId) return;
+
+    const location = await prisma.location.findFirst({
+      where: {
+        id: locationId,
+        isActive: true,
+        OR: [{ tenantId }, { tenantId: null }],
+      },
+      select: { type: true },
+    });
+
+    if (!location) {
+      throw Object.assign(new Error('Lokalizacja docelowa nie istnieje albo nie masz do niej dostępu'), { statusCode: 404 });
+    }
+
+    if (!['shelf', 'level', 'slot'].includes(location.type)) {
+      throw Object.assign(
+        new Error('Lokalizacja docelowa musi wskazywać półkę, poziom albo pozycję, a nie magazyn, strefę albo regał'),
+        { statusCode: 400 }
+      );
+    }
+  }
+
   async create(data: {
     orderId?: string;
     boxId: string;
@@ -13,6 +37,8 @@ export class CustodyService {
     signatureData?: string;
     notes?: string;
   }, tenantId: string) {
+    await this.validateTargetLocation(data.toLocationId, tenantId);
+
     // Verify box belongs to the tenant
     const box = await prisma.box.findFirst({
       where: { id: data.boxId, tenantId },
