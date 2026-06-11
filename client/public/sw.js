@@ -1,8 +1,11 @@
-const CACHE_NAME = 'archivecore-v4';
+const CACHE_NAME = 'archivecore-v5';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
+  '/robots.txt',
   '/icons/icon.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
 ];
 
 // Install — cache static shell

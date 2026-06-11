@@ -3,11 +3,19 @@
   "short_name": "ArchiveCore",
   "description": "System zarządzania archiwum dokumentów, akt osobowych i spisów zdawczo-odbiorczych",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "id": "/",
   "background_color": "#f9fafb",
   "theme_color": "#2563eb",
   "orientation": "any",
   "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
