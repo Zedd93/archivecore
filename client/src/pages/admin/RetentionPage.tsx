@@ -6,6 +6,7 @@ import { useCreate } from '@/hooks/useApi';
 import { DOC_TYPES } from '@archivecore/shared';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
+import StatusBadge from '@/components/ui/StatusBadge';
 import { Plus, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 
 const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
@@ -68,7 +69,7 @@ export default function RetentionPage() {
       },
     },
     { key: 'retentionPolicy', header: t('admin.retention.policies'), render: (item) => item.retentionPolicy?.name || '—' },
-    { key: 'status', header: t('common.status'), render: (item) => item.status },
+    { key: 'status', header: t('common.status'), render: (item) => <StatusBadge status={item.status} type="box" /> },
   ];
 
   const handleCreatePolicy = async (e: React.FormEvent<HTMLFormElement>) => {

@@ -586,6 +586,7 @@
     "template": "Szablon etykiety",
     "templatesHint": "Wybierz szablon przed generowaniem PDF",
     "defaultTemplate": "Domyślny",
+    "defaultTemplateName": "Domyślny ({{width}}×{{height}} mm)",
     "dimensions": "Wymiary:",
     "qrSize": "Rozmiar QR:",
     "correction": "Korekcja:",

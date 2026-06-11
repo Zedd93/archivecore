@@ -120,7 +120,7 @@ export default function SearchPage() {
                   {result.metadata && (
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                       {result.metadata.boxNumber && <span>📦 {result.metadata.boxNumber}</span>}
-                      {result.metadata.status && <span>Status: {result.metadata.status}</span>}
+                      {result.metadata.status && <span>{t('common.status')}: {t(`statuses.box.${result.metadata.status}`, { defaultValue: result.metadata.status })}</span>}
                       {result.metadata.department && <span>🏢 {result.metadata.department}</span>}
                       {result.metadata.docType && <span>📄 {t(`docTypes.${result.metadata.docType}`, { defaultValue: result.metadata.docType })}</span>}
                     </div>

@@ -15,6 +15,10 @@ interface SelectedBox {
 
 const EMPTY_TEMPLATES: any[] = [];
 
+function isSystemDefaultTemplate(template: any) {
+  return template?.tenantId === null && template?.isDefault && Number(template.widthMm) === 70 && Number(template.heightMm) === 36;
+}
+
 export default function LabelsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -47,6 +51,16 @@ export default function LabelsPage() {
     },
   });
   const templateOptions = templates || EMPTY_TEMPLATES;
+
+  const getTemplateName = (template: any) => {
+    if (isSystemDefaultTemplate(template)) {
+      return t('labels.defaultTemplateName', {
+        width: Number(template.widthMm).toString(),
+        height: Number(template.heightMm).toString(),
+      });
+    }
+    return template.name;
+  };
 
   useEffect(() => {
     if (selectedTemplateId || templateOptions.length === 0) return;
@@ -133,7 +147,7 @@ export default function LabelsPage() {
         {templateOptions.length === 0 && <option value="">{t('labels.noTemplates')}</option>}
         {templateOptions.map((tpl: any) => (
           <option key={tpl.id} value={tpl.id}>
-            {tpl.name}{tpl.isDefault ? ` (${t('labels.defaultTemplate')})` : ''}
+            {getTemplateName(tpl)}{tpl.isDefault ? ` (${t('labels.defaultTemplate')})` : ''}
           </option>
         ))}
       </select>
@@ -265,7 +279,7 @@ export default function LabelsPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-sm">{tpl.name}</span>
+                      <span className="font-medium text-sm">{getTemplateName(tpl)}</span>
                       {tpl.isDefault && <span className="badge-blue text-xs">{t('labels.defaultTemplate')}</span>}
                     </div>
                     <div className="text-xs text-gray-500 space-y-1">

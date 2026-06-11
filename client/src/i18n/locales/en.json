@@ -586,6 +586,7 @@
     "template": "Label template",
     "templatesHint": "Choose a template before generating PDF",
     "defaultTemplate": "Default",
+    "defaultTemplateName": "Default ({{width}}×{{height}} mm)",
     "dimensions": "Dimensions:",
     "qrSize": "QR size:",
     "correction": "Correction:",

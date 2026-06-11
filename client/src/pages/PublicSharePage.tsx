@@ -223,11 +223,11 @@ function SharedOrderView({ entity }: { entity: any }) {
       <dl className="grid grid-cols-2 gap-4">
         <div>
           <dt className="text-sm text-gray-500">{t('orders.type')}</dt>
-          <dd className="text-sm mt-1">{entity.type}</dd>
+          <dd className="text-sm mt-1">{t(`statuses.orderType.${entity.orderType}`, { defaultValue: entity.orderType || '—' })}</dd>
         </div>
         <div>
           <dt className="text-sm text-gray-500">{t('orders.priority')}</dt>
-          <dd className="text-sm mt-1">{entity.priority}</dd>
+          <dd className="text-sm mt-1">{t(`statuses.priority.${entity.priority}`, { defaultValue: entity.priority || '—' })}</dd>
         </div>
         <div>
           <dt className="text-sm text-gray-500">{t('orders.requester')}</dt>
