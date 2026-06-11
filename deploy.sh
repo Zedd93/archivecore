@@ -35,7 +35,8 @@ sleep 10
 
 echo ""
 echo "4️⃣  Uruchamiam migrację bazy danych..."
-docker compose -f docker-compose.prod.yml exec app npx prisma db push --accept-data-loss
+docker compose -f docker-compose.prod.yml exec app npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml exec app npx prisma generate
 
 echo ""
 echo "5️⃣  Seeduję dane początkowe..."

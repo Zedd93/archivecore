@@ -1,6 +1,10 @@
 import { prisma } from '../../config/database';
 
 export class LocationService {
+  private compactUpdateData(data: Record<string, unknown>) {
+    return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+  }
+
   private buildLocationWhere(id: string, tenantId: string | null) {
     return {
       id,
@@ -102,18 +106,20 @@ export class LocationService {
       locationTenantId = parent.tenantId ?? tenantId;
     }
 
+    const createData = this.compactUpdateData({
+      parentId: data.parentId,
+      tenantId: locationTenantId,
+      type: data.type,
+      code: data.code,
+      name: data.name,
+      address: data.address,
+      description: data.description,
+      capacity: data.capacity,
+      fullPath,
+    });
+
     return prisma.location.create({
-      data: {
-        parentId: data.parentId,
-        tenantId: locationTenantId,
-        type: data.type,
-        code: data.code,
-        name: data.name,
-        address: data.address,
-        description: data.description,
-        capacity: data.capacity,
-        fullPath,
-      },
+      data: createData as any,
     });
   }
 
@@ -157,22 +163,23 @@ export class LocationService {
     const name = data.name ?? location.name;
     const fullPath = parent ? `${parent.fullPath} > ${name}` : name;
     const locationTenantId = parent?.tenantId ?? location.tenantId ?? tenantId;
+    const updateData = this.compactUpdateData({
+      parentId,
+      tenantId: locationTenantId,
+      type: data.type,
+      code: data.code,
+      name: data.name,
+      address: data.address,
+      description: data.description,
+      capacity: data.capacity,
+      isActive: data.isActive,
+      fullPath,
+    });
 
     return prisma.$transaction(async (tx) => {
       const updated = await tx.location.update({
         where: { id },
-        data: {
-          parentId,
-          tenantId: locationTenantId,
-          type: data.type,
-          code: data.code,
-          name: data.name,
-          address: data.address,
-          description: data.description,
-          capacity: data.capacity,
-          isActive: data.isActive,
-          fullPath,
-        },
+        data: updateData as any,
       });
       await this.refreshChildPaths(updated.id, updated.fullPath, tx);
       return updated;

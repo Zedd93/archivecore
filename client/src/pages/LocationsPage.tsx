@@ -264,15 +264,19 @@ export default function LocationsPage() {
     if (!selectedLocation) return;
     setSaving(true);
     try {
-      await api.put(`/locations/${selectedLocation.id}`, {
+      const payload: Record<string, string | number | null> = {
         name: editForm.name,
         code: editForm.code,
         type: editForm.type,
         parentId: editForm.parentId || null,
-        address: editForm.address || null,
         description: editForm.description || null,
         capacity: editForm.capacity ? parseInt(editForm.capacity) : null,
-      });
+      };
+      if (editForm.address.trim() || selectedLocation.address) {
+        payload.address = editForm.address.trim() || null;
+      }
+
+      await api.put(`/locations/${selectedLocation.id}`, payload);
       toast.success(t('common.success'));
       closeEditModal();
       queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
