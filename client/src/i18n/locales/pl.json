@@ -538,6 +538,7 @@
     "title": "Raporty",
     "subtitle": "Statystyki i analityka archiwum",
     "boxesByStatus": "Kartony wg statusu",
+    "boxesByDocType": "Kartony wg typu dokumentów",
     "ordersByStatus": "Zlecenia wg statusu",
     "slaCompliance": "Realizacja SLA",
     "slaOnTime": "Zleceń zrealizowanych w terminie",
@@ -545,6 +546,7 @@
     "hrRetention": "Retencja akt osobowych",
     "hrOverdue": "Przeterminowane",
     "hrByDepartment": "Akta wg działów",
+    "hrByStatus": "Akta wg statusu zatrudnienia",
     "unknown": "Nieokreślony",
     "locationOccupancy": "Zajętość lokalizacji"
   },

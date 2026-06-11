@@ -1,4 +1,10 @@
 import { prisma } from '../../config/database';
+import {
+  BOX_STATUS_LABELS,
+  DOC_TYPE_LABELS,
+  EMPLOYMENT_STATUS_LABELS,
+  ORDER_STATUS_LABELS,
+} from '@archivecore/shared';
 
 export interface DashboardKPIs {
   totalBoxes: number;
@@ -14,6 +20,26 @@ export interface DashboardKPIs {
 }
 
 export class ReportService {
+  private addLabel<T extends Record<string, any>>(rows: T[], key: keyof T, labels: Record<string, string>) {
+    return rows.map((row) => ({
+      ...row,
+      label: labels[String(row[key])] || String(row[key] || ''),
+    }));
+  }
+
+  private getDescendantIds(locationId: string, childrenByParent: Map<string, string[]>): string[] {
+    const ids: string[] = [];
+    const stack = [locationId];
+
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      ids.push(currentId);
+      stack.push(...(childrenByParent.get(currentId) ?? []));
+    }
+
+    return ids;
+  }
+
   async getDashboardKPIs(tenantId: string): Promise<DashboardKPIs> {
     const [
       totalBoxes,
@@ -63,29 +89,32 @@ export class ReportService {
   }
 
   async getBoxesByStatus(tenantId: string) {
-    return prisma.box.groupBy({
+    const data = await prisma.box.groupBy({
       by: ['status'],
       where: { tenantId },
       _count: true,
     });
+    return this.addLabel(data, 'status', BOX_STATUS_LABELS);
   }
 
   async getBoxesByDocType(tenantId: string) {
-    return prisma.box.groupBy({
+    const data = await prisma.box.groupBy({
       by: ['docType'],
       where: { tenantId },
       _count: true,
       orderBy: { _count: { docType: 'desc' } },
       take: 15,
     });
+    return this.addLabel(data, 'docType', DOC_TYPE_LABELS);
   }
 
   async getOrdersByStatus(tenantId: string) {
-    return prisma.order.groupBy({
+    const data = await prisma.order.groupBy({
       by: ['status'],
       where: { tenantId },
       _count: true,
     });
+    return this.addLabel(data, 'status', ORDER_STATUS_LABELS);
   }
 
   async getOrdersByMonth(tenantId: string, months: number = 12) {
@@ -110,18 +139,58 @@ export class ReportService {
   }
 
   async getLocationOccupancy(tenantId: string) {
-    return prisma.location.findMany({
-      where: { tenantId, type: { in: ['rack', 'shelf'] } },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        fullPath: true,
-        capacity: true,
-        currentCount: true,
-        type: true,
-      },
-      orderBy: { fullPath: 'asc' },
+    const [locations, boxesByLocation] = await Promise.all([
+      prisma.location.findMany({
+        where: { tenantId, type: { in: ['rack', 'shelf'] } },
+        select: {
+          id: true,
+          parentId: true,
+          code: true,
+          name: true,
+          fullPath: true,
+          capacity: true,
+          currentCount: true,
+          type: true,
+        },
+        orderBy: { fullPath: 'asc' },
+      }),
+      prisma.box.groupBy({
+        by: ['locationId'],
+        where: { tenantId, locationId: { not: null } },
+        _count: true,
+      }),
+    ]);
+
+    const allLocations = await prisma.location.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, parentId: true },
+    });
+
+    const directCounts = new Map<string, number>();
+    for (const row of boxesByLocation) {
+      if (row.locationId) directCounts.set(row.locationId, row._count);
+    }
+
+    const childrenByParent = new Map<string, string[]>();
+    for (const location of allLocations) {
+      if (!location.parentId) continue;
+      const children = childrenByParent.get(location.parentId) ?? [];
+      children.push(location.id);
+      childrenByParent.set(location.parentId, children);
+    }
+
+    return locations.map((location) => {
+      const descendantIds = this.getDescendantIds(location.id, childrenByParent);
+      const aggregatedCount = descendantIds.reduce(
+        (sum, id) => sum + (directCounts.get(id) ?? 0),
+        0
+      );
+
+      return {
+        ...location,
+        currentCount: directCounts.get(location.id) ?? 0,
+        aggregatedCount,
+      };
     });
   }
 
@@ -135,11 +204,12 @@ export class ReportService {
   }
 
   async getHRFoldersByStatus(tenantId: string) {
-    return prisma.hRFolder.groupBy({
+    const data = await prisma.hRFolder.groupBy({
       by: ['employmentStatus'],
       where: { tenantId },
       _count: true,
     });
+    return this.addLabel(data, 'employmentStatus', EMPLOYMENT_STATUS_LABELS);
   }
 
   async getRetentionSummary(tenantId: string) {

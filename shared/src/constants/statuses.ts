@@ -123,3 +123,14 @@ export const DOC_TYPES = [
   'legal_documents',
   'other',
 ] as const;
+
+export const DOC_TYPE_LABELS: Record<string, string> = {
+  personnel_files: 'Akta osobowe',
+  financial_documents: 'Dokumenty finansowe',
+  contracts: 'Umowy',
+  correspondence: 'Korespondencja',
+  project_documents: 'Dokumenty projektowe',
+  technical_docs: 'Dokumentacja techniczna',
+  legal_documents: 'Dokumenty prawne',
+  other: 'Inne',
+};

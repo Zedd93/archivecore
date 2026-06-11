@@ -16,6 +16,11 @@ export default function ReportsPage() {
     queryFn: async () => { const { data } = await api.get('/reports/orders/status'); return data.data; },
   });
 
+  const { data: boxesByDocType, isLoading: lDocTypes } = useQuery({
+    queryKey: ['report-boxes-doc-type'],
+    queryFn: async () => { const { data } = await api.get('/reports/boxes/doc-type'); return data.data; },
+  });
+
   const { data: sla, isLoading: l3 } = useQuery({
     queryKey: ['report-sla'],
     queryFn: async () => { const { data } = await api.get('/reports/sla'); return data.data; },
@@ -31,20 +36,32 @@ export default function ReportsPage() {
     queryFn: async () => { const { data } = await api.get('/reports/hr/departments'); return data.data; },
   });
 
+  const { data: hrByStatus, isLoading: lHrStatus } = useQuery({
+    queryKey: ['report-hr-status'],
+    queryFn: async () => { const { data } = await api.get('/reports/hr/status'); return data.data; },
+  });
+
   const { data: occupancy, isLoading: l6 } = useQuery({
     queryKey: ['report-occupancy'],
     queryFn: async () => { const { data } = await api.get('/reports/locations/occupancy'); return data.data; },
   });
 
-  const isLoading = l1 || l2 || l3 || l4 || l5 || l6;
+  const isLoading = l1 || l2 || lDocTypes || l3 || l4 || l5 || lHrStatus || l6;
 
   const STATUS_COLORS: Record<string, string> = {
     active: 'bg-green-500', checked_out: 'bg-yellow-500', pending_disposal: 'bg-orange-500',
     disposed: 'bg-red-500', draft: 'bg-gray-400', submitted: 'bg-blue-400',
     approved: 'bg-blue-600', in_progress: 'bg-yellow-500', ready: 'bg-indigo-500',
     delivered: 'bg-purple-500', completed: 'bg-green-500', cancelled: 'bg-red-400',
-    rejected: 'bg-red-500',
+    rejected: 'bg-red-500', terminated: 'bg-red-500', retired: 'bg-gray-500', deceased: 'bg-gray-600',
   };
+
+  const DOC_TYPE_COLORS = ['bg-primary-500', 'bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-sky-500', 'bg-cyan-500'];
+
+  const getBoxStatusLabel = (item: any) => t(`statuses.box.${item.status}`, { defaultValue: item.label || item.status });
+  const getOrderStatusLabel = (item: any) => t(`statuses.order.${item.status}`, { defaultValue: item.label || item.status });
+  const getDocTypeLabel = (item: any) => t(`docTypes.${item.docType}`, { defaultValue: item.label || item.docType || t('reports.unknown') });
+  const getEmploymentStatusLabel = (item: any) => t(`statuses.employment.${item.employmentStatus}`, { defaultValue: item.label || item.employmentStatus });
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
@@ -68,7 +85,7 @@ export default function ReportsPage() {
               return (
                 <div key={item.status} className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} />
-                  <span className="text-sm flex-1">{t(`statuses.box.${item.status}`, { defaultValue: item.status })}</span>
+                  <span className="text-sm flex-1">{getBoxStatusLabel(item)}</span>
                   <span className="text-sm font-medium">{item._count}</span>
                   <div className="w-24 h-2 bg-gray-200 rounded-full">
                     <div className={`h-full rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
@@ -90,7 +107,7 @@ export default function ReportsPage() {
               return (
                 <div key={item.status} className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} />
-                  <span className="text-sm flex-1">{t(`statuses.order.${item.status}`, { defaultValue: item.status })}</span>
+                  <span className="text-sm flex-1">{getOrderStatusLabel(item)}</span>
                   <span className="text-sm font-medium">{item._count}</span>
                   <div className="w-24 h-2 bg-gray-200 rounded-full">
                     <div className={`h-full rounded-full ${STATUS_COLORS[item.status] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
@@ -99,6 +116,30 @@ export default function ReportsPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        {/* Boxes by document type */}
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><BarChart3 size={20} className="text-primary-600" /> {t('reports.boxesByDocType')}</h2>
+          <div className="space-y-3">
+            {boxesByDocType?.map((item: any, index: number) => {
+              const total = boxesByDocType.reduce((s: number, i: any) => s + i._count, 0);
+              const pct = total > 0 ? Math.round((item._count / total) * 100) : 0;
+              const color = DOC_TYPE_COLORS[index % DOC_TYPE_COLORS.length];
+              return (
+                <div key={item.docType || 'unknown'} className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${color}`} />
+                  <span className="text-sm flex-1">{getDocTypeLabel(item)}</span>
+                  <span className="text-sm font-medium">{item._count}</span>
+                  <div className="w-24 h-2 bg-gray-200 rounded-full">
+                    <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-500 w-8 text-right">{pct}%</span>
+                </div>
+              );
+            })}
+            {(!boxesByDocType || boxesByDocType.length === 0) && <p className="text-sm text-gray-400">{t('common.noData')}</p>}
           </div>
         </div>
 
@@ -165,18 +206,42 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {/* HR by employment status */}
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-4">{t('reports.hrByStatus')}</h2>
+          <div className="space-y-3">
+            {hrByStatus?.map((item: any) => {
+              const total = hrByStatus.reduce((s: number, i: any) => s + i._count, 0);
+              const pct = total > 0 ? Math.round((item._count / total) * 100) : 0;
+              return (
+                <div key={item.employmentStatus} className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[item.employmentStatus] || 'bg-gray-400'}`} />
+                  <span className="text-sm flex-1">{getEmploymentStatusLabel(item)}</span>
+                  <span className="text-sm font-medium">{item._count}</span>
+                  <div className="w-24 h-2 bg-gray-200 rounded-full">
+                    <div className={`h-full rounded-full ${STATUS_COLORS[item.employmentStatus] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-500 w-8 text-right">{pct}%</span>
+                </div>
+              );
+            })}
+            {(!hrByStatus || hrByStatus.length === 0) && <p className="text-sm text-gray-400">{t('common.noData')}</p>}
+          </div>
+        </div>
+
         {/* Location occupancy */}
         <div className="card">
           <h2 className="text-lg font-semibold mb-4">{t('reports.locationOccupancy')}</h2>
           <div className="space-y-3">
             {occupancy?.slice(0, 10).map((loc: any) => {
-              const pct = loc.capacity ? Math.round((loc.currentCount / loc.capacity) * 100) : 0;
+              const occupied = loc.aggregatedCount ?? loc.currentCount ?? 0;
+              const pct = loc.capacity ? Math.round((occupied / loc.capacity) * 100) : 0;
               return (
                 <div key={loc.id} className="flex items-center gap-3">
                   <span className="text-sm flex-1 truncate">{loc.fullPath}</span>
-                  <span className="text-xs text-gray-500">{loc.currentCount}/{loc.capacity}</span>
+                  <span className="text-xs text-gray-500">{occupied}/{loc.capacity ?? '—'}</span>
                   <div className="w-20 h-2 bg-gray-200 rounded-full">
-                    <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
+                    <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                   </div>
                   <span className="text-xs font-medium w-8 text-right">{pct}%</span>
                 </div>

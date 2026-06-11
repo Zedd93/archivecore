@@ -538,6 +538,7 @@
     "title": "Reports",
     "subtitle": "Archive statistics and analytics",
     "boxesByStatus": "Boxes by status",
+    "boxesByDocType": "Boxes by document type",
     "ordersByStatus": "Orders by status",
     "slaCompliance": "SLA compliance",
     "slaOnTime": "Orders completed on time",
@@ -545,6 +546,7 @@
     "hrRetention": "HR records retention",
     "hrOverdue": "Overdue",
     "hrByDepartment": "Records by department",
+    "hrByStatus": "Records by employment status",
     "unknown": "Unknown",
     "locationOccupancy": "Location occupancy"
   },
