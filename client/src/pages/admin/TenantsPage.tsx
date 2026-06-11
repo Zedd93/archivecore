@@ -64,12 +64,12 @@ export default function TenantsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('admin.tenants.title')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('admin.tenants.title')}</h1>
           <p className="text-sm text-gray-500">{t('admin.tenants.subtitle')}</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2"><Plus size={16} /> {t('admin.tenants.new')}</button>
+        <button onClick={() => setShowCreate(true)} className="btn-primary w-full sm:w-auto"><Plus size={16} /> {t('admin.tenants.new')}</button>
       </div>
 
       <div className="card">
@@ -96,7 +96,7 @@ export default function TenantsPage() {
             <div><label htmlFor="tenant-create-phone" className="label-text">{t('admin.tenants.createModal.phone')}</label><input id="tenant-create-phone" name="contactPhone" className="input-field" /></div>
           </div>
           <div><label htmlFor="tenant-create-address" className="label-text">{t('admin.tenants.createModal.address')}</label><textarea id="tenant-create-address" name="address" className="input-field" rows={2} /></div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createTenant.isPending} className="btn-primary">{createTenant.isPending ? t('common.creating') : t('common.create')}</button>
           </div>

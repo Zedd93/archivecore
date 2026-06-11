@@ -161,13 +161,13 @@ export default function LocationsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('locations.title')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('locations.title')}</h1>
           <p className="text-sm text-gray-500">{t('locations.subtitle')}</p>
         </div>
         {canWriteLocations && (
-          <button type="button" onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
+          <button type="button" onClick={() => setShowCreateModal(true)} className="btn-primary w-full sm:w-auto">
             <Plus size={16} /> {t('locations.add')}
           </button>
         )}
@@ -223,7 +223,7 @@ export default function LocationsPage() {
               placeholder={t('locations.parentLocationPlaceholder', 'Opcjonalnie — wybierz magazyn, strefę lub regał')}
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={creating} className="btn-primary">
               {creating ? t('common.creating') : t('common.create')}

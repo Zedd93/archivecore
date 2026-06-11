@@ -113,30 +113,30 @@ export default function HRListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('hr.title')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('hr.title')}</h1>
           <p className="text-sm text-gray-500">{t('hr.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex w-full sm:w-auto items-center gap-2">
           <button
             onClick={() => exportData({ format: 'xlsx', ...filters })}
             disabled={isExporting}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex-1 sm:flex-none"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
-          <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => setShowCreate(true)} className="btn-primary flex-1 sm:flex-none">
             <Plus size={16} /> <span className="hidden sm:inline">{t('hr.newRecord')}</span>
           </button>
         </div>
       </div>
 
       <div className="card">
-        <div className="flex items-center gap-4">
-          <input type="text" placeholder={t('hr.searchPlaceholder')} value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="input-field flex-1" aria-label={t('hr.searchPlaceholder')} />
-          <select value={filters.employmentStatus} onChange={(e) => setFilters({ ...filters, employmentStatus: e.target.value })} className="input-field w-40" aria-label={t('hr.allStatuses')}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <input type="text" placeholder={t('hr.searchPlaceholder')} value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="input-field w-full sm:flex-1" aria-label={t('hr.searchPlaceholder')} />
+          <select value={filters.employmentStatus} onChange={(e) => setFilters({ ...filters, employmentStatus: e.target.value })} className="input-field w-full sm:w-40" aria-label={t('hr.allStatuses')}>
             <option value="">{t('hr.allStatuses')}</option>
             <option value="active">{t('hr.statusEmployed')}</option>
             <option value="terminated">{t('hr.statusTerminated')}</option>
@@ -207,7 +207,7 @@ export default function HRListPage() {
               </select>
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={closeCreateModal} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createHR.isPending} className="btn-primary">
               {createHR.isPending ? t('common.creating') : t('common.create')}

@@ -302,7 +302,7 @@ export default function ImportPage() {
 
           {/* Import button */}
           {preview.rows.length > 0 && (
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
               <button onClick={handleReset} className="btn-secondary">
                 {t('common.cancel')}
               </button>

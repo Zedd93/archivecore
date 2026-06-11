@@ -96,7 +96,7 @@ export default function ShareButton({ entityType, entityId, className = '' }: Sh
                   <option value={30}>30</option>
                 </select>
               </div>
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
                 <button onClick={handleClose} className="btn-secondary">{t('common.cancel')}</button>
                 <button
                   onClick={handleGenerate}
@@ -128,7 +128,7 @@ export default function ShareButton({ entityType, entityId, className = '' }: Sh
                   </button>
                 </div>
               </div>
-              <div className="flex justify-end pt-4 border-t">
+              <div className="flex sm:justify-end pt-4 border-t">
                 <button onClick={handleClose} className="btn-secondary">{t('common.close')}</button>
               </div>
             </>

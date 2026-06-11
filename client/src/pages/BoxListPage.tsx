@@ -178,21 +178,21 @@ export default function BoxListPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('boxes.title')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('boxes.title')}</h1>
           <p className="text-sm text-gray-500">{t('boxes.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex w-full sm:w-auto items-center gap-2">
           <button
             onClick={() => exportData({ format: 'xlsx', ...filters })}
             disabled={isExporting}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex-1 sm:flex-none"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
-          <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => setShowCreateModal(true)} className="btn-primary flex-1 sm:flex-none">
             <Plus size={16} />
             <span className="hidden sm:inline">{t('boxes.newBox')}</span>
           </button>
@@ -201,8 +201,8 @@ export default function BoxListPage() {
 
       {/* Filters */}
       <div className="card">
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <div className="w-full sm:flex-1">
             <input
               type="text"
               placeholder={t('boxes.searchPlaceholder')}
@@ -215,7 +215,7 @@ export default function BoxListPage() {
           <select
             value={filters.status}
             onChange={(e) => { setPage(1); setFilters({ ...filters, status: e.target.value }); }}
-            className="input-field w-40"
+            className="input-field w-full sm:w-40"
             aria-label={t('boxes.allStatuses')}
           >
             <option value="">{t('boxes.allStatuses')}</option>
@@ -227,7 +227,7 @@ export default function BoxListPage() {
           <select
             value={filters.docType}
             onChange={(e) => { setPage(1); setFilters({ ...filters, docType: e.target.value }); }}
-            className="input-field w-52"
+            className="input-field w-full sm:w-52"
             aria-label={t('boxes.createModal.fieldDocType')}
           >
             <option value="">{t('boxes.createModal.fieldDocType')}</option>
@@ -309,7 +309,7 @@ export default function BoxListPage() {
               ))}
             </select>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button onClick={() => setShowBulkStatusModal(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button onClick={handleBulkStatusChange} disabled={!bulkStatus || bulkLoading} className="btn-primary">
               {bulkLoading ? t('common.processing') : t('boxes.bulk.change')}
@@ -332,7 +332,7 @@ export default function BoxListPage() {
               excludeTypes={['warehouse', 'zone', 'rack']}
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button onClick={() => setShowBulkMoveModal(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button onClick={handleBulkMove} disabled={!bulkLocationId || bulkLoading} className="btn-primary">
               {bulkLoading ? t('common.processing') : t('boxes.bulk.move')}
@@ -383,7 +383,7 @@ export default function BoxListPage() {
             <textarea {...register('notes')} className="input-field" rows={2} placeholder={t('boxes.createModal.fieldNotes')} />
           </FormField>
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={handleCloseModal} className="btn-secondary">
               {t('common.cancel')}
             </button>

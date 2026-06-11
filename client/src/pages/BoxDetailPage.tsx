@@ -152,34 +152,34 @@ export default function BoxDetailPage() {
       <Breadcrumbs items={[{ label: t('boxes.title'), to: '/boxes' }, { label: box.boxNumber }]} />
 
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{box.boxNumber}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{box.boxNumber}</h1>
             <StatusBadge status={box.status} type="box" />
           </div>
           <p className="text-gray-500 mt-1">{box.title}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <button
             onClick={() => setShowStatusModal(true)}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary"
           >
             <RefreshCw size={16} />
             {t('common.status')}
           </button>
           <button
             onClick={() => setShowEditModal(true)}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary"
           >
             <Edit3 size={16} />
             {t('common.edit')}
           </button>
-          <ShareButton entityType="box" entityId={box.id} />
+          <ShareButton entityType="box" entityId={box.id} className="w-full sm:w-auto" />
           <button
             onClick={handlePrintLabel}
             disabled={labelLoading}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary"
           >
             {labelLoading ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
             {t('boxes.printLabel')}
@@ -415,7 +415,7 @@ export default function BoxDetailPage() {
               <option value="damaged">{t('statuses.box.damaged')}</option>
             </select>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button onClick={() => setShowStatusModal(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button onClick={handleStatusChange} disabled={!newStatus || saving} className="btn-primary">
               {saving ? t('common.processing') : t('common.confirm')}
@@ -457,7 +457,7 @@ export default function BoxDetailPage() {
             <label className="label-text">{t('common.notes')}</label>
             <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} className="input-field" rows={2} />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button onClick={() => setShowEditModal(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button onClick={handleEdit} disabled={saving} className="btn-primary">
               {saving ? t('common.processing') : t('common.save')}

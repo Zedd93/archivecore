@@ -88,16 +88,16 @@ export default function OrderDetailPage() {
       <Breadcrumbs items={[{ label: t('orders.title'), to: '/orders' }, { label: order.orderNumber }]} />
 
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{order.orderNumber}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{order.orderNumber}</h1>
             <StatusBadge status={order.status} type="order" />
             <StatusBadge status={order.priority} type="priority" />
           </div>
           <p className="text-gray-500 mt-1">{ORDER_TYPE_LABELS[order.orderType]}</p>
         </div>
-        <ShareButton entityType="order" entityId={order.id} />
+        <ShareButton entityType="order" entityId={order.id} className="w-full sm:w-auto" />
       </div>
 
       {/* Progress Stepper */}
@@ -132,44 +132,44 @@ export default function OrderDetailPage() {
       {/* Actions */}
       <div className="card">
         <h2 className="text-lg font-semibold mb-3">{t('common.actions')}</h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
           {order.status === 'draft' && (
-            <button onClick={() => handleAction('submit')} className="btn-primary flex items-center gap-2" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('submit')} className="btn-primary" disabled={patchOrder.isPending}>
               <Play size={16} /> {t('orders.detail.submit')}
             </button>
           )}
           {order.status === 'submitted' && hasPermission('order.approve') && (
             <>
-              <button onClick={() => handleAction('approve')} className="btn-primary flex items-center gap-2" disabled={patchOrder.isPending}>
+              <button onClick={() => handleAction('approve')} className="btn-primary" disabled={patchOrder.isPending}>
                 <CheckCircle size={16} /> {t('orders.detail.approve')}
               </button>
-              <button onClick={() => handleAction('reject')} className="btn-danger flex items-center gap-2" disabled={patchOrder.isPending}>
+              <button onClick={() => handleAction('reject')} className="btn-danger" disabled={patchOrder.isPending}>
                 <XCircle size={16} /> {t('orders.detail.reject')}
               </button>
             </>
           )}
           {order.status === 'approved' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('process')} className="btn-primary flex items-center gap-2" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('process')} className="btn-primary" disabled={patchOrder.isPending}>
               <Play size={16} /> {t('orders.detail.startProgress')}
             </button>
           )}
           {order.status === 'in_progress' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('ready')} className="btn-primary flex items-center gap-2" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending}>
               <Package size={16} /> {t('orders.detail.markReady')}
             </button>
           )}
           {order.status === 'ready' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('deliver')} className="btn-primary flex items-center gap-2" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('deliver')} className="btn-primary" disabled={patchOrder.isPending}>
               <Truck size={16} /> {t('orders.detail.deliver')}
             </button>
           )}
           {order.status === 'delivered' && hasPermission('order.complete') && (
-            <button onClick={() => handleAction('complete')} className="btn-primary flex items-center gap-2" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('complete')} className="btn-primary" disabled={patchOrder.isPending}>
               <CheckCircle size={16} /> {t('orders.detail.complete')}
             </button>
           )}
           {!['completed', 'cancelled'].includes(order.status) && (
-            <button onClick={() => handleAction('cancel')} className="btn-danger flex items-center gap-2" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('cancel')} className="btn-danger" disabled={patchOrder.isPending}>
               <XCircle size={16} /> {t('common.cancel')}
             </button>
           )}
@@ -286,7 +286,7 @@ export default function OrderDetailPage() {
               placeholder={t('orders.createModal.boxIdsPlaceholder')}
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button
               type="button"
               onClick={() => { setShowAddBox(false); setSelectedBoxes([]); }}

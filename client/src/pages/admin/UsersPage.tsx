@@ -142,20 +142,20 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('admin.users.title')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('admin.users.title')}</h1>
           <p className="text-sm text-gray-500">{t('admin.users.subtitle')}</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => setShowCreate(true)} className="btn-primary w-full sm:w-auto">
           <Plus size={16} /> {t('admin.users.new')}
         </button>
       </div>
 
       <div className="card">
-        <div className="flex items-center gap-4">
-          <input type="text" placeholder={t('admin.users.searchPlaceholder')} value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="input-field flex-1" aria-label={t('admin.users.searchPlaceholder')} />
-          <select value={filters.isActive} onChange={(e) => setFilters({ ...filters, isActive: e.target.value })} className="input-field w-36" aria-label={t('common.all')}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <input type="text" placeholder={t('admin.users.searchPlaceholder')} value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="input-field w-full sm:flex-1" aria-label={t('admin.users.searchPlaceholder')} />
+          <select value={filters.isActive} onChange={(e) => setFilters({ ...filters, isActive: e.target.value })} className="input-field w-full sm:w-36" aria-label={t('common.all')}>
             <option value="">{t('common.all')}</option>
             <option value="true">{t('admin.users.active')}</option>
             <option value="false">{t('admin.users.inactive')}</option>
@@ -203,7 +203,7 @@ export default function UsersPage() {
           {roleCode === RoleCode.TENANT_EMPLOYEE && (
             <div><label htmlFor="user-create-department" className="label-text">{t('admin.users.createModal.department')}</label><input id="user-create-department" name="department" className="input-field" placeholder={t('admin.users.createModal.departmentPlaceholder')} required /></div>
           )}
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createUser.isPending} className="btn-primary">{createUser.isPending ? t('common.creating') : t('admin.users.createModal.submit')}</button>
           </div>
@@ -239,7 +239,7 @@ export default function UsersPage() {
           {accessRoleCode === RoleCode.TENANT_EMPLOYEE && (
             <div><label htmlFor="user-access-department" className="label-text">{t('admin.users.createModal.department')}</label><input id="user-access-department" value={accessDepartment} onChange={(e) => setAccessDepartment(e.target.value)} className="input-field" placeholder={t('admin.users.createModal.departmentPlaceholder')} required /></div>
           )}
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setAccessUser(null)} className="btn-secondary">{t('common.cancel')}</button>
             <button
               type="button"

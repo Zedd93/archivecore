@@ -98,21 +98,21 @@ export default function OrderListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('orders.title')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('orders.title')}</h1>
           <p className="text-sm text-gray-500">{t('orders.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex w-full sm:w-auto items-center gap-2">
           <button
             onClick={() => exportData({ format: 'xlsx', ...filters })}
             disabled={isExporting}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex-1 sm:flex-none"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             <span className="hidden sm:inline">{t('common.export')}</span>
           </button>
-          <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => setShowCreate(true)} className="btn-primary flex-1 sm:flex-none">
             <Plus size={16} /> <span className="hidden sm:inline">{t('orders.newOrder')}</span>
           </button>
         </div>
@@ -120,16 +120,16 @@ export default function OrderListPage() {
 
       {/* Filters */}
       <div className="card">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <input
             type="text"
             placeholder={t('orders.searchPlaceholder')}
             value={filters.search}
             onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="input-field flex-1"
+            className="input-field w-full sm:flex-1"
             aria-label={t('orders.searchPlaceholder')}
           />
-          <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="input-field w-40" aria-label={t('orders.allStatuses')}>
+          <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="input-field w-full sm:w-40" aria-label={t('orders.allStatuses')}>
             <option value="">{t('orders.allStatuses')}</option>
             <option value="draft">{t('orders.statusDraft')}</option>
             <option value="submitted">{t('orders.statusSubmitted')}</option>
@@ -140,7 +140,7 @@ export default function OrderListPage() {
             <option value="completed">{t('orders.statusCompleted')}</option>
             <option value="cancelled">{t('orders.statusCancelled')}</option>
           </select>
-          <select value={filters.orderType} onChange={(e) => setFilters({ ...filters, orderType: e.target.value })} className="input-field w-36" aria-label={t('orders.allTypes')}>
+          <select value={filters.orderType} onChange={(e) => setFilters({ ...filters, orderType: e.target.value })} className="input-field w-full sm:w-36" aria-label={t('orders.allTypes')}>
             <option value="">{t('orders.allTypes')}</option>
             <option value="checkout">{t('orders.typeIssue')}</option>
             <option value="return_order">{t('orders.typeReturn')}</option>
@@ -193,7 +193,7 @@ export default function OrderListPage() {
             <label htmlFor="order-create-notes" className="label-text">{t('orders.createModal.notes')}</label>
             <textarea id="order-create-notes" name="notes" className="input-field" rows={3} placeholder={t('orders.createModal.notesPlaceholder')} />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowCreate(false); setSelectedBoxes([]); }} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createOrder.isPending} className="btn-primary">
               {createOrder.isPending ? t('common.creating') : t('orders.createModal.submit')}

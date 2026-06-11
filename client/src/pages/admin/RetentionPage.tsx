@@ -96,9 +96,9 @@ export default function RetentionPage() {
 
       {/* Policies */}
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold">{t('admin.retention.policies')}</h2>
-          <button onClick={() => setShowCreatePolicy(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => setShowCreatePolicy(true)} className="btn-primary w-full sm:w-auto">
             <Plus size={16} /> {t('admin.retention.newPolicy')}
           </button>
         </div>
@@ -157,7 +157,7 @@ export default function RetentionPage() {
             </select>
           </div>
           <div><label htmlFor="retention-create-description" className="label-text">{t('admin.retention.createModal.description')}</label><textarea id="retention-create-description" name="description" className="input-field" rows={3} /></div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowCreatePolicy(false)} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createPolicy.isPending} className="btn-primary">{createPolicy.isPending ? t('common.creating') : t('common.create')}</button>
           </div>

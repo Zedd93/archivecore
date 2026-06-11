@@ -67,18 +67,18 @@ export default function ConfirmDialog({
             <div className="text-sm text-gray-500">{message}</div>
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
           <button
             onClick={onCancel}
             disabled={isLoading}
-            className="btn-secondary"
+            className="btn-secondary w-full sm:w-auto"
           >
             {resolvedCancelLabel}
           </button>
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${config.confirmBtn}`}
+            className={`inline-flex min-h-10 w-full items-center justify-center rounded-lg px-4 py-2 text-center text-sm font-medium leading-tight transition-colors disabled:opacity-50 sm:w-auto ${config.confirmBtn}`}
           >
             {isLoading ? t('common.processing') : resolvedConfirmLabel}
           </button>

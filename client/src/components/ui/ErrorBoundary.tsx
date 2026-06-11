@@ -59,17 +59,17 @@ export default class ErrorBoundary extends Component<Props, State> {
                 </p>
               </div>
             )}
-            <div className="flex gap-3 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 onClick={this.handleRetry}
-                className="btn-primary flex items-center gap-2"
+                className="btn-primary w-full sm:w-auto"
               >
                 <RefreshCw size={16} />
                 {i18n.t('common.tryAgain')}
               </button>
               <button
                 onClick={this.handleGoHome}
-                className="btn-secondary flex items-center gap-2"
+                className="btn-secondary w-full sm:w-auto"
               >
                 <Home size={16} />
                 {i18n.t('common.goHome')}

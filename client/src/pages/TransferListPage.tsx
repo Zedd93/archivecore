@@ -299,21 +299,21 @@ export default function TransferListPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="w-10 h-10 shrink-0 bg-indigo-100 rounded-lg flex items-center justify-center">
             <FileText size={20} className="text-indigo-600" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('transferLists.title')}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('transferLists.title')}</h1>
             <p className="text-sm text-gray-500">{t('transferLists.subtitle')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <button
             onClick={() => exportData({ format: 'xlsx', search, status: statusFilter })}
             disabled={isExporting}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex-1 sm:flex-none"
           >
             {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
             <span className="hidden sm:inline">{t('common.export')}</span>
@@ -321,14 +321,14 @@ export default function TransferListPage() {
           {canImport && (
             <button
               onClick={() => setShowImport(true)}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary flex-1 sm:flex-none"
             >
               <Upload size={18} />
               <span className="hidden sm:inline">{t('transferLists.importFromFile')}</span>
             </button>
           )}
           {canWrite && (
-            <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
+            <button onClick={() => setShowCreate(true)} className="btn-primary flex-1 sm:flex-none">
               <Plus size={18} />
               <span className="hidden sm:inline">{t('transferLists.newList')}</span>
             </button>
@@ -609,7 +609,7 @@ export default function TransferListPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => { setShowImport(false); resetImportForm(); }}
@@ -708,7 +708,7 @@ export default function TransferListPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => { setShowCreate(false); resetForm(); }}
