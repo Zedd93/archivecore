@@ -17,6 +17,7 @@ interface ListResponse<T> {
   success: boolean;
   data: T[];
   meta?: { total: number; page: number; limit: number };
+  pagination?: { total: number; page: number; limit: number; totalPages?: number };
 }
 
 export function useList<T = any>(
@@ -29,7 +30,11 @@ export function useList<T = any>(
     queryKey: [key, params],
     queryFn: async () => {
       const { data } = await api.get(endpoint, { params });
-      return data as ListResponse<T>;
+      const response = data as ListResponse<T>;
+      return {
+        ...response,
+        meta: response.meta || response.pagination,
+      };
     },
     ...options,
   });

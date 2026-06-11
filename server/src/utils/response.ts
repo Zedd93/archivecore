@@ -22,14 +22,17 @@ export function paginatedResponse<T>(
   page: number,
   limit: number
 ) {
+  const pagination = {
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
+
   return res.status(200).json({
     success: true,
     data,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+    pagination,
+    meta: pagination,
   });
 }
