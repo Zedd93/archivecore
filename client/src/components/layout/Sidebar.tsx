@@ -64,7 +64,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {/* Logo */}
       <div className="flex items-center justify-between px-4 py-5 border-b border-gray-100">
-        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <Link
+          to="/dashboard"
+          onClick={onClose}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary-500"
+          aria-label={t('layout.nav.dashboard')}
+        >
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
             <Box size={18} className="text-white" />
           </div>

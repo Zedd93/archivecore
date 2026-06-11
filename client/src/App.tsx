@@ -97,6 +97,7 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/boxes" element={<Suspense fallback={suspenseFallback}><BoxListPage /></Suspense>} />
         <Route path="/boxes/:id" element={<Suspense fallback={suspenseFallback}><BoxDetailPage /></Suspense>} />
         <Route path="/orders" element={<Suspense fallback={suspenseFallback}><OrderListPage /></Suspense>} />
