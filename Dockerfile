@@ -53,6 +53,7 @@ RUN npm install --workspace=server --omit=dev --legacy-peer-deps && \
 
 # Copy built server
 COPY --from=builder /app/server/dist server/dist
+COPY --from=builder /app/server/src/assets server/src/assets
 
 # Copy built client (static files)
 COPY --from=builder /app/client/dist client/dist

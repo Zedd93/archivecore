@@ -1,8 +1,12 @@
 import PDFDocument from 'pdfkit';
+import fs from 'node:fs';
+import path from 'node:path';
 import { qrService } from './qr.service';
 
 // 1mm = 2.83465 points (PDF points)
 const MM_TO_PT = 2.83465;
+const LABEL_FONT_REGULAR = 'ArchiveCoreLabelRegular';
+const LABEL_FONT_BOLD = 'ArchiveCoreLabelBold';
 
 export interface LabelLayout {
   widthMm: number;
@@ -37,6 +41,25 @@ export interface LabelData {
 }
 
 export class PdfService {
+  private resolveAssetPath(...segments: string[]) {
+    const candidates = [
+      path.resolve(__dirname, '..', '..', 'assets', ...segments),
+      path.resolve(process.cwd(), 'server', 'src', 'assets', ...segments),
+      path.resolve(process.cwd(), 'src', 'assets', ...segments),
+    ];
+
+    const found = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!found) {
+      throw Object.assign(new Error(`Nie znaleziono assetu etykiet: ${segments.join('/')}`), { statusCode: 500 });
+    }
+    return found;
+  }
+
+  private registerFonts(doc: PDFKit.PDFDocument) {
+    doc.registerFont(LABEL_FONT_REGULAR, this.resolveAssetPath('fonts', 'STIXTwoText.ttf'));
+    doc.registerFont(LABEL_FONT_BOLD, this.resolveAssetPath('fonts', 'STIXTwoText.ttf'));
+  }
+
   async generateLabel(layout: LabelLayout, data: LabelData): Promise<Buffer> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -56,6 +79,7 @@ export class PdfService {
         doc.on('data', (chunk: Buffer) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
+        this.registerFonts(doc);
 
         // Generate QR code image
         const qrSizePt = layout.qrSizeMm * MM_TO_PT;
@@ -76,12 +100,12 @@ export class PdfService {
           const fontSize = field.fontSize || baseFontSize;
 
           // Field label
-          doc.font('Helvetica-Bold').fontSize(fontSize - 1);
+          doc.font(LABEL_FONT_BOLD).fontSize(fontSize - 1);
           doc.text(field.label + ':', x, y, { width: maxWidth, lineBreak: false });
 
           // Field value
           const value = data[field.key] || '';
-          doc.font(field.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+          doc.font(field.bold ? LABEL_FONT_BOLD : LABEL_FONT_REGULAR).fontSize(fontSize);
           doc.text(String(value), x, y + fontSize + 1, { width: maxWidth, lineBreak: true, ellipsis: true, height: fontSize * 2.5 });
         }
 
@@ -122,6 +146,7 @@ export class PdfService {
         doc.on('data', (chunk: Buffer) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
+        this.registerFonts(doc);
 
         for (let i = 0; i < labels.length; i++) {
           if (i > 0 && i % perPage === 0) doc.addPage();
@@ -165,11 +190,11 @@ export class PdfService {
       const maxWidth = field.maxWidth ? field.maxWidth * MM_TO_PT : widthPt - (field.x * MM_TO_PT) - 4;
       const fontSize = field.fontSize || baseFontSize;
 
-      doc.font('Helvetica-Bold').fontSize(fontSize - 1);
+      doc.font(LABEL_FONT_BOLD).fontSize(fontSize - 1);
       doc.text(field.label + ':', x, y, { width: maxWidth, lineBreak: false });
 
       const value = data[field.key] || '';
-      doc.font(field.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+      doc.font(field.bold ? LABEL_FONT_BOLD : LABEL_FONT_REGULAR).fontSize(fontSize);
       doc.text(String(value), x, y + fontSize + 1, { width: maxWidth, lineBreak: true, ellipsis: true, height: fontSize * 2.5 });
     }
 
