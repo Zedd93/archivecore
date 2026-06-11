@@ -3,6 +3,8 @@ import { authService } from './auth.service';
 import { successResponse, errorResponse } from '../../utils/response';
 
 const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_TOKEN_COOKIE = 'refreshToken';
+const EXPIRED_COOKIE_DATE = new Date(0);
 
 function refreshTokenCookieOptions(req: Request): CookieOptions {
   return {
@@ -11,6 +13,38 @@ function refreshTokenCookieOptions(req: Request): CookieOptions {
     sameSite: 'strict',
     path: '/',
   };
+}
+
+function setRefreshTokenCookie(req: Request, res: Response, token: string) {
+  res.cookie(REFRESH_TOKEN_COOKIE, token, {
+    ...refreshTokenCookieOptions(req),
+    maxAge: REFRESH_TOKEN_MAX_AGE,
+  });
+}
+
+function expireRefreshTokenCookie(res: Response, secure: boolean) {
+  const options: CookieOptions = {
+    httpOnly: true,
+    secure,
+    sameSite: 'strict',
+    path: '/',
+  };
+
+  res.clearCookie(REFRESH_TOKEN_COOKIE, options);
+  res.cookie(REFRESH_TOKEN_COOKIE, '', {
+    ...options,
+    expires: EXPIRED_COOKIE_DATE,
+    maxAge: 0,
+  });
+}
+
+function clearRefreshTokenCookie(req: Request, res: Response) {
+  const currentSecure = refreshTokenCookieOptions(req).secure === true;
+
+  // Clear both variants to remove cookies created before/after proxy HTTPS changes.
+  for (const secure of new Set([currentSecure, true, false])) {
+    expireRefreshTokenCookie(res, secure);
+  }
 }
 
 export class AuthController {
@@ -27,10 +61,7 @@ export class AuthController {
       const loginResult = result as { accessToken: string; refreshToken: string; user: any };
 
       // Set refresh token as httpOnly cookie
-      res.cookie('refreshToken', loginResult.refreshToken, {
-        ...refreshTokenCookieOptions(req),
-        maxAge: REFRESH_TOKEN_MAX_AGE,
-      });
+      setRefreshTokenCookie(req, res, loginResult.refreshToken);
 
       return successResponse(res, {
         accessToken: loginResult.accessToken,
@@ -47,10 +78,7 @@ export class AuthController {
       const totpCode = req.body.totpCode || req.body.code;
       const result = await authService.validateTwoFactor(tempToken, totpCode);
 
-      res.cookie('refreshToken', result.refreshToken, {
-        ...refreshTokenCookieOptions(req),
-        maxAge: REFRESH_TOKEN_MAX_AGE,
-      });
+      setRefreshTokenCookie(req, res, result.refreshToken);
 
       return successResponse(res, {
         accessToken: result.accessToken,
@@ -82,15 +110,12 @@ export class AuthController {
 
   async refresh(req: Request, res: Response, next: NextFunction) {
     try {
-      const token = req.cookies?.refreshToken;
+      const token = req.cookies?.[REFRESH_TOKEN_COOKIE];
       if (!token) return errorResponse(res, 'Brak tokenu odświeżania', 401);
 
       const result = await authService.refreshToken(token);
 
-      res.cookie('refreshToken', result.refreshToken, {
-        ...refreshTokenCookieOptions(req),
-        maxAge: REFRESH_TOKEN_MAX_AGE,
-      });
+      setRefreshTokenCookie(req, res, result.refreshToken);
 
       return successResponse(res, { accessToken: result.accessToken });
     } catch (err) {
@@ -100,9 +125,9 @@ export class AuthController {
 
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
-      const token = req.cookies?.refreshToken;
+      const token = req.cookies?.[REFRESH_TOKEN_COOKIE];
       if (token) await authService.logout(token);
-      res.clearCookie('refreshToken', refreshTokenCookieOptions(req));
+      clearRefreshTokenCookie(req, res);
       return successResponse(res, { message: 'Wylogowano' });
     } catch (err) {
       next(err);
