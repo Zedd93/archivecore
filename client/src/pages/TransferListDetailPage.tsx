@@ -792,6 +792,7 @@ export default function TransferListDetailPage() {
               <input
                 id="item-folderSignature"
                 type="text"
+                data-autofocus
                 value={form.folderSignature}
                 onChange={(e) => setForm({ ...form, folderSignature: e.target.value })}
                 className="input-field"

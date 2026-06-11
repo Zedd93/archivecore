@@ -576,6 +576,7 @@ export default function TransferListPage() {
             <input
               id="import-title"
               type="text"
+              data-autofocus
               value={importTitle}
               onChange={(e) => setImportTitle(e.target.value)}
               className="input-field"
@@ -650,6 +651,7 @@ export default function TransferListPage() {
             <input
               id="create-list-title"
               type="text"
+              data-autofocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="input-field"

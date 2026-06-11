@@ -18,6 +18,7 @@ const sizes = {
 };
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const INITIAL_FOCUS_SELECTOR = '[data-autofocus], input:not([type="hidden"]):not([disabled]):not(.hidden), textarea:not([disabled]), select:not([disabled])';
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
   const { t } = useTranslation();
@@ -66,12 +67,15 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
 
     document.addEventListener('keydown', handleKeyDown);
 
-    // Focus the first focusable element inside the dialog (only on open)
+    // Focus the first useful form field inside the dialog (only on open).
+    // If focus is already inside the dialog, leave it alone to avoid stealing
+    // focus from controlled inputs during parent re-renders.
     requestAnimationFrame(() => {
       if (dialogRef.current) {
-        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-        if (focusable.length > 0) {
-          focusable[0].focus();
+        if (dialogRef.current.contains(document.activeElement)) return;
+        const initialFocus = dialogRef.current.querySelector<HTMLElement>(INITIAL_FOCUS_SELECTOR);
+        if (initialFocus) {
+          initialFocus.focus();
         }
       }
     });
