@@ -13,6 +13,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="ArchiveCore" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <script>
+      (() => {
+        const theme = localStorage.getItem('archivecore-theme') || 'light';
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const resolved = theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
+        document.documentElement.classList.toggle('dark', resolved === 'dark');
+        document.documentElement.dataset.theme = theme;
+        const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (metaThemeColor) metaThemeColor.content = resolved === 'dark' ? '#111827' : '#2563eb';
+      })();
+    </script>
     <title>ArchiveCore — System Zarządzania Archiwum</title>
   </head>
   <body class="bg-gray-50 antialiased">

@@ -5,6 +5,7 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { User, Shield, Bell, Palette, Loader2, Eye, EyeOff } from 'lucide-react';
+import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, ThemePreference } from '@/utils/theme';
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance';
 
@@ -410,15 +411,46 @@ function NotificationsTab() {
 // ─── Appearance Tab ──────────────────────────────────────
 function AppearanceTab() {
   const { t, i18n } = useTranslation();
+  const [theme, setTheme] = useState<ThemePreference>(() => getStoredThemePreference());
 
   const handleLanguageChange = (lng: string) => {
     i18n.changeLanguage(lng);
     localStorage.setItem('archivecore-lang', lng);
   };
 
+  useEffect(() => {
+    if (theme !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => applyThemePreference('system');
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
+
+  const handleThemeChange = (nextTheme: ThemePreference) => {
+    setTheme(nextTheme);
+    setStoredThemePreference(nextTheme);
+    toast.success(t('settings.appearance.themeChanged', { theme: t(`settings.appearance.theme${nextTheme[0].toUpperCase()}${nextTheme.slice(1)}`) }));
+  };
+
   return (
     <div className="card p-4 sm:p-6 space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('settings.appearance.title')}</h2>
+
+      <div>
+        <label htmlFor="settings-appearance-theme" className="label-text mb-3 block">{t('settings.appearance.theme')}</label>
+        <select
+          id="settings-appearance-theme"
+          className="input-field w-full sm:w-64"
+          value={theme}
+          onChange={(e) => handleThemeChange(e.target.value as ThemePreference)}
+        >
+          <option value="light">{t('settings.appearance.themeLight')}</option>
+          <option value="dark">{t('settings.appearance.themeDark')}</option>
+          <option value="system">{t('settings.appearance.themeSystem')}</option>
+        </select>
+        <p className="mt-2 text-xs text-gray-500">{t('settings.appearance.themeHint')}</p>
+      </div>
 
       <div>
         <label htmlFor="settings-appearance-language" className="label-text mb-3 block">{t('settings.appearance.language')}</label>
