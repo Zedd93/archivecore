@@ -639,10 +639,11 @@
 
   "import": {
     "title": "Data import",
-    "subtitle": "Import boxes or HR records from Excel/CSV files",
+    "subtitle": "Import boxes, HR records, or transfer lists from Excel/CSV files",
     "step1": "1. Select data type",
     "boxColumns": "Columns: Title (required), Document type, Description, Notes",
     "hrColumns": "Columns: First name (req.), Last name (req.), PESEL (req.), ID number, Department, Position, Hire date, Employment status",
+    "transferListColumns": "Columns: Folder signature, Folder title, Date range, Category, Folder count, Box number",
     "step2": "2. Select file",
     "dropHint": "Drag a file here or click to browse",
     "step3": "3. Import preview",
@@ -658,7 +659,9 @@
     "importErrors": "Import errors:",
     "newImport": "New import",
     "successMsg": "Imported {{count}} of {{total}} rows",
-    "successWithErrors": "Imported {{count}} rows. {{errors}} errors."
+    "successWithErrors": "Imported {{count}} rows. {{errors}} errors.",
+    "createdTransferList": "Created transfer list {{number}}: {{title}}",
+    "openTransferList": "Open transfer list"
   },
 
   "settings": {

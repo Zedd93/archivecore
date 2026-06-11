@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import api from '@/services/api';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import toast from 'react-hot-toast';
@@ -9,7 +10,7 @@ import {
   Loader2, X, ArrowRight, Download,
 } from 'lucide-react';
 
-type EntityType = 'boxes' | 'hr';
+type EntityType = 'boxes' | 'hr' | 'transfer-lists';
 
 interface PreviewRow {
   [key: string]: any;
@@ -31,6 +32,9 @@ interface ImportResult {
   totalRows: number;
   imported: number;
   errors: ImportError[];
+  listId?: string;
+  listNumber?: string;
+  title?: string;
 }
 
 function useEntityOptions() {
@@ -38,6 +42,7 @@ function useEntityOptions() {
   return [
     { value: 'boxes' as EntityType, label: t('boxes.title'), description: t('import.boxColumns') },
     { value: 'hr' as EntityType, label: t('hr.title'), description: t('import.hrColumns') },
+    { value: 'transfer-lists' as EntityType, label: t('transferLists.title'), description: t('import.transferListColumns') },
   ];
 }
 
@@ -166,7 +171,7 @@ export default function ImportPage() {
       {/* Step 1: Entity selection */}
       <div className="card">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('import.step1')}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {ENTITY_OPTIONS.map(opt => (
             <button
               key={opt.value}
@@ -351,6 +356,23 @@ export default function ImportPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {importResult.listId && (
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
+              <div className="text-sm font-medium text-primary-900">
+                {t('import.createdTransferList', {
+                  number: importResult.listNumber || '',
+                  title: importResult.title || '',
+                })}
+              </div>
+              <Link
+                to={`/transfer-lists/${importResult.listId}`}
+                className="inline-flex mt-3 btn-primary"
+              >
+                {t('import.openTransferList')}
+              </Link>
             </div>
           )}
 

@@ -639,10 +639,11 @@
 
   "import": {
     "title": "Import danych",
-    "subtitle": "Importuj kartony lub akta osobowe z plików Excel/CSV",
+    "subtitle": "Importuj kartony, akta osobowe lub spisy zdawczo-odbiorcze z plików Excel/CSV",
     "step1": "1. Wybierz typ danych",
     "boxColumns": "Kolumny: Tytuł (wymagane), Typ dokumentów, Opis, Uwagi",
     "hrColumns": "Kolumny: Imię (wym.), Nazwisko (wym.), PESEL (wym.), Nr dowodu, Dział, Stanowisko, Data zatrudnienia, Status zatrudnienia",
+    "transferListColumns": "Kolumny: Znak teczki, Tytuł teczki lub tomu, Daty skrajne, Kat. akt, Liczba teczek, Numer kartonu",
     "step2": "2. Wybierz plik",
     "dropHint": "Przeciągnij plik tutaj lub kliknij aby wybrać",
     "step3": "3. Podgląd importu",
@@ -658,7 +659,9 @@
     "importErrors": "Błędy podczas importu:",
     "newImport": "Nowy import",
     "successMsg": "Zaimportowano {{count}} z {{total}} wierszy",
-    "successWithErrors": "Zaimportowano {{count}} wierszy. {{errors}} błędów."
+    "successWithErrors": "Zaimportowano {{count}} wierszy. {{errors}} błędów.",
+    "createdTransferList": "Utworzono spis {{number}}: {{title}}",
+    "openTransferList": "Otwórz spis"
   },
 
   "settings": {

@@ -53,6 +53,31 @@ export class ImportController {
       return successResponse(res, result, 201);
     } catch (err) { next(err); }
   }
+
+  async previewTransferLists(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Nie załączono pliku', 400);
+
+      const result = await importService.previewTransferLists(req.file.buffer, req.file.originalname);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async importTransferLists(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Nie załączono pliku', 400);
+
+      const result = await importService.importTransferLists(
+        req.file.buffer,
+        req.file.originalname,
+        req.tenantId,
+        req.user!.userId
+      );
+      return successResponse(res, result, 201);
+    } catch (err) { next(err); }
+  }
 }
 
 export const importController = new ImportController();

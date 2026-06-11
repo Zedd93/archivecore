@@ -15,7 +15,6 @@ import {
   changeTransferListStatusSchema,
   bulkDeleteItemsSchema,
   bulkAssignBoxSchema,
-  importTransferListSchema,
 } from '@archivecore/shared';
 
 const router = Router();
@@ -117,7 +116,6 @@ router.post('/:id/import',
   ...auth,
   requirePermission(Permissions.TRANSFER_LIST_IMPORT),
   fileUpload.single('file'),
-  validate(importTransferListSchema),
   auditLog('transfer_list', 'transfer_list.import'),
   (req, res, next) => transferListController.importFile(req, res, next)
 );

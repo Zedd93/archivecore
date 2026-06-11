@@ -22,5 +22,7 @@ router.post('/import/boxes/preview', ...auth, requirePermission(Permissions.IMPO
 router.post('/import/boxes', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), auditLog('import', 'import.boxes'), (req, res, next) => importController.importBoxes(req, res, next));
 router.post('/import/hr/preview', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.previewHR(req, res, next));
 router.post('/import/hr', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), auditLog('import', 'import.hr'), (req, res, next) => importController.importHR(req, res, next));
+router.post('/import/transfer-lists/preview', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.previewTransferLists(req, res, next));
+router.post('/import/transfer-lists', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), auditLog('import', 'import.transfer-lists'), (req, res, next) => importController.importTransferLists(req, res, next));
 
 export default router;
