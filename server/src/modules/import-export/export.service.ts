@@ -1,14 +1,15 @@
 import * as XLSX from 'xlsx';
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
-import { BOX_STATUS_LABELS, ORDER_STATUS_LABELS, ORDER_TYPE_LABELS, PRIORITY_LABELS, EMPLOYMENT_STATUS_LABELS, DISPOSAL_STATUS_LABELS } from '@archivecore/shared';
-
-// Transfer list statuses are not in shared constants — define locally
-const TRANSFER_LIST_STATUS_LABELS: Record<string, string> = {
-  draft: 'Szkic',
-  confirmed: 'Zatwierdzony',
-  archived: 'Zarchiwizowany',
-};
+import {
+  BOX_STATUS_LABELS,
+  DISPOSAL_STATUS_LABELS,
+  EMPLOYMENT_STATUS_LABELS,
+  ORDER_STATUS_LABELS,
+  ORDER_TYPE_LABELS,
+  PRIORITY_LABELS,
+  TRANSFER_LIST_STATUS_LABELS,
+} from '@archivecore/shared';
 
 const RETENTION_PERIOD_LABELS: Record<string, string> = {
   ten_years: '10 lat',

@@ -42,6 +42,19 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   cancelled: 'gray',
 };
 
+// ======= Transfer List Status Labels =======
+export const TRANSFER_LIST_STATUS_LABELS: Record<string, string> = {
+  draft: 'Roboczy',
+  confirmed: 'Zatwierdzony',
+  archived: 'Zarchiwizowany',
+};
+
+export const TRANSFER_LIST_STATUS_COLORS: Record<string, string> = {
+  draft: 'gray',
+  confirmed: 'green',
+  archived: 'blue',
+};
+
 // ======= Order Type Labels =======
 export const ORDER_TYPE_LABELS: Record<string, string> = {
   checkout: 'Wydanie',
