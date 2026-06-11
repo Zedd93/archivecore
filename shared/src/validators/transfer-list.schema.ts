@@ -27,7 +27,7 @@ export const createTransferListItemSchema = z.object({
 export const updateTransferListItemSchema = createTransferListItemSchema.partial();
 
 export const changeTransferListStatusSchema = z.object({
-  status: z.enum(['draft', 'submitted', 'approved', 'rejected', 'archived']),
+  status: z.enum(['draft', 'confirmed', 'archived']),
   notes: z.string().optional(),
 });
 
