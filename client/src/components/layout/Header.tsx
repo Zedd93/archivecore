@@ -43,11 +43,44 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   });
   const markRead = useMutation({
     mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+      const previous = queryClient.getQueryData<{ items: NotificationItem[]; unreadCount: number }>(['notifications']);
+      queryClient.setQueryData<{ items: NotificationItem[]; unreadCount: number }>(['notifications'], (current) => {
+        if (!current) return current;
+        const now = new Date().toISOString();
+        const wasUnread = current.items.some((item) => item.id === id && !item.readAt);
+        return {
+          unreadCount: Math.max(0, current.unreadCount - (wasUnread ? 1 : 0)),
+          items: current.items.map((item) => item.id === id ? { ...item, readAt: item.readAt || now } : item),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['notifications'], context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
   const markAllRead = useMutation({
     mutationFn: () => api.post('/notifications/read-all'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+      const previous = queryClient.getQueryData<{ items: NotificationItem[]; unreadCount: number }>(['notifications']);
+      queryClient.setQueryData<{ items: NotificationItem[]; unreadCount: number }>(['notifications'], (current) => {
+        if (!current) return current;
+        const now = new Date().toISOString();
+        return {
+          unreadCount: 0,
+          items: current.items.map((item) => ({ ...item, readAt: item.readAt || now })),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(['notifications'], context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
   const activeTenantId = localStorage.getItem('tenantId') || '';
   const notifications = notificationsData?.items ?? [];
@@ -149,9 +182,14 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         <div className="relative">
           <button
             ref={bellRef}
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => {
+              setShowMenu(false);
+              setShowNotifications((open) => !open);
+            }}
             className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
             aria-label={t('layout.notifications.title')}
+            aria-expanded={showNotifications}
+            aria-haspopup="menu"
           >
             <Bell size={20} />
             {unreadCount > 0 && (
@@ -163,7 +201,8 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           {showNotifications && (
             <div
               ref={notificationsRef}
-              className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden"
+              className="fixed right-4 top-16 lg:right-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-xl border border-gray-200 z-[70] overflow-hidden"
+              role="menu"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <div>
@@ -177,8 +216,12 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                 {unreadCount > 0 && (
                   <button
                     type="button"
-                    onClick={() => markAllRead.mutate()}
-                    className="text-xs text-primary-700 hover:text-primary-800 font-medium"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markAllRead.mutate();
+                    }}
+                    disabled={markAllRead.isPending}
+                    className="text-xs text-primary-700 hover:text-primary-800 font-medium disabled:opacity-60"
                   >
                     {t('layout.notifications.markAllRead')}
                   </button>
