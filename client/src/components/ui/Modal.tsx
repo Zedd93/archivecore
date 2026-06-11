@@ -24,14 +24,25 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
   // Use a ref so the keydown handler always sees the latest onClose without
   // re-running the effect (which would re-focus the first element).
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // Focus trap + Escape key — depends only on `isOpen` so the effect runs
-  // once when the modal opens and cleans up when it closes.  The handler
-  // reads `onCloseRef.current` to always call the latest callback.
+  useEffect(() => {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+
+    if (!isOpen && wasOpen) {
+      document.body.style.overflow = '';
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    }
+  }, [isOpen]);
+
+  // Focus trap + Escape key. The handler reads `onCloseRef.current` to always
+  // call the latest callback without re-focusing fields on every render.
   useEffect(() => {
     if (!isOpen) return;
 
@@ -83,8 +94,6 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     return () => {
       document.body.style.overflow = '';
       document.removeEventListener('keydown', handleKeyDown);
-      // Restore focus to the previously focused element
-      previousFocusRef.current?.focus();
     };
   }, [isOpen]);
 

@@ -220,6 +220,10 @@ export default function TransferListDetailPage() {
     });
   };
 
+  const updateFormField = (field: keyof typeof form, value: string | number) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -794,7 +798,7 @@ export default function TransferListDetailPage() {
                 type="text"
                 data-autofocus
                 value={form.folderSignature}
-                onChange={(e) => setForm({ ...form, folderSignature: e.target.value })}
+                onChange={(e) => updateFormField('folderSignature', e.target.value)}
                 className="input-field"
                 placeholder={t('transferLists.detail.folderSignPlaceholder')}
                 required
@@ -805,7 +809,7 @@ export default function TransferListDetailPage() {
               <select
                 id="item-categoryCode"
                 value={form.categoryCode}
-                onChange={(e) => setForm({ ...form, categoryCode: e.target.value })}
+                onChange={(e) => updateFormField('categoryCode', e.target.value)}
                 className="input-field"
                 required
               >
@@ -820,7 +824,7 @@ export default function TransferListDetailPage() {
               id="item-folderTitle"
               type="text"
               value={form.folderTitle}
-              onChange={(e) => setForm({ ...form, folderTitle: e.target.value })}
+              onChange={(e) => updateFormField('folderTitle', e.target.value)}
               className="input-field"
               placeholder={t('transferLists.detail.folderTitlePlaceholder')}
               required
@@ -834,7 +838,7 @@ export default function TransferListDetailPage() {
                 id="item-dateFrom"
                 type="date"
                 value={form.dateFrom}
-                onChange={(e) => setForm({ ...form, dateFrom: e.target.value })}
+                onChange={(e) => updateFormField('dateFrom', e.target.value)}
                 className="input-field"
               />
             </div>
@@ -844,7 +848,7 @@ export default function TransferListDetailPage() {
                 id="item-dateTo"
                 type="date"
                 value={form.dateTo}
-                onChange={(e) => setForm({ ...form, dateTo: e.target.value })}
+                onChange={(e) => updateFormField('dateTo', e.target.value)}
                 className="input-field"
               />
             </div>
@@ -855,7 +859,7 @@ export default function TransferListDetailPage() {
                 type="number"
                 min={1}
                 value={form.folderCount}
-                onChange={(e) => setForm({ ...form, folderCount: parseInt(e.target.value) || 1 })}
+                onChange={(e) => updateFormField('folderCount', parseInt(e.target.value) || 1)}
                 className="input-field"
               />
             </div>
@@ -867,7 +871,7 @@ export default function TransferListDetailPage() {
               id="item-storageLocation"
               type="text"
               value={form.storageLocation}
-              onChange={(e) => setForm({ ...form, storageLocation: e.target.value })}
+              onChange={(e) => updateFormField('storageLocation', e.target.value)}
               className="input-field"
               placeholder={t('transferLists.detail.storageLocationPlaceholder')}
             />
@@ -880,7 +884,7 @@ export default function TransferListDetailPage() {
                 id="item-destructionDate"
                 type="date"
                 value={form.disposalOrTransferDate}
-                onChange={(e) => setForm({ ...form, disposalOrTransferDate: e.target.value })}
+                onChange={(e) => updateFormField('disposalOrTransferDate', e.target.value)}
                 className="input-field"
               />
             </div>
@@ -888,7 +892,7 @@ export default function TransferListDetailPage() {
               <label htmlFor="item-boxNumber" className="label-text">{t('transferLists.detail.boxOptional')}</label>
               <BoxNumberInput
                 value={form.boxNumber}
-                onChange={(val) => setForm({ ...form, boxNumber: val })}
+                onChange={(val) => updateFormField('boxNumber', val)}
               />
             </div>
           </div>
@@ -898,7 +902,7 @@ export default function TransferListDetailPage() {
             <textarea
               id="item-notes"
               value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              onChange={(e) => updateFormField('notes', e.target.value)}
               className="input-field"
               rows={2}
             />
