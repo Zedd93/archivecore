@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
-import { MapPin, ChevronDown, Loader2, X } from 'lucide-react';
+import { Search, MapPin, ChevronDown, Loader2, X } from 'lucide-react';
 
 interface LocationNode {
   id: string;
@@ -172,28 +172,34 @@ export default function LocationPicker({
     }
   }
 
-  const displayValue = open ? search : selectedLocation?.fullPath ?? '';
+  useEffect(() => {
+    if (open) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [open]);
+
+  const displayValue = selectedLocation?.fullPath ?? '';
   const placeholderText = placeholder ?? t('locations.pickLocation', 'Select location...');
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <div className="relative">
-        <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-        <input
+        <button
           id={id}
-          ref={inputRef}
-          type="text"
-          className="input-field pl-9 pr-16"
-          placeholder={placeholderText}
-          value={displayValue}
-          onChange={handleInputChange}
-          onFocus={handleInputFocus}
-          onKeyDown={handleKeyDown}
-          autoComplete="off"
-        />
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          className="input-field flex min-h-[42px] w-full items-center pl-9 pr-16 text-left"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <span className={`block truncate ${displayValue ? 'text-gray-900' : 'text-gray-400'}`}>
+            {displayValue || placeholderText}
+          </span>
+        </button>
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {isLoading && <Loader2 size={14} className="animate-spin text-gray-400" />}
-          {selectedLocation && !open && (
+          {selectedLocation && (
             <button
               type="button"
               onClick={handleClear}
@@ -203,15 +209,38 @@ export default function LocationPicker({
               <X size={14} />
             </button>
           )}
-          <ChevronDown
-            size={16}
-            className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
-          />
+          <button
+            type="button"
+            onClick={() => setOpen((current) => !current)}
+            className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label={placeholderText}
+          >
+            <ChevronDown
+              size={16}
+              className={`transition-transform ${open ? 'rotate-180' : ''}`}
+            />
+          </button>
         </div>
       </div>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-[70] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+          <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                ref={inputRef}
+                type="text"
+                className="input-field h-9 pl-8 text-sm"
+                placeholder={t('common.search', 'Search')}
+                value={search}
+                onChange={handleInputChange}
+                onFocus={handleInputFocus}
+                onKeyDown={handleKeyDown}
+                autoComplete="off"
+              />
+            </div>
+          </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 size={20} className="animate-spin text-primary-500" />
