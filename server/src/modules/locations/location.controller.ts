@@ -1,11 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
 import { locationService } from './location.service';
 import { successResponse, errorResponse } from '../../utils/response';
+import { Permissions, RoleCode } from '@archivecore/shared';
+
+function canSelectLocationTenant(req: Request) {
+  return !req.user?.tenantId && (
+    req.user?.roles.includes(RoleCode.SUPER_ADMIN) ||
+    req.user?.permissions.includes(Permissions.TENANT_MANAGE) ||
+    req.user?.permissions.includes(Permissions.TENANT_SWITCH)
+  );
+}
 
 export class LocationController {
   async getTree(req: Request, res: Response, next: NextFunction) {
     try {
-      const tree = await locationService.getTree(req.tenantId || null);
+      const selectedTenantId = canSelectLocationTenant(req)
+        ? (req.query.tenantId as string | undefined) || req.tenantId || null
+        : req.tenantId || null;
+      const tree = await locationService.getTree(selectedTenantId);
       return successResponse(res, tree);
     } catch (err) { next(err); }
   }
@@ -19,8 +31,15 @@ export class LocationController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.tenantId) return errorResponse(res, 'Tenant context required', 400);
-      const location = await locationService.create(req.body, req.tenantId);
+      const selectedTenantId = canSelectLocationTenant(req)
+        ? req.body.tenantId || req.tenantId || null
+        : req.tenantId || null;
+
+      if (!selectedTenantId && !canSelectLocationTenant(req)) {
+        return errorResponse(res, 'Tenant context required', 400);
+      }
+
+      const location = await locationService.create(req.body, selectedTenantId);
       return successResponse(res, location, 201);
     } catch (err) { next(err); }
   }

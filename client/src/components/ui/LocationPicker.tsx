@@ -29,6 +29,7 @@ interface LocationPickerProps {
   onChange: (locationId: string) => void;
   placeholder?: string;
   excludeTypes?: string[];
+  tenantId?: string;
   className?: string;
 }
 
@@ -89,6 +90,7 @@ export default function LocationPicker({
   onChange,
   placeholder,
   excludeTypes = [],
+  tenantId,
   className = '',
 }: LocationPickerProps) {
   const { t } = useTranslation();
@@ -98,9 +100,11 @@ export default function LocationPicker({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: tree, isLoading } = useQuery({
-    queryKey: ['locations-tree'],
+    queryKey: ['locations-tree', tenantId || 'active'],
     queryFn: async () => {
-      const { data } = await api.get('/locations/tree');
+      const { data } = await api.get('/locations/tree', {
+        params: tenantId ? { tenantId } : undefined,
+      });
       return data.data as LocationNode[];
     },
   });

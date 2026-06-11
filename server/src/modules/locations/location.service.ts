@@ -51,17 +51,30 @@ export class LocationService {
 
   async create(data: any, tenantId: string | null) {
     let fullPath = data.name;
+    let locationTenantId = tenantId;
+
     if (data.parentId) {
       const parent = await prisma.location.findFirst({
-        where: { id: data.parentId, ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}) },
+        where: {
+          id: data.parentId,
+          isActive: true,
+          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}),
+        },
       });
-      if (parent) fullPath = `${parent.fullPath} > ${data.name}`;
+      if (!parent) {
+        throw Object.assign(new Error('Lokalizacja nadrzędna nie znaleziona'), { statusCode: 404 });
+      }
+      if (parent.tenantId && tenantId && parent.tenantId !== tenantId) {
+        throw Object.assign(new Error('Lokalizacja nadrzędna należy do innego tenanta'), { statusCode: 400 });
+      }
+      fullPath = `${parent.fullPath} > ${data.name}`;
+      locationTenantId = parent.tenantId ?? tenantId;
     }
 
     return prisma.location.create({
       data: {
         parentId: data.parentId,
-        tenantId,
+        tenantId: locationTenantId,
         type: data.type,
         code: data.code,
         name: data.name,

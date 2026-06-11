@@ -123,10 +123,12 @@ function LocationTreeNode({ node, depth }: { node: LocationNode; depth: number }
 export default function LocationsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const canWriteLocations = hasPermission('location.write');
+  const canSelectTenant = !user?.tenantId && (hasPermission('tenant.manage') || hasPermission('tenant.switch'));
+  const activeTenantId = localStorage.getItem('tenantId') || '';
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
+  const [createForm, setCreateForm] = useState({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId });
   const [creating, setCreating] = useState(false);
 
   const { data: tree, isLoading } = useQuery({
@@ -137,6 +139,19 @@ export default function LocationsPage() {
     },
   });
 
+  const { data: tenants } = useQuery({
+    queryKey: ['location-tenant-options'],
+    queryFn: async () => {
+      const { data } = await api.get('/tenants', { params: { page: 1, limit: 100 } });
+      return data.data as Array<{ id: string; name: string; shortCode: string }>;
+    },
+    enabled: canSelectTenant && showCreateModal,
+  });
+
+  const resetCreateForm = () => {
+    setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId });
+  };
+
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -145,12 +160,13 @@ export default function LocationsPage() {
         name: createForm.name,
         code: createForm.code,
         type: createForm.type,
+        tenantId: createForm.tenantId || undefined,
         parentId: createForm.parentId || undefined,
         capacity: createForm.capacity ? parseInt(createForm.capacity) : undefined,
       });
       toast.success(t('common.success'));
       setShowCreateModal(false);
-      setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '' });
+      resetCreateForm();
       queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
@@ -186,9 +202,36 @@ export default function LocationsPage() {
         )}
       </div>
 
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title={t('locations.add')}>
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false);
+          resetCreateForm();
+        }}
+        title={t('locations.add')}
+      >
         <form onSubmit={handleCreateLocation} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          {canSelectTenant && (
+            <div>
+              <label className="label-text">{t('locations.tenant')}</label>
+              <select
+                value={createForm.tenantId}
+                onChange={(e) => setCreateForm({ ...createForm, tenantId: e.target.value, parentId: '' })}
+                className="input-field"
+                required
+              >
+                <option value="">{t('locations.tenantPlaceholder')}</option>
+                {tenants?.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name} ({tenant.shortCode})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">{t('locations.tenantHint')}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-text">{t('common.name')}</label>
               <input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} className="input-field" required />
@@ -198,7 +241,7 @@ export default function LocationsPage() {
               <input value={createForm.code} onChange={(e) => setCreateForm({ ...createForm, code: e.target.value })} className="input-field" required placeholder="np. MAG-A" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-text">{t('common.type')}</label>
               <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="input-field">
@@ -220,11 +263,21 @@ export default function LocationsPage() {
             <LocationPicker
               value={createForm.parentId}
               onChange={(parentId) => setCreateForm({ ...createForm, parentId })}
+              tenantId={createForm.tenantId || undefined}
               placeholder={t('locations.parentLocationPlaceholder', 'Opcjonalnie — wybierz magazyn, strefę lub regał')}
             />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateModal(false);
+                resetCreateForm();
+              }}
+              className="btn-secondary"
+            >
+              {t('common.cancel')}
+            </button>
             <button type="submit" disabled={creating} className="btn-primary">
               {creating ? t('common.creating') : t('common.create')}
             </button>
