@@ -29,6 +29,7 @@ interface LocationPickerProps {
   onChange: (locationId: string) => void;
   placeholder?: string;
   excludeTypes?: string[];
+  excludeIds?: string[];
   tenantId?: string;
   className?: string;
 }
@@ -60,12 +61,12 @@ const TYPE_BADGE_COLORS: Record<string, string> = {
   slot: 'badge-gray',
 };
 
-function flattenTree(nodes: LocationNode[], excludeTypes: string[]): FlatLocation[] {
+function flattenTree(nodes: LocationNode[], excludeTypes: string[], excludeIds: string[]): FlatLocation[] {
   const result: FlatLocation[] = [];
 
   function walk(list: LocationNode[]) {
     for (const node of list) {
-      if (!excludeTypes.includes(node.type)) {
+      if (!excludeTypes.includes(node.type) && !excludeIds.includes(node.id)) {
         result.push({
           id: node.id,
           code: node.code,
@@ -90,6 +91,7 @@ export default function LocationPicker({
   onChange,
   placeholder,
   excludeTypes = [],
+  excludeIds = [],
   tenantId,
   className = '',
 }: LocationPickerProps) {
@@ -111,8 +113,8 @@ export default function LocationPicker({
 
   const flatLocations = useMemo(() => {
     if (!tree) return [];
-    return flattenTree(tree, excludeTypes);
-  }, [tree, excludeTypes]);
+    return flattenTree(tree, excludeTypes, excludeIds);
+  }, [tree, excludeTypes, excludeIds]);
 
   const selectedLocation = useMemo(() => {
     if (!value) return null;

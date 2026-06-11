@@ -1,6 +1,37 @@
 import { prisma } from '../../config/database';
 
 export class LocationService {
+  private buildLocationWhere(id: string, tenantId: string | null) {
+    return {
+      id,
+      ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}),
+    };
+  }
+
+  private async getDescendantIds(id: string) {
+    const descendants = await prisma.location.findMany({
+      where: { parentId: id },
+      select: { id: true },
+    });
+    const ids = descendants.map((location) => location.id);
+    for (const child of descendants) {
+      ids.push(...await this.getDescendantIds(child.id));
+    }
+    return ids;
+  }
+
+  private async refreshChildPaths(parentId: string, parentPath: string, tx: any) {
+    const children = await tx.location.findMany({ where: { parentId } });
+    for (const child of children) {
+      const fullPath = `${parentPath} > ${child.name}`;
+      await tx.location.update({
+        where: { id: child.id },
+        data: { fullPath },
+      });
+      await this.refreshChildPaths(child.id, fullPath, tx);
+    }
+  }
+
   async getTree(tenantId: string | null) {
     const locations = await prisma.location.findMany({
       where: { isActive: true, ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}) },
@@ -42,7 +73,7 @@ export class LocationService {
 
   async getById(id: string, tenantId: string | null) {
     const location = await prisma.location.findFirst({
-      where: { id, ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}) },
+      where: this.buildLocationWhere(id, tenantId),
       include: { children: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } } },
     });
     if (!location) throw Object.assign(new Error('Lokalizacja nie znaleziona'), { statusCode: 404 });
@@ -78,6 +109,7 @@ export class LocationService {
         type: data.type,
         code: data.code,
         name: data.name,
+        address: data.address,
         description: data.description,
         capacity: data.capacity,
         fullPath,
@@ -86,16 +118,64 @@ export class LocationService {
   }
 
   async update(id: string, tenantId: string | null, data: any) {
-    // Verify the location belongs to this tenant
-    await this.getById(id, tenantId);
-    return prisma.location.update({
-      where: { id },
-      data: {
-        name: data.name,
-        description: data.description,
-        capacity: data.capacity,
-        isActive: data.isActive,
-      },
+    const location = await prisma.location.findFirst({
+      where: this.buildLocationWhere(id, tenantId),
+    });
+    if (!location) throw Object.assign(new Error('Lokalizacja nie znaleziona'), { statusCode: 404 });
+
+    const parentId = data.parentId === undefined ? location.parentId : data.parentId || null;
+    let parent: any = null;
+
+    if (parentId) {
+      if (parentId === id) {
+        throw Object.assign(new Error('Lokalizacja nie może być własnym rodzicem'), { statusCode: 400 });
+      }
+
+      const descendantIds = await this.getDescendantIds(id);
+      if (descendantIds.includes(parentId)) {
+        throw Object.assign(new Error('Nie można przenieść lokalizacji do jej lokalizacji podrzędnej'), { statusCode: 400 });
+      }
+
+      parent = await prisma.location.findFirst({
+        where: {
+          id: parentId,
+          isActive: true,
+          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}),
+        },
+      });
+      if (!parent) {
+        throw Object.assign(new Error('Lokalizacja nadrzędna nie znaleziona'), { statusCode: 404 });
+      }
+      if (parent.tenantId && tenantId && parent.tenantId !== tenantId) {
+        throw Object.assign(new Error('Lokalizacja nadrzędna należy do innego tenanta'), { statusCode: 400 });
+      }
+      if (parent.tenantId && location.tenantId && parent.tenantId !== location.tenantId) {
+        throw Object.assign(new Error('Nie można przenieść lokalizacji do innego tenanta'), { statusCode: 400 });
+      }
+    }
+
+    const name = data.name ?? location.name;
+    const fullPath = parent ? `${parent.fullPath} > ${name}` : name;
+    const locationTenantId = parent?.tenantId ?? location.tenantId ?? tenantId;
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.location.update({
+        where: { id },
+        data: {
+          parentId,
+          tenantId: locationTenantId,
+          type: data.type,
+          code: data.code,
+          name: data.name,
+          address: data.address,
+          description: data.description,
+          capacity: data.capacity,
+          isActive: data.isActive,
+          fullPath,
+        },
+      });
+      await this.refreshChildPaths(updated.id, updated.fullPath, tx);
+      return updated;
     });
   }
 

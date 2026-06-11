@@ -46,8 +46,8 @@ export class LocationController {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.tenantId) return errorResponse(res, 'Tenant context required', 400);
-      const location = await locationService.update(req.params.id, req.tenantId, req.body);
+      if (!req.tenantId && !canSelectLocationTenant(req)) return errorResponse(res, 'Tenant context required', 400);
+      const location = await locationService.update(req.params.id, req.tenantId || null, req.body);
       return successResponse(res, location);
     } catch (err) { next(err); }
   }

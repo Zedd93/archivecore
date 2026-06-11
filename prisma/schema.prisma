@@ -291,6 +291,7 @@ model Location {
   type         LocationType
   code         String       @db.VarChar(50)
   name         String       @db.VarChar(255)
+  address      String?      @db.Text
   description  String?      @db.Text
   capacity     Int?
   currentCount Int          @default(0)

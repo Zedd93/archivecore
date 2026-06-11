@@ -7,6 +7,7 @@ export interface ILocation {
   type: LocationType;
   code: string;
   name: string;
+  address: string | null;
   description: string | null;
   capacity: number | null;
   currentCount: number;
@@ -27,13 +28,18 @@ export interface ICreateLocation {
   type: LocationType;
   code: string;
   name: string;
+  address?: string;
   description?: string;
   capacity?: number;
 }
 
 export interface IUpdateLocation {
   name?: string;
-  description?: string;
-  capacity?: number;
+  parentId?: string | null;
+  type?: LocationType;
+  code?: string;
+  address?: string | null;
+  description?: string | null;
+  capacity?: number | null;
   isActive?: boolean;
 }
