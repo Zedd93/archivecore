@@ -112,6 +112,7 @@
     "retentionDate": "Retention date",
     "noFolders": "No folders in this box",
     "foldersCount": "Folders ({{count}})",
+    "fromTransferList": "From transfer list",
     "transferItemsCount": "Transfer list items ({{count}})",
     "ordinalNo": "No.",
     "folderSign": "Folder sign",

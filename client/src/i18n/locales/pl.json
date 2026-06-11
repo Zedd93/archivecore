@@ -112,6 +112,7 @@
     "retentionDate": "Data retencji",
     "noFolders": "Brak teczek w tym kartonie",
     "foldersCount": "Teczki ({{count}})",
+    "fromTransferList": "Ze spisu",
     "transferItemsCount": "Pozycje spisów zdawczo-odbiorczych ({{count}})",
     "ordinalNo": "Lp.",
     "folderSign": "Znak teczki",
