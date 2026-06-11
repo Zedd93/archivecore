@@ -1,6 +1,7 @@
 import { prisma, Prisma } from '../../config/database';
 import { pdfService, LabelLayout, LabelData, LabelField } from './pdf.service';
 import { qrService } from './qr.service';
+import { DOC_TYPE_LABELS } from '@archivecore/shared';
 
 // Default label template: 70mm x 36mm (standard archive label)
 const DEFAULT_LAYOUT: LabelLayout = {
@@ -116,7 +117,7 @@ export class LabelService {
       tenantName: box.tenant.name,
       location: box.location?.fullPath || '-',
       dateRange: formatDateRange(box.dateFrom, box.dateTo),
-      docType: box.docType || '-',
+      docType: box.docType ? DOC_TYPE_LABELS[box.docType] || box.docType : '-',
     };
 
     const pdf = await pdfService.generateLabel(layout, labelData);
@@ -183,7 +184,7 @@ export class LabelService {
       tenantName: box.tenant.name,
       location: box.location?.fullPath || '-',
       dateRange: formatDateRange(box.dateFrom, box.dateTo),
-      docType: box.docType || '-',
+      docType: box.docType ? DOC_TYPE_LABELS[box.docType] || box.docType : '-',
     }));
 
     return pdfService.generateMultipleLabels(layout, labelsData);

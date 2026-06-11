@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { DOC_TYPE_LABELS } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export interface SearchResult {
@@ -113,7 +114,7 @@ export class SearchService {
       type: 'box' as const,
       id: box.id,
       title: `${box.boxNumber} — ${box.title}`,
-      subtitle: `${box.location?.fullPath || 'Brak lokalizacji'} | ${box.docType || '-'}`,
+      subtitle: `${box.location?.fullPath || 'Brak lokalizacji'} | ${box.docType ? DOC_TYPE_LABELS[box.docType] || box.docType : '-'}`,
       relevance: this.calculateRelevance(query, [box.title, box.boxNumber, box.description || '']),
       metadata: { boxNumber: box.boxNumber, status: box.status, docType: box.docType },
     }));

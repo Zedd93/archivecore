@@ -1,9 +1,12 @@
 import { z } from 'zod';
+import { DOC_TYPES } from '../constants/statuses';
+
+const optionalDocTypeSchema = z.enum(DOC_TYPES).optional();
 
 export const createFolderSchema = z.object({
   boxId: z.string().uuid('Nieprawidłowe ID kartonu'),
   title: z.string().min(1, 'Tytuł jest wymagany').max(500),
-  docType: z.string().max(100).optional(),
+  docType: optionalDocTypeSchema,
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   description: z.string().optional(),

@@ -1,14 +1,29 @@
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 import { prisma } from '../../config/database';
-import { generateQrData, peselSchema } from '@archivecore/shared';
+import { DOC_TYPES, DOC_TYPE_LABELS, generateQrData, peselSchema } from '@archivecore/shared';
 import { encryptAES256, hmacSha256 } from '../../utils/crypto';
 
 // ─── Row validation schemas (relaxed versions for import) ─
 
+const DOC_TYPE_ALIASES: Record<string, string> = {
+  akta_osobowe: 'personnel_files',
+};
+
+for (const docType of DOC_TYPES) {
+  DOC_TYPE_ALIASES[docType.toLowerCase()] = docType;
+  DOC_TYPE_ALIASES[DOC_TYPE_LABELS[docType].toLowerCase()] = docType;
+}
+
+function normalizeDocType(value: unknown): string | undefined {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return undefined;
+  return DOC_TYPE_ALIASES[normalized] || normalized;
+}
+
 const boxImportRowSchema = z.object({
   title: z.string().min(1, 'Tytuł jest wymagany').max(500),
-  docType: z.string().max(100).optional(),
+  docType: z.preprocess(normalizeDocType, z.enum(DOC_TYPES).optional()),
   department: z.string().max(200).optional(),
   description: z.string().optional(),
   notes: z.string().optional(),

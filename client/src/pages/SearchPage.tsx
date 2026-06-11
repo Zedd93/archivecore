@@ -122,7 +122,7 @@ export default function SearchPage() {
                       {result.metadata.boxNumber && <span>📦 {result.metadata.boxNumber}</span>}
                       {result.metadata.status && <span>Status: {result.metadata.status}</span>}
                       {result.metadata.department && <span>🏢 {result.metadata.department}</span>}
-                      {result.metadata.docType && <span>📄 {result.metadata.docType}</span>}
+                      {result.metadata.docType && <span>📄 {t(`docTypes.${result.metadata.docType}`, { defaultValue: result.metadata.docType })}</span>}
                     </div>
                   )}
                 </div>

@@ -189,7 +189,7 @@ export default function BoxDetailPage() {
               </div>
               <div>
                 <dt className="text-sm text-gray-500">{t('boxes.documentType')}</dt>
-                <dd className="text-sm mt-1">{box.docType || '—'}</dd>
+                <dd className="text-sm mt-1">{box.docType ? t(`docTypes.${box.docType}`, { defaultValue: box.docType }) : '—'}</dd>
               </div>
               <div>
                 <dt className="text-sm text-gray-500">{t('boxes.department')}</dt>

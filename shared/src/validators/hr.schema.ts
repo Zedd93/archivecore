@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { DOC_TYPES } from '../constants/statuses';
+
+const optionalDocTypeSchema = z.enum(DOC_TYPES).optional();
 
 export function validatePeselChecksum(pesel: string): boolean {
   if (!/^\d{11}$/.test(pesel)) return false;
@@ -31,7 +34,7 @@ export const createHRFolderSchema = z.object({
 
 export const createHRDocumentSchema = z.object({
   title: z.string().min(1, 'Tytuł jest wymagany').max(500),
-  docType: z.string().max(100).optional(),
+  docType: optionalDocTypeSchema,
   docDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   pageCount: z.number().int().min(0).optional(),
   notes: z.string().optional(),

@@ -156,7 +156,7 @@ function SharedBoxView({ entity }: { entity: any }) {
         </div>
         <div>
           <dt className="text-sm text-gray-500">{t('boxes.documentType')}</dt>
-          <dd className="text-sm mt-1">{entity.docType || '—'}</dd>
+          <dd className="text-sm mt-1">{entity.docType ? t(`docTypes.${entity.docType}`, { defaultValue: entity.docType }) : '—'}</dd>
         </div>
         <div>
           <dt className="text-sm text-gray-500">{t('boxes.location')}</dt>

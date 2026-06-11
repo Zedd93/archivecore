@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import {
   BOX_STATUS_LABELS,
   DISPOSAL_STATUS_LABELS,
+  DOC_TYPE_LABELS,
   EMPLOYMENT_STATUS_LABELS,
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
@@ -33,7 +34,7 @@ interface ExportColumn {
 const BOX_COLUMNS: ExportColumn[] = [
   { header: 'Numer kartonu', key: 'boxNumber' },
   { header: 'Tytuł', key: 'title' },
-  { header: 'Typ dokumentów', key: 'docType' },
+  { header: 'Typ dokumentów', key: 'docType', transform: (v) => DOC_TYPE_LABELS[v] || v },
   { header: 'Dział', key: 'department' },
   { header: 'Status', key: 'status', transform: (v) => BOX_STATUS_LABELS[v] || v },
   { header: 'Lokalizacja', key: 'location', transform: (_v, row) => row.location?.fullPath || '' },

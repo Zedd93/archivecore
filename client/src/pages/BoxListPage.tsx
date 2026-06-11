@@ -91,7 +91,7 @@ export default function BoxListPage() {
         <span className="text-gray-500 text-xs">{item.location?.fullPath || '—'}</span>
       ),
     },
-    { key: 'docType', header: t('boxes.docType'), render: (item) => item.docType || '—' },
+    { key: 'docType', header: t('boxes.docType'), render: (item) => item.docType ? t(`docTypes.${item.docType}`, { defaultValue: item.docType }) : '—' },
     { key: 'department', header: t('boxes.department'), render: (item) => item.department || '—' },
     {
       key: '_count',
@@ -223,6 +223,17 @@ export default function BoxListPage() {
             <option value="checked_out">{t('boxes.statusIssued')}</option>
             <option value="pending_disposal">{t('boxes.statusForDestruction')}</option>
             <option value="disposed">{t('boxes.statusDestroyed')}</option>
+          </select>
+          <select
+            value={filters.docType}
+            onChange={(e) => { setPage(1); setFilters({ ...filters, docType: e.target.value }); }}
+            className="input-field w-52"
+            aria-label={t('boxes.createModal.fieldDocType')}
+          >
+            <option value="">{t('boxes.createModal.fieldDocType')}</option>
+            {DOC_TYPES.map((dt) => (
+              <option key={dt} value={dt}>{t(`docTypes.${dt}`, { defaultValue: dt })}</option>
+            ))}
           </select>
         </div>
         {filters.locationId && (
