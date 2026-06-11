@@ -8,7 +8,7 @@ export class UserController {
     try {
       const { skip, take, page, limit } = parsePagination(req.query as any);
       const tenantId = req.tenantId || null;
-      const { data, total } = await userService.list(tenantId, req.query, skip, take);
+      const { data, total } = await userService.list(tenantId, req.query, skip, take, req.user!);
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }

@@ -29,18 +29,29 @@ export class UserService {
     });
   }
 
-  async list(tenantId: string | null, filters: any, skip: number, take: number) {
+  async list(tenantId: string | null, filters: any, skip: number, take: number, actor?: IJwtPayload) {
     const where: Prisma.UserWhereInput = {};
-    if (tenantId) where.tenantId = tenantId;
+    const canSeeGlobalUsers = actor?.roles.includes(RoleCode.SUPER_ADMIN) || actor?.roles.includes(RoleCode.DOXART_ADMIN);
+    if (tenantId) {
+      where.OR = canSeeGlobalUsers
+        ? [{ tenantId }, { tenantId: null }]
+        : [{ tenantId }];
+    }
     if (filters.isActive === 'true' || filters.isActive === 'false') {
       where.isActive = filters.isActive === 'true';
     }
     if (filters.search) {
-      where.OR = [
+      const searchOr: Prisma.UserWhereInput[] = [
         { firstName: { contains: filters.search, mode: 'insensitive' } },
         { lastName: { contains: filters.search, mode: 'insensitive' } },
         { email: { contains: filters.search, mode: 'insensitive' } },
       ];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchOr }];
+        delete where.OR;
+      } else {
+        where.OR = searchOr;
+      }
     }
 
     const [data, total] = await Promise.all([
@@ -48,7 +59,7 @@ export class UserService {
         where,
         skip,
         take,
-        orderBy: { lastName: 'asc' },
+        orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           tenantId: true,

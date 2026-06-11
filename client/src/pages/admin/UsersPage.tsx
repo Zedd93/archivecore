@@ -134,6 +134,8 @@ export default function UsersPage() {
     });
     setShowCreate(false);
     setRoleCode('');
+    setFilters({ search: '', isActive: '' });
+    setPage(1);
     // Explicitly invalidate all user queries to ensure the list refreshes
     await queryClient.invalidateQueries({ queryKey: ['users'] });
   };
