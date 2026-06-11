@@ -21,21 +21,21 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6 overflow-hidden">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">{t('settings.title')}</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('settings.title')}</h1>
         <p className="text-sm text-gray-500">{t('settings.subtitle')}</p>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6">
+      <div className="flex min-w-0 flex-col md:flex-row gap-4 sm:gap-6">
         {/* Tabs sidebar */}
-        <nav className="w-full md:w-48 md:shrink-0">
-          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+        <nav className="w-full min-w-0 md:w-48 md:shrink-0">
+          <div className="flex md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0 -mx-1 px-1">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors ${
+                className={`flex shrink-0 md:w-full items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-sm transition-colors ${
                   activeTab === tab.id
                     ? 'bg-primary-50 text-primary-700 font-medium'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -49,7 +49,7 @@ export default function SettingsPage() {
         </nav>
 
         {/* Tab content */}
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           {activeTab === 'profile' && <ProfileTab user={user} />}
           {activeTab === 'security' && <SecurityTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
@@ -80,23 +80,23 @@ function ProfileTab({ user }: { user: any }) {
   };
 
   return (
-    <div className="card space-y-6">
+    <div className="card p-4 sm:p-6 space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('auth.profile')}</h2>
 
       {/* Avatar */}
-      <div className="flex items-center gap-4">
-        <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
+      <div className="flex items-start sm:items-center gap-4">
+        <div className="w-16 h-16 shrink-0 bg-primary-100 rounded-full flex items-center justify-center">
           <span className="text-xl font-bold text-primary-700">
             {user?.firstName?.[0]}{user?.lastName?.[0]}
           </span>
         </div>
-        <div>
-          <div className="text-sm font-medium text-gray-900">{user?.email}</div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-gray-900 break-all">{user?.email}</div>
           <div className="text-xs text-gray-500">{user?.tenant?.name || t('layout.superAdmin')}</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label htmlFor="settings-profile-firstName" className="label-text">{t('auth.firstName')}</label>
           <input
@@ -129,7 +129,7 @@ function ProfileTab({ user }: { user: any }) {
       </div>
 
       <div className="flex justify-end pt-4 border-t">
-        <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
+        <button onClick={handleSave} disabled={saving} className="btn-primary flex w-full sm:w-auto items-center justify-center gap-2">
           {saving && <Loader2 size={16} className="animate-spin" />}
           {t('common.save')}
         </button>
@@ -208,7 +208,7 @@ function SecurityTab() {
   };
 
   return (
-    <div className="card space-y-6">
+    <div className="card p-4 sm:p-6 space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('settings.security.title')}</h2>
 
       <div className="space-y-4">
@@ -261,7 +261,7 @@ function SecurityTab() {
         <button
           onClick={handleChangePassword}
           disabled={saving || !currentPassword || !newPassword || !confirmPassword}
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex w-full sm:w-auto items-center justify-center gap-2"
         >
           {saving && <Loader2 size={16} className="animate-spin" />}
           {t('settings.security.changeButton')}
@@ -275,12 +275,12 @@ function SecurityTab() {
           {t('settings.security.twoFaDesc')}
         </p>
         <div className="p-4 bg-gray-50 rounded-lg space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div className="min-w-0">
               <div className="text-sm font-medium text-gray-900">{t('settings.security.totp')}</div>
               <div className="text-xs text-gray-500">{t('settings.security.totpDesc')}</div>
             </div>
-            <span className={mfaEnabled ? 'badge-green' : 'badge-gray'}>
+            <span className={`${mfaEnabled ? 'badge-green' : 'badge-gray'} w-fit`}>
               {mfaEnabled ? t('settings.security.twoFaEnabledBadge') : t('settings.security.twoFaDisabledBadge')}
             </span>
           </div>
@@ -290,7 +290,7 @@ function SecurityTab() {
               type="button"
               onClick={handleSetupMfa}
               disabled={mfaLoading}
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex w-full sm:w-auto items-center justify-center gap-2"
             >
               {mfaLoading && <Loader2 size={16} className="animate-spin" />}
               {t('settings.security.twoFaSetupButton')}
@@ -298,11 +298,11 @@ function SecurityTab() {
           )}
 
           {!mfaEnabled && mfaSetup && (
-            <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-5 items-start">
+            <div className="grid min-w-0 grid-cols-1 md:grid-cols-[240px_1fr] gap-5 items-start">
               <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-center">
-                <img src={mfaSetup.qrCodeUrl} alt={t('settings.security.twoFaQrAlt')} className="w-56 h-56" />
+                <img src={mfaSetup.qrCodeUrl} alt={t('settings.security.twoFaQrAlt')} className="w-full max-w-56 h-auto" />
               </div>
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <div>
                   <div className="text-sm font-medium text-gray-900">{t('settings.security.twoFaScanTitle')}</div>
                   <p className="text-xs text-gray-500 mt-1">{t('settings.security.twoFaScanDesc')}</p>
@@ -313,7 +313,7 @@ function SecurityTab() {
                     id="settings-security-mfa-secret"
                     value={mfaSetup.secret}
                     readOnly
-                    className="input-field font-mono text-xs bg-white"
+                    className="input-field min-w-0 font-mono text-xs bg-white"
                   />
                 </div>
                 <div>
@@ -328,12 +328,12 @@ function SecurityTab() {
                     maxLength={6}
                   />
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     type="button"
                     onClick={handleVerifyMfa}
                     disabled={mfaLoading || mfaCode.length !== 6}
-                    className="btn-primary flex items-center gap-2"
+                    className="btn-primary flex w-full sm:w-auto items-center justify-center gap-2"
                   >
                     {mfaLoading && <Loader2 size={16} className="animate-spin" />}
                     {t('settings.security.twoFaVerifyButton')}
@@ -342,7 +342,7 @@ function SecurityTab() {
                     type="button"
                     onClick={() => { setMfaSetup(null); setMfaCode(''); }}
                     disabled={mfaLoading}
-                    className="btn-secondary"
+                    className="btn-secondary w-full sm:w-auto"
                   >
                     {t('common.cancel')}
                   </button>
@@ -371,16 +371,16 @@ function NotificationsTab() {
   ];
 
   return (
-    <div className="card space-y-6">
+    <div className="card p-4 sm:p-6 space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('settings.notifications.title')}</h2>
 
       <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="min-w-0">
             <div className="text-sm font-semibold text-green-900">{t('settings.notifications.inAppActive')}</div>
             <p className="text-sm text-green-800 mt-1">{t('settings.notifications.inAppDesc')}</p>
           </div>
-          <span className="badge-green">{t('common.active')}</span>
+          <span className="badge-green w-fit">{t('common.active')}</span>
         </div>
       </div>
 
@@ -388,9 +388,9 @@ function NotificationsTab() {
         <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('settings.notifications.eventsTitle')}</h3>
         <div className="space-y-2">
           {activeEvents.map((label) => (
-            <div key={label} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+            <div key={label} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2">
               <span className="text-sm text-gray-700">{label}</span>
-              <span className="badge-blue">{t('settings.notifications.channelInApp')}</span>
+              <span className="badge-blue w-fit">{t('settings.notifications.channelInApp')}</span>
             </div>
           ))}
         </div>
@@ -413,14 +413,14 @@ function AppearanceTab() {
   };
 
   return (
-    <div className="card space-y-6">
+    <div className="card p-4 sm:p-6 space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('settings.appearance.title')}</h2>
 
       <div>
         <label htmlFor="settings-appearance-language" className="label-text mb-3 block">{t('settings.appearance.language')}</label>
         <select
           id="settings-appearance-language"
-          className="input-field w-48"
+          className="input-field w-full sm:w-48"
           value={i18n.language}
           onChange={(e) => handleLanguageChange(e.target.value)}
         >
