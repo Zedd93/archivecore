@@ -8,6 +8,8 @@ import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { Plus, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 
+const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
+
 export default function RetentionPage() {
   const { t } = useTranslation();
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
@@ -25,10 +27,20 @@ export default function RetentionPage() {
 
   const createPolicy = useCreate('/retention/policies', ['retention-policies'], t('admin.retention.policyCreated'));
 
+  const formatRetentionYears = (years: number) => {
+    const mod10 = years % 10;
+    const mod100 = years % 100;
+    if (years === 1) return t('admin.retention.yearOne', { count: years });
+    if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) {
+      return t('admin.retention.yearFew', { count: years });
+    }
+    return t('admin.retention.years', { count: years });
+  };
+
   const policyColumns: Column<any>[] = [
     { key: 'name', header: t('common.name'), render: (item) => <span className="font-medium">{item.name}</span> },
     { key: 'docType', header: t('admin.retention.createModal.docType'), render: (item) => item.docType || t('common.all') },
-    { key: 'retentionYears', header: t('admin.retention.createModal.period'), render: (item) => t('admin.retention.years', { count: item.retentionYears }) },
+    { key: 'retentionYears', header: t('admin.retention.createModal.period'), render: (item) => formatRetentionYears(item.retentionYears) },
     {
       key: 'retentionTrigger',
       header: t('admin.retention.createModal.trigger'),
@@ -127,7 +139,14 @@ export default function RetentionPage() {
                 ))}
               </select>
             </div>
-            <div><label htmlFor="retention-create-period" className="label-text">{t('admin.retention.createModal.period')} *</label><input id="retention-create-period" name="retentionYears" type="number" className="input-field" required min={1} max={100} /></div>
+            <div>
+              <label htmlFor="retention-create-period" className="label-text">{t('admin.retention.createModal.period')} *</label>
+              <select id="retention-create-period" name="retentionYears" className="input-field" required defaultValue="10">
+                {RETENTION_YEAR_OPTIONS.map((years) => (
+                  <option key={years} value={years}>{formatRetentionYears(years)}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label htmlFor="retention-create-trigger" className="label-text">{t('admin.retention.createModal.trigger')}</label>

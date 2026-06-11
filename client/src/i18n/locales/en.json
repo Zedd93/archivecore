@@ -528,6 +528,8 @@
       "within90": "Within 90 days",
       "withinYear": "Within a year",
       "legalHold": "With legal hold (litigation hold)",
+      "yearOne": "{{count}} year",
+      "yearFew": "{{count}} years",
       "years": "{{count}} years",
       "statusActive": "Active",
       "statusInactive": "Inactive"
