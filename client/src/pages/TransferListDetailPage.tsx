@@ -433,6 +433,13 @@ export default function TransferListDetailPage() {
     return <div className="card p-8 text-center text-gray-500">{t('transferLists.detail.notFound')}</div>;
   }
 
+  const canEditItems = canWrite && list.status === 'draft';
+  const addItemDisabledReason = !canWrite
+    ? t('transferLists.detail.addItemNoPermission')
+    : list.status !== 'draft'
+      ? t('transferLists.detail.addItemLocked')
+      : '';
+
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: t('layout.nav.transferLists'), to: '/transfer-lists' }, { label: list.listNumber || list.title }]} />
@@ -512,12 +519,19 @@ export default function TransferListDetailPage() {
               </button>
             </>
           )}
-          {canWrite && list.status === 'draft' && (
-            <button onClick={() => setShowAddItem(true)} className="btn-primary flex items-center gap-2 text-sm">
+          <button
+            onClick={() => {
+              if (canEditItems) setShowAddItem(true);
+            }}
+            disabled={!canEditItems}
+            title={addItemDisabledReason || undefined}
+            className={`flex items-center gap-2 text-sm ${
+              canEditItems ? 'btn-primary' : 'btn-secondary opacity-60 cursor-not-allowed'
+            }`}
+          >
               <Plus size={16} />
               {t('transferLists.detail.addItem')}
-            </button>
-          )}
+          </button>
         </div>
       </div>
 
@@ -572,8 +586,14 @@ export default function TransferListDetailPage() {
         </div>
       )}
 
+      {!canEditItems && addItemDisabledReason && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+          {addItemDisabledReason}
+        </div>
+      )}
+
       {/* Bulk Actions Bar */}
-      {selectedItemIds.size > 0 && canWrite && list.status === 'draft' && (
+      {selectedItemIds.size > 0 && canEditItems && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-indigo-800 font-medium">
@@ -647,7 +667,7 @@ export default function TransferListDetailPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {canWrite && list.status === 'draft' && (
+                {canEditItems && (
                   <th className="px-3 py-3 w-10">
                     <input
                       type="checkbox"
@@ -666,7 +686,7 @@ export default function TransferListDetailPage() {
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-40">{t('transferLists.detail.colStorage')}</th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">{t('transferLists.detail.colDisposalDate')}</th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">{t('transferLists.detail.colBox')}</th>
-                {canWrite && list.status === 'draft' && (
+                {canEditItems && (
                   <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">{t('transferLists.detail.colActions')}</th>
                 )}
               </tr>
@@ -674,20 +694,32 @@ export default function TransferListDetailPage() {
             <tbody className="divide-y divide-gray-100">
               {itemsLoading ? (
                 <tr>
-                  <td colSpan={canWrite && list.status === 'draft' ? 11 : 10} className="px-3 py-12 text-center text-gray-400">{t('common.loading')}</td>
+                  <td colSpan={canEditItems ? 11 : 10} className="px-3 py-12 text-center text-gray-400">{t('common.loading')}</td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={canWrite && list.status === 'draft' ? 11 : 10} className="px-3 py-12 text-center text-gray-400">
+                  <td colSpan={canEditItems ? 11 : 10} className="px-3 py-12 text-center text-gray-400">
                     <FileSpreadsheet size={40} className="mx-auto text-gray-300 mb-2" />
                     <p>{t('transferLists.detail.emptyItems')}</p>
-                    <p className="text-xs mt-1">{t('transferLists.detail.emptyItemsDesc')}</p>
+                    <p className="text-xs mt-1">
+                      {canEditItems ? t('transferLists.detail.emptyItemsDesc') : addItemDisabledReason}
+                    </p>
+                    {canEditItems && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddItem(true)}
+                        className="btn-primary inline-flex items-center gap-2 text-sm mt-4"
+                      >
+                        <Plus size={16} />
+                        {t('transferLists.detail.addItem')}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
                 items.map((item: any) => (
                   <tr key={item.id} className={`hover:bg-gray-50 transition-colors ${selectedItemIds.has(item.id) ? 'bg-indigo-50/50' : ''}`}>
-                    {canWrite && list.status === 'draft' && (
+                    {canEditItems && (
                       <td className="px-3 py-2.5">
                         <input
                           type="checkbox"
@@ -742,7 +774,7 @@ export default function TransferListDetailPage() {
                         <span className="text-xs text-gray-300">—</span>
                       )}
                     </td>
-                    {canWrite && list.status === 'draft' && (
+                    {canEditItems && (
                       <td className="px-3 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button

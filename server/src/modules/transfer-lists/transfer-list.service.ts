@@ -3,6 +3,12 @@ import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export class TransferListService {
+  private ensureDraftStatus(list: { status: string }, message = 'Można edytować pozycje tylko w spisie o statusie roboczym') {
+    if (list.status !== 'draft') {
+      throw Object.assign(new Error(message), { statusCode: 400 });
+    }
+  }
+
   // ─── List all transfer lists for a tenant ─────────────
   async list(tenantId: string, filters: any, skip: number, take: number) {
     const where: Prisma.TransferListWhereInput = { tenantId };
@@ -148,6 +154,7 @@ export class TransferListService {
   // ─── Add item to list ──────────────────────────────────
   async addItem(listId: string, tenantId: string, userId: string, data: any) {
     const list = await this.getById(listId, tenantId);
+    this.ensureDraftStatus(list, 'Można dodawać pozycje tylko w spisie o statusie roboczym');
     const boxId = await this.resolveBoxId(list.tenantId, userId, data);
 
     // Get next ordinal number
@@ -181,6 +188,7 @@ export class TransferListService {
   // ─── Update item ───────────────────────────────────────
   async updateItem(listId: string, itemId: string, tenantId: string, userId: string, data: any) {
     const list = await this.getById(listId, tenantId);
+    this.ensureDraftStatus(list);
     const boxId = await this.resolveBoxId(list.tenantId, userId, data);
 
     const item = await prisma.transferListItem.findFirst({
@@ -210,7 +218,8 @@ export class TransferListService {
 
   // ─── Delete item ───────────────────────────────────────
   async deleteItem(listId: string, itemId: string, tenantId: string) {
-    await this.getById(listId, tenantId);
+    const list = await this.getById(listId, tenantId);
+    this.ensureDraftStatus(list, 'Można usuwać pozycje tylko w spisie o statusie roboczym');
     const item = await prisma.transferListItem.findFirst({
       where: { id: itemId, transferListId: listId },
     });
@@ -220,7 +229,8 @@ export class TransferListService {
 
   // ─── Import items from parsed data (Excel/CSV) ────────
   async importItems(listId: string, tenantId: string, items: any[]) {
-    await this.getById(listId, tenantId);
+    const list = await this.getById(listId, tenantId);
+    this.ensureDraftStatus(list, 'Można importować pozycje tylko do spisu o statusie roboczym');
 
     // Get current max ordinal
     const lastItem = await prisma.transferListItem.findFirst({
@@ -279,9 +289,7 @@ export class TransferListService {
   // ─── Bulk delete items ────────────────────────────────
   async bulkDeleteItems(listId: string, tenantId: string, itemIds: string[]) {
     const list = await this.getById(listId, tenantId);
-    if (list.status !== 'draft') {
-      throw Object.assign(new Error('Można usuwać pozycje tylko w spisie o statusie roboczym'), { statusCode: 400 });
-    }
+    this.ensureDraftStatus(list, 'Można usuwać pozycje tylko w spisie o statusie roboczym');
 
     const result = await prisma.transferListItem.deleteMany({
       where: {
@@ -296,9 +304,7 @@ export class TransferListService {
   // ─── Bulk assign box to items ────────────────────────
   async bulkAssignBox(listId: string, tenantId: string, userId: string, itemIds: string[], boxNumber: string | null) {
     const list = await this.getById(listId, tenantId);
-    if (list.status !== 'draft') {
-      throw Object.assign(new Error('Można edytować pozycje tylko w spisie o statusie roboczym'), { statusCode: 400 });
-    }
+    this.ensureDraftStatus(list);
 
     let boxId: string | null = null;
     if (boxNumber && boxNumber.trim()) {
