@@ -17,6 +17,21 @@ function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxO
   }
 }
 
+function buildBoxWhereSql(filters: any, tenantId: string, department: string | undefined, locationIds: string[] | null) {
+  const conditions: Prisma.Sql[] = [Prisma.sql`"tenantId" = ${tenantId}::uuid`];
+
+  if (department) conditions.push(Prisma.sql`"department" ILIKE ${department}`);
+  if (filters.status) conditions.push(Prisma.sql`"status"::text = ${String(filters.status)}`);
+  if (filters.docType) conditions.push(Prisma.sql`"docType" = ${String(filters.docType)}`);
+  if (locationIds) conditions.push(Prisma.sql`"locationId" IN (${Prisma.join(locationIds.map(id => Prisma.sql`${id}::uuid`))})`);
+  if (filters.search) {
+    const search = `%${String(filters.search)}%`;
+    conditions.push(Prisma.sql`("title" ILIKE ${search} OR "boxNumber" ILIKE ${search} OR "qrCode" ILIKE ${search})`);
+  }
+
+  return Prisma.sql`${Prisma.join(conditions, ' AND ')}`;
+}
+
 export class BoxService {
   private async getLocationAndDescendantIds(locationId: string, tenantId: string): Promise<string[]> {
     const locations = await prisma.location.findMany({
@@ -80,12 +95,14 @@ export class BoxService {
     const sortBy = String(filters.sortBy || 'createdAt');
     const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
     const orderBy = getBoxOrderBy(sortBy, sortOrder);
+    let locationIds: string[] | null = null;
 
     if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
     if (filters.docType) where.docType = filters.docType;
     if (filters.locationId) {
-      where.locationId = { in: await this.getLocationAndDescendantIds(String(filters.locationId), tenantId) };
+      locationIds = await this.getLocationAndDescendantIds(String(filters.locationId), tenantId);
+      where.locationId = { in: locationIds };
     }
     if (filters.search) {
       where.OR = [
@@ -93,6 +110,39 @@ export class BoxService {
         { boxNumber: { contains: filters.search, mode: 'insensitive' } },
         { qrCode: { contains: filters.search, mode: 'insensitive' } },
       ];
+    }
+
+    if (sortBy === 'boxNumber') {
+      const sortDirection = sortOrder === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+      const whereSql = buildBoxWhereSql(filters, tenantId, department, locationIds);
+      const [sortedIds, total] = await Promise.all([
+        prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+          SELECT "id"
+          FROM "boxes"
+          WHERE ${whereSql}
+          ORDER BY
+            regexp_replace("boxNumber", '[0-9]+$', '') ${sortDirection},
+            COALESCE(NULLIF(substring("boxNumber" from '[0-9]+$'), '')::bigint, 0) ${sortDirection},
+            "boxNumber" ${sortDirection}
+          OFFSET ${skip}
+          LIMIT ${take}
+        `),
+        prisma.box.count({ where }),
+      ]);
+
+      const ids = sortedIds.map(row => row.id);
+      if (ids.length === 0) return { data: [], total };
+
+      const rows = await prisma.box.findMany({
+        where: { id: { in: ids } },
+        include: {
+          location: { select: { id: true, fullPath: true, code: true } },
+          tenant: { select: { id: true, name: true, shortCode: true } },
+          _count: { select: { folders: true, documents: true, attachments: true, transferListItems: true } },
+        },
+      });
+      const rowById = new Map(rows.map(row => [row.id, row]));
+      return { data: ids.map(id => rowById.get(id)).filter(Boolean), total };
     }
 
     const [data, total] = await Promise.all([
