@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { normalizeDisplayText } from '@archivecore/shared';
 
 const TRANSFER_LIST_COLUMN_MAP: Record<string, string> = {
   'lp': '_ordinal',
@@ -201,8 +202,8 @@ export function parseTransferListImport(buffer: Buffer) {
       mapped.dateTo = range.to;
     }
 
-    const folderSignature = String(mapped.folderSignature ?? '').trim();
-    const folderTitle = String(mapped.folderTitle ?? '').trim();
+    const folderSignature = normalizeDisplayText(mapped.folderSignature).trim();
+    const folderTitle = normalizeDisplayText(mapped.folderTitle).trim();
 
     if (!folderSignature && !folderTitle) return null;
     if (normalizeHeader(folderSignature) === 'znak teczki' || normalizeHeader(folderTitle).startsWith('tytuł teczki')) return null;
@@ -214,12 +215,12 @@ export function parseTransferListImport(buffer: Buffer) {
       folderTitle: folderTitle || 'Bez tytułu',
       dateFrom: parseDate(mapped.dateFrom),
       dateTo: parseDate(mapped.dateTo),
-      categoryCode: String(mapped.categoryCode ?? '').trim() || 'B10',
+      categoryCode: normalizeDisplayText(mapped.categoryCode).trim() || 'B10',
       folderCount: Math.max(1, parseInt(String(mapped.folderCount), 10) || 1),
-      storageLocation: mapped.storageLocation ? String(mapped.storageLocation).trim() || null : null,
+      storageLocation: mapped.storageLocation ? normalizeDisplayText(mapped.storageLocation).trim() || null : null,
       disposalOrTransferDate: parseDate(mapped.disposalOrTransferDate),
       boxNumber: boxNumber || null,
-      notes: mapped.notes ? String(mapped.notes).trim() || null : null,
+      notes: mapped.notes ? normalizeDisplayText(mapped.notes).trim() || null : null,
     };
   }).filter((item: any) => item !== null);
 

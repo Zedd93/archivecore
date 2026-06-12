@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { generateQrData } from '@archivecore/shared';
+import { generateQrData, normalizeOptionalText } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
 export class TransferListService {
@@ -73,11 +73,11 @@ export class TransferListService {
       data: {
         tenantId,
         listNumber,
-        title: data.title,
-        transferringUnit: data.transferringUnit,
-        receivingUnit: data.receivingUnit,
+        title: normalizeOptionalText(data.title) || data.title,
+        transferringUnit: normalizeOptionalText(data.transferringUnit),
+        receivingUnit: normalizeOptionalText(data.receivingUnit),
         transferDate: data.transferDate ? new Date(data.transferDate) : undefined,
-        notes: data.notes,
+        notes: normalizeOptionalText(data.notes),
         createdById: userId,
         status: 'draft',
       },
@@ -94,11 +94,11 @@ export class TransferListService {
     return prisma.transferList.update({
       where: { id },
       data: {
-        title: data.title,
-        transferringUnit: data.transferringUnit,
-        receivingUnit: data.receivingUnit,
+        title: data.title === undefined ? undefined : normalizeOptionalText(data.title),
+        transferringUnit: data.transferringUnit === undefined ? undefined : normalizeOptionalText(data.transferringUnit),
+        receivingUnit: data.receivingUnit === undefined ? undefined : normalizeOptionalText(data.receivingUnit),
         transferDate: data.transferDate ? new Date(data.transferDate) : undefined,
-        notes: data.notes,
+        notes: data.notes === undefined ? undefined : normalizeOptionalText(data.notes),
         status: data.status,
       },
       include: {

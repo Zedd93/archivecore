@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 import { prisma } from '../../config/database';
-import { DOC_TYPES, DOC_TYPE_LABELS, generateQrData, peselSchema } from '@archivecore/shared';
+import { DOC_TYPES, DOC_TYPE_LABELS, generateQrData, normalizeDisplayText, peselSchema } from '@archivecore/shared';
 import { encryptAES256, hmacSha256 } from '../../utils/crypto';
 import { parseTransferListImport } from '../transfer-lists/transfer-list-import.parser';
 import { transferListService } from '../transfer-lists/transfer-list.service';
@@ -121,7 +121,7 @@ function mapColumns(rows: Record<string, any>[], columnMap: Record<string, strin
 }
 
 function transferListTitleFromFilename(filename: string): string {
-  const title = filename.replace(/\.[^.]+$/, '').trim();
+  const title = normalizeDisplayText(filename).replace(/\.[^.]+$/, '').trim();
   return title || 'Import spisu zdawczo-odbiorczego';
 }
 
@@ -343,7 +343,7 @@ export class ImportService {
 
     const list = await transferListService.create({
       title,
-      notes: `Import z pliku: ${filename}`,
+      notes: `Import z pliku: ${normalizeDisplayText(filename)}`,
     }, tenantId, userId);
 
     const result = await transferListService.importItems(list.id, tenantId, userId, parsed.items);

@@ -53,6 +53,48 @@ export function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+const MOJIBAKE_MARKER_RE = /[ÃÂÄÅÆÐÑØÙÚÛÜÝÞß]/;
+const CONTROL_MOJIBAKE_RE = /[\u0080-\u009F]/;
+
+function countEncodingArtifacts(value: string): number {
+  const markerCount = (value.match(MOJIBAKE_MARKER_RE) ?? []).length;
+  const controlCount = (value.match(CONTROL_MOJIBAKE_RE) ?? []).length;
+  return markerCount + controlCount;
+}
+
+function repairLatin1DecodedUtf8(value: string): string {
+  if (!MOJIBAKE_MARKER_RE.test(value) && !CONTROL_MOJIBAKE_RE.test(value)) {
+    return value;
+  }
+
+  const bytes = new Uint8Array(value.length);
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code > 255) return value;
+    bytes[index] = code;
+  }
+
+  try {
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return countEncodingArtifacts(decoded) < countEncodingArtifacts(value) ? decoded : value;
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Normalize user-facing text for Polish diacritics.
+ * Fixes decomposed Unicode from macOS filenames and common UTF-8-as-Latin1 mojibake.
+ */
+export function normalizeDisplayText(value: unknown): string {
+  return repairLatin1DecodedUtf8(String(value ?? '')).normalize('NFC');
+}
+
+export function normalizeOptionalText(value: unknown): string | undefined {
+  const normalized = normalizeDisplayText(value).trim();
+  return normalized || undefined;
+}
+
 /**
  * Generate box number: K-{year}-{sequence}
  */

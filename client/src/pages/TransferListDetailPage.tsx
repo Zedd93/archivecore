@@ -17,6 +17,7 @@ import {
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/statusColors';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { normalizeDisplayText } from '@archivecore/shared';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 
@@ -442,13 +443,13 @@ export default function TransferListDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Breadcrumbs items={[{ label: t('layout.nav.transferLists'), to: '/transfer-lists' }, { label: list.listNumber || list.title }]} />
+      <Breadcrumbs items={[{ label: t('layout.nav.transferLists'), to: '/transfer-lists' }, { label: list.listNumber || normalizeDisplayText(list.title) }]} />
 
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{list.title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 break-words">{normalizeDisplayText(list.title)}</h1>
             <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[list.status]}`}>
               {STATUS_LABELS[list.status]}
             </span>
@@ -734,7 +735,7 @@ export default function TransferListDetailPage() {
                       <span className="font-mono text-sm font-medium text-gray-900">{item.folderSignature}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="text-gray-900 line-clamp-2">{item.folderTitle}</div>
+                      <div className="text-gray-900 whitespace-normal break-words">{normalizeDisplayText(item.folderTitle)}</div>
                       {item.notes && (
                         <div className="text-xs text-gray-400 mt-0.5 truncate">{item.notes}</div>
                       )}

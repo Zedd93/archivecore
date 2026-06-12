@@ -16,6 +16,7 @@ import {
 import { SkeletonTable } from '@/components/ui/Skeleton';
 import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/statusColors';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { normalizeDisplayText } from '@archivecore/shared';
 
 export default function TransferListPage() {
   const { t } = useTranslation();
@@ -70,7 +71,7 @@ export default function TransferListPage() {
     e.preventDefault();
     try {
       const created: any = await createMutation.mutateAsync({
-        title,
+        title: normalizeDisplayText(title).trim(),
         transferringUnit: transferringUnit || undefined,
         receivingUnit: receivingUnit || undefined,
         transferDate: transferDate || undefined,
@@ -112,7 +113,7 @@ export default function TransferListPage() {
     try {
       // 1. Create new transfer list
       const created: any = await createMutation.mutateAsync({
-        title: importTitle || `Import z ${importFile.name}`,
+        title: normalizeDisplayText(importTitle || `Import z ${importFile.name}`).trim(),
         transferringUnit: importTransferringUnit || undefined,
         receivingUnit: importReceivingUnit || undefined,
       });
@@ -146,7 +147,7 @@ export default function TransferListPage() {
   const handleQuickImport = useCallback(async (file: File) => {
     if (!canImport) return;
     setImportFile(file);
-    setImportTitle(`Import z ${file.name}`);
+    setImportTitle(normalizeDisplayText(`Import z ${file.name}`));
     setShowImport(true);
   }, [canImport]);
 
@@ -232,10 +233,12 @@ export default function TransferListPage() {
       header: t('transferLists.listTitle'),
       render: (row: any) => (
         <div>
-          <div className="font-medium text-gray-900 truncate max-w-xs">{row.title}</div>
+          <div className="font-medium text-gray-900 whitespace-normal break-words max-w-xl">
+            {normalizeDisplayText(row.title)}
+          </div>
           {row.transferringUnit && (
             <div className="text-xs text-gray-500 mt-0.5">
-              {row.transferringUnit} → {row.receivingUnit || '—'}
+              {normalizeDisplayText(row.transferringUnit)} → {row.receivingUnit ? normalizeDisplayText(row.receivingUnit) : '—'}
             </div>
           )}
         </div>
@@ -538,7 +541,7 @@ export default function TransferListPage() {
                   const file = e.target.files?.[0];
                   if (file) {
                     setImportFile(file);
-                    if (!importTitle) setImportTitle(`Import z ${file.name}`);
+                    if (!importTitle) setImportTitle(normalizeDisplayText(`Import z ${file.name}`));
                   }
                 }}
               />
