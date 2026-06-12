@@ -390,7 +390,10 @@ export default function TransferListDetailPage() {
         itemIds: Array.from(selectedItemIds),
         boxNumber: bulkBoxNumber.trim(),
       });
-      toast.success(t('transferLists.detail.assigned', { count: data.data.updated }));
+      toast.success(t('transferLists.detail.assigned', {
+        count: data.data.updated,
+        boxNumber: data.data.box?.boxNumber || bulkBoxNumber.trim(),
+      }));
       setSelectedItemIds(new Set());
       setBulkAction('none');
       setBulkBoxNumber('');

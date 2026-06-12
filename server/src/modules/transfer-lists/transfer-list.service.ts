@@ -309,8 +309,15 @@ export class TransferListService {
     this.ensureDraftStatus(list);
 
     let boxId: string | null = null;
+    let box: { id: string; boxNumber: string; title: string } | null = null;
     if (boxNumber && boxNumber.trim()) {
       boxId = await this.resolveBoxId(tenantId, userId, { boxNumber: boxNumber.trim() });
+      if (boxId) {
+        box = await prisma.box.findUnique({
+          where: { id: boxId },
+          select: { id: true, boxNumber: true, title: true },
+        });
+      }
     }
 
     const result = await prisma.transferListItem.updateMany({
@@ -321,7 +328,7 @@ export class TransferListService {
       data: { boxId },
     });
 
-    return { updated: result.count, boxId };
+    return { updated: result.count, box };
   }
 
   // ─── Change status ─────────────────────────────────────

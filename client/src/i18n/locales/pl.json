@@ -385,7 +385,7 @@
       "confirmUnassignMsg": "Czy na pewno odpiąć karton od {{count}} zaznaczonych pozycji?",
       "unassign": "Odepnij",
       "unassigned": "Odepnięto karton od {{count}} pozycji",
-      "assigned": "Przypisano karton do {{count}} pozycji",
+      "assigned": "Przypisano karton {{boxNumber}} do {{count}} pozycji",
       "itemAdded": "Pozycja dodana",
       "itemUpdated": "Pozycja zaktualizowana",
       "boxPlaceholder": "Wpisz numer kartonu lub nowy...",

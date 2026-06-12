@@ -385,7 +385,7 @@
       "confirmUnassignMsg": "Are you sure you want to unassign the box from {{count}} selected items?",
       "unassign": "Unassign",
       "unassigned": "Unassigned box from {{count}} items",
-      "assigned": "Assigned box to {{count}} items",
+      "assigned": "Assigned box {{boxNumber}} to {{count}} items",
       "itemAdded": "Item added",
       "itemUpdated": "Item updated",
       "boxPlaceholder": "Enter box number or new...",
