@@ -35,4 +35,10 @@ export const config = {
   encryption: {
     key: process.env.ENCRYPTION_KEY || 'dev-encryption-key-32-bytes-long!',
   },
+
+  gusBir: {
+    apiKey: process.env.GUS_BIR_API_KEY || '',
+    endpoint: process.env.GUS_BIR_ENDPOINT || 'https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc',
+    timeoutMs: parseInt(process.env.GUS_BIR_TIMEOUT_MS || '10000', 10),
+  },
 };

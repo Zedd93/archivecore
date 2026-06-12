@@ -487,6 +487,12 @@
         "contactEmail": "Email kontaktowy",
         "phone": "Telefon",
         "address": "Adres"
+      },
+      "gus": {
+        "fetch": "Pobierz z GUS",
+        "loaded": "Dane pobrane z GUS",
+        "error": "Nie udało się pobrać danych z GUS",
+        "invalidNip": "Podaj poprawny NIP: 10 cyfr"
       }
     },
     "audit": {

@@ -487,6 +487,12 @@
         "contactEmail": "Contact email",
         "phone": "Phone",
         "address": "Address"
+      },
+      "gus": {
+        "fetch": "Fetch from GUS",
+        "loaded": "Data fetched from GUS",
+        "error": "Failed to fetch data from GUS",
+        "invalidNip": "Enter a valid NIP: 10 digits"
       }
     },
     "audit": {

@@ -37,6 +37,12 @@ ENCRYPTION_KEY=${ENCRYPTION_KEY}
 
 # Domena
 CORS_ORIGIN=http://${DOMAIN}
+
+# GUS BIR / REGON API
+# Uzupełnij po uzyskaniu klucza z GUS: regon_bir@stat.gov.pl
+GUS_BIR_API_KEY=
+GUS_BIR_ENDPOINT=https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc
+GUS_BIR_TIMEOUT_MS=10000
 EOF
 
 echo ""

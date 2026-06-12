@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { tenantService } from './tenant.service';
+import { gusBirService } from './gus-bir.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
 
@@ -23,6 +24,13 @@ export class TenantController {
     try {
       const tenant = await tenantService.create(req.body);
       return successResponse(res, tenant, 201);
+    } catch (err) { next(err); }
+  }
+
+  async lookupGusByNip(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await gusBirService.findByNip(req.params.nip);
+      return successResponse(res, data);
     } catch (err) { next(err); }
   }
 

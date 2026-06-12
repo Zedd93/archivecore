@@ -5,18 +5,49 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
-import { Plus, Building2 } from 'lucide-react';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { Plus, Building2, Loader2 } from 'lucide-react';
+
+interface TenantFormState {
+  name: string;
+  shortCode: string;
+  nip: string;
+  address: string;
+  contactPerson: string;
+  contactEmail: string;
+  contactPhone: string;
+  regon: string;
+}
+
+const emptyTenantForm: TenantFormState = {
+  name: '',
+  shortCode: '',
+  nip: '',
+  address: '',
+  contactPerson: '',
+  contactEmail: '',
+  contactPhone: '',
+  regon: '',
+};
 
 export default function TenantsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
+  const [tenantForm, setTenantForm] = useState<TenantFormState>(emptyTenantForm);
+  const [gusLoading, setGusLoading] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
   const { data, isLoading } = useList('tenants', '/tenants', { page, limit: 20, search: debouncedSearch });
   const createTenant = useCreate('/tenants', ['tenants'], t('admin.tenants.created'));
+
+  const setTenantField = (field: keyof TenantFormState, value: string) => {
+    setTenantForm(prev => ({ ...prev, [field]: value }));
+  };
 
   const columns: Column<any>[] = [
     {
@@ -49,17 +80,49 @@ export default function TenantsPage() {
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
     await createTenant.mutateAsync({
-      name: fd.get('name'),
-      shortCode: fd.get('shortCode'),
-      nip: fd.get('nip') || undefined,
-      address: fd.get('address') || undefined,
-      contactPerson: fd.get('contactPerson') || undefined,
-      contactEmail: fd.get('contactEmail') || undefined,
-      contactPhone: fd.get('contactPhone') || undefined,
+      name: tenantForm.name,
+      shortCode: tenantForm.shortCode,
+      nip: tenantForm.nip || undefined,
+      address: tenantForm.address || undefined,
+      contactPerson: tenantForm.contactPerson || undefined,
+      contactEmail: tenantForm.contactEmail || undefined,
+      contactPhone: tenantForm.contactPhone || undefined,
+      configJson: tenantForm.regon ? { gus: { regon: tenantForm.regon } } : undefined,
     });
     setShowCreate(false);
+    setTenantForm(emptyTenantForm);
+  };
+
+  const handleCloseCreate = () => {
+    setShowCreate(false);
+    setTenantForm(emptyTenantForm);
+  };
+
+  const handleFetchGus = async () => {
+    const nip = tenantForm.nip.replace(/\D/g, '');
+    if (nip.length !== 10) {
+      toast.error(t('admin.tenants.gus.invalidNip'));
+      return;
+    }
+
+    setGusLoading(true);
+    try {
+      const { data } = await api.get(`/tenants/gus/${nip}`);
+      const gus = data.data;
+      setTenantForm(prev => ({
+        ...prev,
+        name: gus.name || prev.name,
+        nip: gus.nip || nip,
+        address: gus.address || prev.address,
+        regon: gus.regon || prev.regon,
+      }));
+      toast.success(t('admin.tenants.gus.loaded'));
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('admin.tenants.gus.error')));
+    } finally {
+      setGusLoading(false);
+    }
   };
 
   return (
@@ -81,23 +144,33 @@ export default function TenantsPage() {
         {data?.meta && <div className="px-4 pb-4"><Pagination page={page} limit={20} total={data.meta.total} onPageChange={setPage} /></div>}
       </div>
 
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title={t('admin.tenants.createModal.title')} size="lg">
+      <Modal isOpen={showCreate} onClose={handleCloseCreate} title={t('admin.tenants.createModal.title')} size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label htmlFor="tenant-create-name" className="label-text">{t('admin.tenants.createModal.name')}</label><input id="tenant-create-name" name="name" className="input-field" required /></div>
-            <div><label htmlFor="tenant-create-shortCode" className="label-text">{t('admin.tenants.createModal.shortCode')}</label><input id="tenant-create-shortCode" name="shortCode" className="input-field font-mono uppercase" required maxLength={6} minLength={3} /></div>
+            <div><label htmlFor="tenant-create-name" className="label-text">{t('admin.tenants.createModal.name')}</label><input id="tenant-create-name" name="name" value={tenantForm.name} onChange={(e) => setTenantField('name', e.target.value)} className="input-field" required /></div>
+            <div><label htmlFor="tenant-create-shortCode" className="label-text">{t('admin.tenants.createModal.shortCode')}</label><input id="tenant-create-shortCode" name="shortCode" value={tenantForm.shortCode} onChange={(e) => setTenantField('shortCode', e.target.value.toUpperCase())} className="input-field font-mono uppercase" required maxLength={6} minLength={3} /></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label htmlFor="tenant-create-nip" className="label-text">{t('admin.tenants.colNip')}</label><input id="tenant-create-nip" name="nip" className="input-field" /></div>
-            <div><label htmlFor="tenant-create-contactPerson" className="label-text">{t('admin.tenants.createModal.contactPerson')}</label><input id="tenant-create-contactPerson" name="contactPerson" className="input-field" /></div>
+            <div>
+              <label htmlFor="tenant-create-nip" className="label-text">{t('admin.tenants.colNip')}</label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input id="tenant-create-nip" name="nip" value={tenantForm.nip} onChange={(e) => setTenantField('nip', e.target.value)} className="input-field" />
+                <button type="button" onClick={handleFetchGus} disabled={gusLoading || tenantForm.nip.replace(/\D/g, '').length !== 10} className="btn-secondary whitespace-nowrap">
+                  {gusLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {t('admin.tenants.gus.fetch')}
+                </button>
+              </div>
+              {tenantForm.regon && <p className="mt-1 text-xs text-gray-500">REGON: {tenantForm.regon}</p>}
+            </div>
+            <div><label htmlFor="tenant-create-contactPerson" className="label-text">{t('admin.tenants.createModal.contactPerson')}</label><input id="tenant-create-contactPerson" name="contactPerson" value={tenantForm.contactPerson} onChange={(e) => setTenantField('contactPerson', e.target.value)} className="input-field" /></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label htmlFor="tenant-create-contactEmail" className="label-text">{t('admin.tenants.createModal.contactEmail')}</label><input id="tenant-create-contactEmail" name="contactEmail" type="email" className="input-field" /></div>
-            <div><label htmlFor="tenant-create-phone" className="label-text">{t('admin.tenants.createModal.phone')}</label><input id="tenant-create-phone" name="contactPhone" className="input-field" /></div>
+            <div><label htmlFor="tenant-create-contactEmail" className="label-text">{t('admin.tenants.createModal.contactEmail')}</label><input id="tenant-create-contactEmail" name="contactEmail" type="email" value={tenantForm.contactEmail} onChange={(e) => setTenantField('contactEmail', e.target.value)} className="input-field" /></div>
+            <div><label htmlFor="tenant-create-phone" className="label-text">{t('admin.tenants.createModal.phone')}</label><input id="tenant-create-phone" name="contactPhone" value={tenantForm.contactPhone} onChange={(e) => setTenantField('contactPhone', e.target.value)} className="input-field" /></div>
           </div>
-          <div><label htmlFor="tenant-create-address" className="label-text">{t('admin.tenants.createModal.address')}</label><textarea id="tenant-create-address" name="address" className="input-field" rows={2} /></div>
+          <div><label htmlFor="tenant-create-address" className="label-text">{t('admin.tenants.createModal.address')}</label><textarea id="tenant-create-address" name="address" value={tenantForm.address} onChange={(e) => setTenantField('address', e.target.value)} className="input-field" rows={3} /></div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="button" onClick={handleCloseCreate} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={createTenant.isPending} className="btn-primary">{createTenant.isPending ? t('common.creating') : t('common.create')}</button>
           </div>
         </form>
