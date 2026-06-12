@@ -110,12 +110,12 @@ export class TransferListController {
   async bulkAssignBox(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const { itemIds, boxNumber } = req.body;
+      const { itemIds, boxId, boxNumber } = req.body;
       if (!Array.isArray(itemIds) || itemIds.length === 0) {
         return errorResponse(res, 'Wymagana lista identyfikatorów pozycji', 400);
       }
       const result = await transferListService.bulkAssignBox(
-        req.params.id, req.tenantId, req.user!.userId, itemIds, boxNumber ?? null
+        req.params.id, req.tenantId, req.user!.userId, itemIds, boxNumber ?? boxId ?? null
       );
       return successResponse(res, result);
     } catch (err) { next(err); }

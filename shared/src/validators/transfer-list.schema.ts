@@ -37,7 +37,11 @@ export const bulkDeleteItemsSchema = z.object({
 
 export const bulkAssignBoxSchema = z.object({
   itemIds: z.array(z.string().uuid()).min(1, 'At least one item ID required'),
-  boxId: z.string().uuid('Valid box ID required'),
+  boxId: z.string().uuid('Nieprawidłowy identyfikator kartonu').optional().nullable(),
+  boxNumber: z.string().max(100).optional().nullable(),
+}).refine((data) => data.boxId || data.boxNumber !== undefined, {
+  message: 'Wymagany numer kartonu albo identyfikator kartonu',
+  path: ['boxNumber'],
 });
 
 export const importTransferListSchema = z.object({
