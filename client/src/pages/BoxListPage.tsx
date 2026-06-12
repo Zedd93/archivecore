@@ -37,6 +37,8 @@ export default function BoxListPage() {
     const requested = Number(searchParams.get('limit'));
     return PAGE_SIZE_OPTIONS.includes(requested) ? requested : 25;
   });
+  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
@@ -55,6 +57,8 @@ export default function BoxListPage() {
   const { data, isLoading, refetch } = useList('boxes', '/boxes', {
     page,
     limit: pageSize,
+    sortBy,
+    sortOrder,
     ...filters,
   });
 
@@ -82,31 +86,37 @@ export default function BoxListPage() {
     {
       key: 'boxNumber',
       header: t('boxes.boxNumber'),
+      sortable: true,
       render: (item) => <span className="font-mono font-medium text-primary-700">{item.boxNumber}</span>,
     },
-    { key: 'title', header: t('common.title'), className: 'max-w-xs truncate' },
+    { key: 'title', header: t('common.title'), className: 'max-w-xs truncate', sortable: true },
     {
       key: 'status',
       header: t('common.status'),
+      sortable: true,
       render: (item) => <StatusBadge status={item.status} type="box" />,
     },
     {
       key: 'location',
       header: t('boxes.location'),
+      sortable: true,
       render: (item) => (
         <span className="text-gray-500 text-xs">{item.location?.fullPath || '—'}</span>
       ),
     },
-    { key: 'docType', header: t('boxes.docType'), render: (item) => item.docType ? t(`docTypes.${item.docType}`, { defaultValue: item.docType }) : '—' },
-    { key: 'department', header: t('boxes.department'), render: (item) => item.department || '—' },
+    { key: 'docType', header: t('boxes.docType'), sortable: true, render: (item) => item.docType ? t(`docTypes.${item.docType}`, { defaultValue: item.docType }) : '—' },
+    { key: 'department', header: t('boxes.department'), sortable: true, render: (item) => item.department || '—' },
     {
       key: '_count',
       header: t('boxes.folders'),
+      sortable: true,
+      sortKey: 'folders',
       render: (item) => item._count?.folders ?? 0,
     },
     {
       key: 'createdAt',
       header: t('boxes.createdAt'),
+      sortable: true,
       render: (item) => new Date(item.createdAt).toLocaleDateString('pl-PL'),
     },
   ];
@@ -143,6 +153,17 @@ export default function BoxListPage() {
     setSelectedIds(new Set());
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('limit', String(limit));
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleSortChange = (nextSortBy: string, nextSortOrder: 'asc' | 'desc') => {
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortOrder);
+    setPage(1);
+    setSelectedIds(new Set());
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('sortBy', nextSortBy);
+    nextParams.set('sortOrder', nextSortOrder);
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -272,6 +293,9 @@ export default function BoxListPage() {
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={handleSortChange}
         />
         {data?.meta && (
           <div className="px-4 pb-4">

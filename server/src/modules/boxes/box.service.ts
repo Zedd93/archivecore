@@ -2,6 +2,21 @@ import { prisma } from '../../config/database';
 import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
+function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxOrderByWithRelationInput {
+  switch (sortBy) {
+    case 'boxNumber': return { boxNumber: sortOrder };
+    case 'title': return { title: sortOrder };
+    case 'status': return { status: sortOrder };
+    case 'docType': return { docType: sortOrder };
+    case 'department': return { department: sortOrder };
+    case 'location': return { location: { fullPath: sortOrder } };
+    case 'folders': return { folders: { _count: sortOrder } };
+    case 'createdAt':
+    default:
+      return { createdAt: sortOrder };
+  }
+}
+
 export class BoxService {
   private async getLocationAndDescendantIds(locationId: string, tenantId: string): Promise<string[]> {
     const locations = await prisma.location.findMany({
@@ -62,6 +77,9 @@ export class BoxService {
 
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
     const where: Prisma.BoxWhereInput = { tenantId };
+    const sortBy = String(filters.sortBy || 'createdAt');
+    const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+    const orderBy = getBoxOrderBy(sortBy, sortOrder);
 
     if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
@@ -82,7 +100,7 @@ export class BoxService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           location: { select: { id: true, fullPath: true, code: true } },
           tenant: { select: { id: true, name: true, shortCode: true } },

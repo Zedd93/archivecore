@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface Column<T> {
@@ -7,6 +7,8 @@ interface Column<T> {
   header: string;
   render?: (item: T) => ReactNode;
   className?: string;
+  sortable?: boolean;
+  sortKey?: string;
 }
 
 interface DataTableProps<T> {
@@ -22,6 +24,9 @@ interface DataTableProps<T> {
   selectedIds?: Set<string>;
   /** Called when selection changes */
   onSelectionChange?: (ids: Set<string>) => void;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
 }
 
 export default function DataTable<T extends Record<string, any>>({
@@ -34,6 +39,9 @@ export default function DataTable<T extends Record<string, any>>({
   selectable,
   selectedIds,
   onSelectionChange,
+  sortBy,
+  sortOrder = 'asc',
+  onSortChange,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
   const getItemId = (item: T, index: number) => rowKey ? rowKey(item) : item.id || String(index);
@@ -65,6 +73,22 @@ export default function DataTable<T extends Record<string, any>>({
       newSet.add(id);
     }
     onSelectionChange(newSet);
+  };
+
+  const handleSort = (col: Column<T>) => {
+    if (!col.sortable || !onSortChange) return;
+    const nextSortBy = col.sortKey || col.key;
+    const nextSortOrder = sortBy === nextSortBy && sortOrder === 'asc' ? 'desc' : 'asc';
+    onSortChange(nextSortBy, nextSortOrder);
+  };
+
+  const renderSortIcon = (col: Column<T>) => {
+    if (!col.sortable) return null;
+    const colSortKey = col.sortKey || col.key;
+    if (sortBy !== colSortKey) return <ArrowUpDown size={13} className="text-gray-300" />;
+    return sortOrder === 'asc'
+      ? <ArrowUp size={13} className="text-primary-600" />
+      : <ArrowDown size={13} className="text-primary-600" />;
   };
 
   if (isLoading) {
@@ -108,7 +132,16 @@ export default function DataTable<T extends Record<string, any>>({
                 key={col.key}
                 className={`text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 ${col.className || ''}`}
               >
-                {col.header}
+                {col.sortable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSort(col)}
+                    className="inline-flex items-center gap-1 text-left font-semibold uppercase tracking-wider hover:text-gray-700"
+                  >
+                    {col.header}
+                    {renderSortIcon(col)}
+                  </button>
+                ) : col.header}
               </th>
             ))}
           </tr>
