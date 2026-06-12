@@ -11,6 +11,32 @@ import {
 } from '@archivecore/shared';
 
 export class UserService {
+  private canManageGlobalUsers(actor?: IJwtPayload) {
+    return Boolean(actor?.roles.includes(RoleCode.SUPER_ADMIN));
+  }
+
+  private manageableUserWhere(id: string, tenantId: string | null, actor: IJwtPayload): Prisma.UserWhereInput {
+    if (this.canManageGlobalUsers(actor)) {
+      return { id };
+    }
+
+    const effectiveTenantId = actor.tenantId || tenantId;
+    return {
+      id,
+      ...(effectiveTenantId ? { tenantId: effectiveTenantId } : { tenantId: null }),
+    };
+  }
+
+  private async getManageableUser(id: string, tenantId: string | null, actor: IJwtPayload) {
+    const user = await prisma.user.findFirst({
+      where: this.manageableUserWhere(id, tenantId, actor),
+      select: { id: true, tenantId: true },
+    });
+
+    if (!user) throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
+    return user;
+  }
+
   private async getOrCreateSystemRole(roleCode: RoleCode) {
     const existing = await prisma.role.findFirst({
       where: { code: roleCode, tenantId: null, isSystem: true },
@@ -183,7 +209,7 @@ export class UserService {
   }
 
   async updateAccess(id: string, data: any, tenantId: string | null, actor: IJwtPayload) {
-    await this.getById(id, actor.tenantId || tenantId);
+    await this.getManageableUser(id, tenantId, actor);
 
     const roleCode = data.roleCode as RoleCode;
     const isGlobalRole = roleCode === RoleCode.SUPER_ADMIN || roleCode === RoleCode.DOXART_ADMIN;
@@ -218,7 +244,7 @@ export class UserService {
   }
 
   async assignRoles(id: string, roleIds: string[], actor: IJwtPayload, tenantId: string | null) {
-    await this.getById(id, actor.tenantId || tenantId);
+    await this.getManageableUser(id, tenantId, actor);
     const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
     const assignsGlobalRole = roles.some((role) =>
       role.code === RoleCode.SUPER_ADMIN || role.code === RoleCode.DOXART_ADMIN
