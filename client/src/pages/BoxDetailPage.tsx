@@ -251,15 +251,17 @@ export default function BoxDetailPage() {
             {totalFolderCount > 0 ? (
               <div className="space-y-2">
                 {folderRecords.map((folder: any) => (
-                  <div key={folder.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <FileText size={18} className="text-gray-400" />
-                      <div>
+                  <div key={folder.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="min-w-0 flex items-start gap-3">
+                      <FileText size={18} className="mt-0.5 flex-shrink-0 text-gray-400" />
+                      <div className="min-w-0">
                         <div className="text-sm font-medium">{folder.folderNumber}</div>
-                        <div className="text-xs text-gray-500">{folder.title}</div>
+                        <div className="text-xs text-gray-500 whitespace-normal break-words">{folder.title}</div>
                       </div>
                     </div>
-                    <StatusBadge status={folder.status} type="box" />
+                    <div className="flex-shrink-0">
+                      <StatusBadge status={folder.status} type="box" />
+                    </div>
                   </div>
                 ))}
                 {transferListItems.map((item: any) => (
@@ -268,7 +270,7 @@ export default function BoxDetailPage() {
                       <FileText size={18} className="flex-shrink-0 text-gray-400" />
                       <div className="min-w-0">
                         <div className="text-sm font-medium">{item.folderSignature}</div>
-                        <div className="text-xs text-gray-500 line-clamp-2">{item.folderTitle}</div>
+                        <div className="text-xs text-gray-500 whitespace-normal break-words">{item.folderTitle}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
                           <span>{t('boxes.fromTransferList')}</span>
                           {item.transferList && (
