@@ -7,6 +7,8 @@ import { X, Box, Loader2 } from 'lucide-react';
 interface SelectedBox {
   id: string;
   boxNumber: string;
+  title?: string;
+  location?: { fullPath?: string | null } | null;
 }
 
 interface BoxPickerProps {
@@ -14,9 +16,20 @@ interface BoxPickerProps {
   onChange: (boxes: SelectedBox[]) => void;
   placeholder?: string;
   className?: string;
+  maxSelected?: number;
+  tenantId?: string;
+  showLocation?: boolean;
 }
 
-export default function BoxPicker({ value = [], onChange, placeholder, className = '' }: BoxPickerProps) {
+export default function BoxPicker({
+  value = [],
+  onChange,
+  placeholder,
+  className = '',
+  maxSelected,
+  tenantId,
+  showLocation = false,
+}: BoxPickerProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -52,13 +65,22 @@ export default function BoxPicker({ value = [], onChange, placeholder, className
 
   // Fetch boxes from API
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['box-picker', debouncedSearch],
+    queryKey: ['box-picker', tenantId || 'active', debouncedSearch],
     queryFn: async () => {
       if (!debouncedSearch || debouncedSearch.length < 1) return [];
-      const { data } = await api.get('/boxes', {
-        params: { search: debouncedSearch, limit: 10 },
-      });
-      return (data.data || []) as Array<{ id: string; boxNumber: string; title?: string }>;
+      const previousTenantId = localStorage.getItem('tenantId');
+      if (tenantId) localStorage.setItem('tenantId', tenantId);
+      try {
+        const { data } = await api.get('/boxes', {
+          params: { search: debouncedSearch, limit: 10 },
+        });
+        return (data.data || []) as Array<SelectedBox>;
+      } finally {
+        if (tenantId) {
+          if (previousTenantId) localStorage.setItem('tenantId', previousTenantId);
+          else localStorage.removeItem('tenantId');
+        }
+      }
     },
     enabled: debouncedSearch.length >= 1,
     staleTime: 30_000,
@@ -68,8 +90,10 @@ export default function BoxPicker({ value = [], onChange, placeholder, className
   const selectedIds = new Set(value.map((b) => b.id));
   const filteredResults = results.filter((box) => !selectedIds.has(box.id));
 
-  const selectBox = (box: { id: string; boxNumber: string }) => {
-    const next = [...value, { id: box.id, boxNumber: box.boxNumber }];
+  const selectBox = (box: SelectedBox) => {
+    const next = maxSelected === 1
+      ? [{ id: box.id, boxNumber: box.boxNumber, title: box.title, location: box.location }]
+      : [...value, { id: box.id, boxNumber: box.boxNumber, title: box.title, location: box.location }];
     onChange(next);
     setSearch('');
     setDebouncedSearch('');
@@ -139,6 +163,9 @@ export default function BoxPicker({ value = [], onChange, placeholder, className
                 <span className="font-mono font-medium text-gray-900">{box.boxNumber}</span>
                 {box.title && (
                   <span className="text-gray-400 truncate text-xs">— {box.title}</span>
+                )}
+                {showLocation && box.location?.fullPath && (
+                  <span className="ml-auto text-gray-400 truncate text-xs">{box.location.fullPath}</span>
                 )}
               </button>
             ))

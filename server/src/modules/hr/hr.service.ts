@@ -5,6 +5,17 @@ import { encryptAES256, decryptAES256, hmacSha256 } from '../../utils/crypto';
 const HR_PARTS: HRPartCode[] = ['A', 'B', 'C', 'D', 'E'];
 
 export class HRService {
+  private async validateBoxAccess(boxId: string | undefined | null, tenantId: string) {
+    if (!boxId) return;
+    const box = await prisma.box.findFirst({
+      where: { id: boxId, tenantId },
+      select: { id: true },
+    });
+    if (!box) {
+      throw Object.assign(new Error('Wybrany karton nie istnieje w tym tenancie'), { statusCode: 400 });
+    }
+  }
+
   async list(tenantId: string, filters: any, skip: number, take: number) {
     const where: Prisma.HRFolderWhereInput = { tenantId };
 
@@ -93,6 +104,8 @@ export class HRService {
   }
 
   async create(data: any, tenantId: string) {
+    await this.validateBoxAccess(data.boxId, tenantId);
+
     // Encrypt PESEL
     const encryptedPesel = encryptAES256(data.employeePesel);
     const peselHmac = hmacSha256(data.employeePesel);
@@ -158,6 +171,7 @@ export class HRService {
 
   async update(id: string, tenantId: string, data: any) {
     await this.getById(id, tenantId);
+    await this.validateBoxAccess(data.boxId, tenantId);
 
     const updateData: any = {};
     if (data.employeeFirstName) updateData.employeeFirstName = data.employeeFirstName;
