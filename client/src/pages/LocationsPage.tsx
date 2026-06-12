@@ -49,6 +49,16 @@ function collectLocationIds(node: LocationNode): string[] {
   return [node.id, ...node.children.flatMap(collectLocationIds)];
 }
 
+function findLocationById(nodes: LocationNode[] | undefined, id: string): LocationNode | null {
+  if (!nodes || !id) return null;
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findLocationById(node.children, id);
+    if (child) return child;
+  }
+  return null;
+}
+
 function LocationTree({
   nodes,
   depth = 0,
@@ -214,6 +224,15 @@ export default function LocationsPage() {
     setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId, address: '', description: '' });
   };
 
+  const handleCreateParentChange = (parentId: string) => {
+    const parent = findLocationById(tree, parentId);
+    setCreateForm({
+      ...createForm,
+      parentId,
+      address: parent?.address || '',
+    });
+  };
+
   const openEditModal = (location: LocationNode) => {
     setSelectedLocation(location);
     setEditForm({
@@ -330,7 +349,7 @@ export default function LocationsPage() {
               <label className="label-text">{t('locations.tenant')}</label>
               <select
                 value={createForm.tenantId}
-                onChange={(e) => setCreateForm({ ...createForm, tenantId: e.target.value, parentId: '' })}
+                onChange={(e) => setCreateForm({ ...createForm, tenantId: e.target.value, parentId: '', address: '' })}
                 className="input-field"
                 required
               >
@@ -386,7 +405,7 @@ export default function LocationsPage() {
             <label className="label-text">{t('locations.parentLocation', 'Lokalizacja nadrzędna')}</label>
             <LocationPicker
               value={createForm.parentId}
-              onChange={(parentId) => setCreateForm({ ...createForm, parentId })}
+              onChange={handleCreateParentChange}
               tenantId={createForm.tenantId || undefined}
               placeholder={t('locations.parentLocationPlaceholder', 'Opcjonalnie — wybierz magazyn, strefę lub regał')}
             />
