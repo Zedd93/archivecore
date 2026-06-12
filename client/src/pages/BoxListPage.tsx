@@ -43,6 +43,7 @@ export default function BoxListPage() {
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkLocationId, setBulkLocationId] = useState('');
+  const activeTenantId = localStorage.getItem('tenantId') || undefined;
   const { confirm, ConfirmDialogElement } = useConfirm();
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
@@ -346,6 +347,7 @@ export default function BoxListPage() {
               onChange={setBulkLocationId}
               placeholder={t('boxes.bulk.locationPlaceholder')}
               excludeTypes={['warehouse', 'zone', 'rack']}
+              tenantId={activeTenantId}
             />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
@@ -383,6 +385,7 @@ export default function BoxListPage() {
                 onChange={(id) => setValue('locationId', id, { shouldValidate: true })}
                 placeholder={t('boxes.bulk.locationPlaceholder')}
                 excludeTypes={['warehouse', 'zone', 'rack']}
+                tenantId={activeTenantId}
               />
             </FormField>
           </div>

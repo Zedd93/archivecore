@@ -99,16 +99,17 @@ export default function LocationPicker({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const activeTenantId = tenantId ?? localStorage.getItem('tenantId') ?? '';
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: tree, isLoading } = useQuery({
-    queryKey: ['locations-tree', tenantId || 'active'],
+    queryKey: ['locations-tree', activeTenantId || 'active'],
     queryFn: async () => {
       const { data } = await api.get('/locations/tree', {
-        params: tenantId ? { tenantId } : undefined,
+        params: activeTenantId ? { tenantId: activeTenantId } : undefined,
       });
       return data.data as LocationNode[];
     },
