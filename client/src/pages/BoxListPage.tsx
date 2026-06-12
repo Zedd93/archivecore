@@ -24,6 +24,7 @@ import { Plus, Download, Loader2, RefreshCw, MapPin } from 'lucide-react';
 type CreateBoxForm = z.infer<typeof createBoxSchema>;
 
 const BOX_STATUS_OPTIONS = ['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged'] as const;
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 export default function BoxListPage() {
   const navigate = useNavigate();
@@ -32,6 +33,10 @@ export default function BoxListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(searchParams.get('action') === 'create');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    const requested = Number(searchParams.get('limit'));
+    return PAGE_SIZE_OPTIONS.includes(requested) ? requested : 25;
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
@@ -48,7 +53,7 @@ export default function BoxListPage() {
 
   const { data, isLoading, refetch } = useList('boxes', '/boxes', {
     page,
-    limit: 20,
+    limit: pageSize,
     ...filters,
   });
 
@@ -128,6 +133,15 @@ export default function BoxListPage() {
     setPage(1);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('locationId');
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handlePageSizeChange = (limit: number) => {
+    setPageSize(limit);
+    setPage(1);
+    setSelectedIds(new Set());
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('limit', String(limit));
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -262,9 +276,11 @@ export default function BoxListPage() {
           <div className="px-4 pb-4">
             <Pagination
               page={page}
-              limit={20}
+              limit={pageSize}
               total={data.meta.total}
               onPageChange={setPage}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onLimitChange={handlePageSizeChange}
             />
           </div>
         )}

@@ -40,7 +40,8 @@
     "active": "Active",
     "inactive": "Inactive",
     "pagination": {
-      "showing": "Showing {{start}}–{{end}} of {{total}}"
+      "showing": "Showing {{start}}–{{end}} of {{total}}",
+      "perPage": "Per page"
     },
     "selected": "Selected: {{count}}",
     "deselect": "Deselect",

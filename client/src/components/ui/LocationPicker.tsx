@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
@@ -98,7 +99,9 @@ export default function LocationPicker({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: tree, isLoading } = useQuery({
@@ -135,13 +138,43 @@ export default function LocationPicker({
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function updateDropdownPosition() {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        maxHeight: Math.max(160, Math.min(320, window.innerHeight - rect.bottom - 12)),
+        zIndex: 90,
+      });
+    }
+
+    updateDropdownPosition();
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+    };
+  }, [open]);
 
   function handleSelect(loc: FlatLocation) {
     onChange(loc.id);
@@ -180,6 +213,56 @@ export default function LocationPicker({
 
   const displayValue = selectedLocation?.fullPath ?? '';
   const placeholderText = placeholder ?? t('locations.pickLocation', 'Select location...');
+  const dropdown = (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-y-auto"
+    >
+      <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            ref={inputRef}
+            type="text"
+            className="input-field h-9 pl-8 text-sm"
+            placeholder={t('common.search', 'Search')}
+            value={search}
+            onChange={handleInputChange}
+            onFocus={handleInputFocus}
+            onKeyDown={handleKeyDown}
+            autoComplete="off"
+          />
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 size={20} className="animate-spin text-primary-500" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="px-3 py-4 text-sm text-gray-500 text-center">
+          {t('locations.noResults', 'No locations found')}
+        </div>
+      ) : (
+        filtered.map((loc) => (
+          <button
+            key={loc.id}
+            type="button"
+            onClick={() => handleSelect(loc)}
+            className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-50 transition-colors flex items-center gap-2 ${
+              value === loc.id ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
+            }`}
+          >
+            <span className="flex-shrink-0">{TYPE_ICONS[loc.type] || '\u{1F4C1}'}</span>
+            <span className="flex-1 truncate">{loc.fullPath}</span>
+            <span className={`flex-shrink-0 ${TYPE_BADGE_COLORS[loc.type] || 'badge-gray'} text-xs`}>
+              {t(TYPE_LABEL_KEYS[loc.type] || loc.type)}
+            </span>
+          </button>
+        ))
+      )}
+    </div>
+  );
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -223,52 +306,7 @@ export default function LocationPicker({
         </div>
       </div>
 
-      {open && (
-        <div className="absolute z-[70] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
-          <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input
-                ref={inputRef}
-                type="text"
-                className="input-field h-9 pl-8 text-sm"
-                placeholder={t('common.search', 'Search')}
-                value={search}
-                onChange={handleInputChange}
-                onFocus={handleInputFocus}
-                onKeyDown={handleKeyDown}
-                autoComplete="off"
-              />
-            </div>
-          </div>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 size={20} className="animate-spin text-primary-500" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-gray-500 text-center">
-              {t('locations.noResults', 'No locations found')}
-            </div>
-          ) : (
-            filtered.map((loc) => (
-              <button
-                key={loc.id}
-                type="button"
-                onClick={() => handleSelect(loc)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-50 transition-colors flex items-center gap-2 ${
-                  value === loc.id ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
-                }`}
-              >
-                <span className="flex-shrink-0">{TYPE_ICONS[loc.type] || '\u{1F4C1}'}</span>
-                <span className="flex-1 truncate">{loc.fullPath}</span>
-                <span className={`flex-shrink-0 ${TYPE_BADGE_COLORS[loc.type] || 'badge-gray'} text-xs`}>
-                  {t(TYPE_LABEL_KEYS[loc.type] || loc.type)}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {open && createPortal(dropdown, document.body)}
     </div>
   );
 }

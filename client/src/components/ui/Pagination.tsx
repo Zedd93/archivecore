@@ -6,12 +6,23 @@ interface PaginationProps {
   limit: number;
   total: number;
   onPageChange: (page: number) => void;
+  pageSizeOptions?: number[];
+  onLimitChange?: (limit: number) => void;
 }
 
-export default function Pagination({ page, limit, total, onPageChange }: PaginationProps) {
+export default function Pagination({
+  page,
+  limit,
+  total,
+  onPageChange,
+  pageSizeOptions,
+  onLimitChange,
+}: PaginationProps) {
   const { t } = useTranslation();
   const totalPages = Math.ceil(total / limit);
-  if (totalPages <= 1) return null;
+  if (totalPages <= 1 && !onLimitChange) return null;
+  const start = total === 0 ? 0 : ((page - 1) * limit) + 1;
+  const end = Math.min(page * limit, total);
 
   const pages: (number | string)[] = [];
   for (let i = 1; i <= totalPages; i++) {
@@ -23,10 +34,28 @@ export default function Pagination({ page, limit, total, onPageChange }: Paginat
   }
 
   return (
-    <div className="flex items-center justify-between mt-4">
-      <div className="text-sm text-gray-500">
-        {t('common.pagination.showing', { start: ((page - 1) * limit) + 1, end: Math.min(page * limit, total), total })}
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div className="text-sm text-gray-500">
+          {t('common.pagination.showing', { start, end, total })}
+        </div>
+        {onLimitChange && pageSizeOptions && pageSizeOptions.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-gray-500">
+            <span>{t('common.pagination.perPage')}</span>
+            <select
+              value={limit}
+              onChange={(e) => onLimitChange(Number(e.target.value))}
+              className="input-field h-9 w-24 py-1 text-sm"
+              aria-label={t('common.pagination.perPage')}
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+      {totalPages > 1 && (
       <div className="flex items-center gap-1">
         <button
           onClick={() => onPageChange(page - 1)}
@@ -60,6 +89,7 @@ export default function Pagination({ page, limit, total, onPageChange }: Paginat
           <ChevronRight size={16} />
         </button>
       </div>
+      )}
     </div>
   );
 }
