@@ -506,7 +506,13 @@
       "colType": "Type",
       "colEntityId": "Entity ID",
       "colIp": "IP",
-      "empty": "No audit logs"
+      "empty": "No audit logs",
+      "revert": "Revert",
+      "notRevertible": "This event cannot be reverted",
+      "revertSuccess": "Event reverted",
+      "revertError": "Failed to revert event",
+      "revertConfirmTitle": "Revert event?",
+      "revertConfirmMsg": "The system will run the opposite operation for: {{action}} / {{entity}}. A new audit entry will be added."
     },
     "retention": {
       "title": "Retention & destruction",
@@ -949,6 +955,7 @@
       "box.status": "Box status changed",
       "box.bulk_status": "Status changed (bulk)",
       "box.bulk_move": "Moved (bulk)",
+      "audit.revert": "Audit event reverted",
       "attachment.upload": "Attachment uploaded",
       "attachment.delete": "Attachment deleted",
       "custody.create": "Custody event created",

@@ -33,6 +33,13 @@ export class AuditController {
       return successResponse(res, types);
     } catch (err) { next(err); }
   }
+
+  async revert(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await auditService.revert(req.params.id, req.user!.userId);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
 }
 
 export const auditController = new AuditController();

@@ -506,7 +506,13 @@
       "colType": "Typ",
       "colEntityId": "ID Obiektu",
       "colIp": "IP",
-      "empty": "Brak logów audytu"
+      "empty": "Brak logów audytu",
+      "revert": "Cofnij",
+      "notRevertible": "Tego zdarzenia nie można cofnąć",
+      "revertSuccess": "Zdarzenie zostało cofnięte",
+      "revertError": "Nie udało się cofnąć zdarzenia",
+      "revertConfirmTitle": "Cofnąć zdarzenie?",
+      "revertConfirmMsg": "System wykona operację odwrotną dla: {{action}} / {{entity}}. W dzienniku zostanie dopisany nowy wpis audytu."
     },
     "retention": {
       "title": "Retencja i brakowanie",
@@ -949,6 +955,7 @@
       "box.status": "Zmiana statusu kartonu",
       "box.bulk_status": "Zmiana statusu (masowo)",
       "box.bulk_move": "Przeniesienie (masowo)",
+      "audit.revert": "Cofnięcie zdarzenia audytu",
       "attachment.upload": "Dodanie załącznika",
       "attachment.delete": "Usunięcie załącznika",
       "custody.create": "Utworzenie zdarzenia custody",

@@ -10,6 +10,8 @@ export interface IAuditLog {
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: string;
+  canRevert?: boolean;
+  reason?: string | null;
   user?: { firstName: string; lastName: string; email: string };
 }
 

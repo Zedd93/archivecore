@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useList } from '@/hooks/useApi';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
-import { Shield, User, Clock } from 'lucide-react';
+import { Shield, User, Clock, RotateCcw, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useConfirm } from '@/hooks/useConfirm';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { RoleCode } from '@archivecore/shared';
 
 const AUDIT_ACTION_OPTIONS = [
   'attachment.upload',
   'attachment.delete',
+  'audit.revert',
   'box.create',
   'box.update',
   'box.move',
@@ -102,8 +110,12 @@ const AUDIT_ENTITY_OPTIONS = [
 
 export default function AuditPage() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { hasRole } = useAuth();
+  const { confirm, ConfirmDialogElement } = useConfirm();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({ action: '', entityType: '', dateFrom: '', dateTo: '' });
+  const [revertingId, setRevertingId] = useState<string | null>(null);
 
   const actionLabels = t('statuses.auditAction', { returnObjects: true }) as Record<string, string>;
   const entityLabels = t('statuses.auditEntity', { returnObjects: true }) as Record<string, string>;
@@ -117,6 +129,37 @@ export default function AuditPage() {
   const formatAuditEntity = (entityType: string) => entityLabels[entityType] || humanizeAuditValue(entityType);
 
   const { data, isLoading } = useList('audit', '/audit', { page, limit: 30, ...filters });
+  const isSuperAdmin = hasRole(RoleCode.SUPER_ADMIN);
+
+  const revertMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post(`/audit/${id}/revert`);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['audit'] });
+      toast.success(t('admin.audit.revertSuccess'));
+    },
+    onError: (err: any) => {
+      toast.error(getApiErrorMessage(err, t('admin.audit.revertError')));
+    },
+    onSettled: () => setRevertingId(null),
+  });
+
+  const handleRevert = async (item: any) => {
+    const ok = await confirm({
+      title: t('admin.audit.revertConfirmTitle'),
+      message: t('admin.audit.revertConfirmMsg', {
+        action: formatAuditAction(item.action),
+        entity: formatAuditEntity(item.entityType),
+      }),
+      confirmLabel: t('admin.audit.revert'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setRevertingId(item.id);
+    revertMutation.mutate(item.id);
+  };
 
   const columns: Column<any>[] = [
     {
@@ -156,6 +199,22 @@ export default function AuditPage() {
       header: t('admin.users.colTenant'),
       render: (item) => item.tenant?.shortCode || '—',
     },
+    ...(isSuperAdmin ? [{
+      key: 'actions',
+      header: t('common.actions'),
+      render: (item: any) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); handleRevert(item); }}
+          disabled={!item.canRevert || revertingId === item.id}
+          title={item.canRevert ? t('admin.audit.revert') : item.reason || t('admin.audit.notRevertible')}
+          className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+        >
+          {revertingId === item.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+          {t('admin.audit.revert')}
+        </button>
+      ),
+    } as Column<any>] : []),
   ];
 
   return (
@@ -203,6 +262,7 @@ export default function AuditPage() {
         <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} emptyMessage={t('admin.audit.empty')} />
         {data?.meta && <div className="px-4 pb-4"><Pagination page={page} limit={30} total={data.meta.total} onPageChange={setPage} /></div>}
       </div>
+      {ConfirmDialogElement}
     </div>
   );
 }
