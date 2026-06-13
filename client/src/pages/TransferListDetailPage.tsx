@@ -162,8 +162,11 @@ export default function TransferListDetailPage() {
 
   // Modals
   const [showAddItem, setShowAddItem] = useState(false);
+  const [showEditListTitle, setShowEditListTitle] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [importing, setImporting] = useState(false);
+  const [editListTitle, setEditListTitle] = useState('');
+  const [updatingListTitle, setUpdatingListTitle] = useState(false);
 
   // Selection & bulk actions
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
@@ -335,6 +338,32 @@ export default function TransferListDetailPage() {
       refetchList();
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('transferLists.detail.statusError')));
+    }
+  };
+
+  const openEditListTitle = () => {
+    setEditListTitle(normalizeDisplayText(list.title));
+    setShowEditListTitle(true);
+  };
+
+  const handleUpdateListTitle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextTitle = normalizeDisplayText(editListTitle).trim();
+    if (!nextTitle) {
+      toast.error(t('transferLists.detail.titleRequired'));
+      return;
+    }
+
+    setUpdatingListTitle(true);
+    try {
+      await api.put(`/transfer-lists/${id}`, { title: nextTitle });
+      toast.success(t('transferLists.detail.titleUpdated'));
+      setShowEditListTitle(false);
+      refetchList();
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.titleUpdateError')));
+    } finally {
+      setUpdatingListTitle(false);
     }
   };
 
@@ -517,6 +546,15 @@ export default function TransferListDetailPage() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {canWrite && (
+            <button
+              onClick={openEditListTitle}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Edit2 size={16} />
+              {t('transferLists.detail.editTitle')}
+            </button>
+          )}
           {canWrite && list.status === 'draft' && (
             <button
               onClick={() => handleStatusChange('confirmed')}
@@ -1074,6 +1112,46 @@ export default function TransferListDetailPage() {
             </button>
             <button type="submit" className="btn-primary" disabled={addItemMutation.isPending}>
               {editingItem ? t('common.save') : t('transferLists.detail.addItem')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={showEditListTitle}
+        onClose={() => setShowEditListTitle(false)}
+        title={t('transferLists.detail.editTitle')}
+        size="md"
+      >
+        <form onSubmit={handleUpdateListTitle} className="space-y-4">
+          <div>
+            <label htmlFor="edit-list-title" className="label-text">{t('transferLists.listTitle')} *</label>
+            <input
+              id="edit-list-title"
+              type="text"
+              data-autofocus
+              value={editListTitle}
+              onChange={(e) => setEditListTitle(e.target.value)}
+              className="input-field"
+              placeholder={t('transferLists.importModal.titlePlaceholder')}
+              required
+            />
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowEditListTitle(false)}
+              className="btn-secondary"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={updatingListTitle || !editListTitle.trim()}
+            >
+              {updatingListTitle ? t('common.saving') : t('common.save')}
             </button>
           </div>
         </form>
