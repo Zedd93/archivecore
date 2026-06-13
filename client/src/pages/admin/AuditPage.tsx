@@ -78,6 +78,8 @@ const AUDIT_ACTION_OPTIONS = [
   'transfer_list_item.delete',
   'transfer_list_item.bulk_delete',
   'transfer_list_item.bulk_assign_box',
+  'transfer_list_item.bulk_storage_location',
+  'transfer_list_item.bulk_disposal_date',
   'user.create',
   'user.update',
   'user.update_access',

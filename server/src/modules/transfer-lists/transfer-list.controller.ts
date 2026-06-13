@@ -121,6 +121,34 @@ export class TransferListController {
     } catch (err) { next(err); }
   }
 
+  async bulkUpdateStorageLocation(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { itemIds, storageLocation } = req.body;
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return errorResponse(res, 'Wymagana lista identyfikatorów pozycji', 400);
+      }
+      const result = await transferListService.bulkUpdateStorageLocation(
+        req.params.id, req.tenantId, itemIds, storageLocation
+      );
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async bulkUpdateDisposalDate(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { itemIds, disposalOrTransferDate } = req.body;
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return errorResponse(res, 'Wymagana lista identyfikatorów pozycji', 400);
+      }
+      const result = await transferListService.bulkUpdateDisposalDate(
+        req.params.id, req.tenantId, itemIds, disposalOrTransferDate
+      );
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
   // ─── Import from Excel/CSV ─────────────────────────────
   async importFile(req: Request, res: Response, next: NextFunction) {
     try {

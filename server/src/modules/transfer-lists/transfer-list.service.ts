@@ -331,6 +331,43 @@ export class TransferListService {
     return { updated: result.count, box };
   }
 
+  // ─── Bulk update storage location ────────────────────
+  async bulkUpdateStorageLocation(listId: string, tenantId: string, itemIds: string[], storageLocation: string) {
+    const list = await this.getById(listId, tenantId);
+    this.ensureDraftStatus(list);
+
+    const normalizedLocation = storageLocation.trim();
+    const result = await prisma.transferListItem.updateMany({
+      where: {
+        id: { in: itemIds },
+        transferListId: listId,
+      },
+      data: {
+        storageLocation: normalizedLocation,
+      },
+    });
+
+    return { updated: result.count, storageLocation: normalizedLocation };
+  }
+
+  // ─── Bulk update destruction / AP transfer date ───────
+  async bulkUpdateDisposalDate(listId: string, tenantId: string, itemIds: string[], disposalOrTransferDate: string) {
+    const list = await this.getById(listId, tenantId);
+    this.ensureDraftStatus(list);
+
+    const result = await prisma.transferListItem.updateMany({
+      where: {
+        id: { in: itemIds },
+        transferListId: listId,
+      },
+      data: {
+        disposalOrTransferDate: new Date(disposalOrTransferDate),
+      },
+    });
+
+    return { updated: result.count, disposalOrTransferDate };
+  }
+
   // ─── Change status ─────────────────────────────────────
   async changeStatus(id: string, tenantId: string, status: string) {
     const list = await this.getById(id, tenantId);

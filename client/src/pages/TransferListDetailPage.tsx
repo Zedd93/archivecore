@@ -12,7 +12,7 @@ import toast from 'react-hot-toast';
 import {
   Upload, Plus, Trash2, Edit2, Check, X,
   FileSpreadsheet, Filter, Search, CheckCircle2, Archive, Box, PackagePlus,
-  Loader2, XCircle,
+  Loader2, XCircle, MapPin, CalendarDays,
 } from 'lucide-react';
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/statusColors';
@@ -167,8 +167,10 @@ export default function TransferListDetailPage() {
 
   // Selection & bulk actions
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState<'none' | 'assignBox' | 'removeBox'>('none');
+  const [bulkAction, setBulkAction] = useState<'none' | 'assignBox' | 'storageLocation' | 'disposalDate'>('none');
   const [bulkBoxNumber, setBulkBoxNumber] = useState('');
+  const [bulkStorageLocation, setBulkStorageLocation] = useState('');
+  const [bulkDisposalDate, setBulkDisposalDate] = useState('');
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Form state for add/edit
@@ -429,6 +431,52 @@ export default function TransferListDetailPage() {
     }
   };
 
+  const handleBulkUpdateStorageLocation = async () => {
+    if (!bulkStorageLocation.trim()) {
+      toast.error(t('transferLists.detail.enterStorageLocation'));
+      return;
+    }
+    setBulkProcessing(true);
+    try {
+      const { data } = await api.post(`/transfer-lists/${id}/items/bulk-storage-location`, {
+        itemIds: Array.from(selectedItemIds),
+        storageLocation: bulkStorageLocation.trim(),
+      });
+      toast.success(t('transferLists.detail.storageLocationUpdated', { count: data.data.updated }));
+      setSelectedItemIds(new Set());
+      setBulkAction('none');
+      setBulkStorageLocation('');
+      refetchItems();
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.storageLocationError')));
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const handleBulkUpdateDisposalDate = async () => {
+    if (!bulkDisposalDate) {
+      toast.error(t('transferLists.detail.enterDisposalDate'));
+      return;
+    }
+    setBulkProcessing(true);
+    try {
+      const { data } = await api.post(`/transfer-lists/${id}/items/bulk-disposal-date`, {
+        itemIds: Array.from(selectedItemIds),
+        disposalOrTransferDate: bulkDisposalDate,
+      });
+      toast.success(t('transferLists.detail.disposalDateUpdated', { count: data.data.updated }));
+      setSelectedItemIds(new Set());
+      setBulkAction('none');
+      setBulkDisposalDate('');
+      refetchItems();
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('transferLists.detail.disposalDateError')));
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   if (listLoading) {
     return <SkeletonDetailPage />;
   }
@@ -599,11 +647,11 @@ export default function TransferListDetailPage() {
       {/* Bulk Actions Bar */}
       {selectedItemIds.size > 0 && canEditItems && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-indigo-800 font-medium">
               {t('common.selected', { count: selectedItemIds.size })}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setSelectedItemIds(new Set())}
                 className="btn-secondary text-sm py-1.5 px-3"
@@ -616,6 +664,20 @@ export default function TransferListDetailPage() {
               >
                 <Box size={14} />
                 {t('transferLists.detail.assignBox')}
+              </button>
+              <button
+                onClick={() => { setBulkAction('storageLocation'); setBulkStorageLocation(''); }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <MapPin size={14} />
+                {t('transferLists.detail.assignStorageLocation')}
+              </button>
+              <button
+                onClick={() => { setBulkAction('disposalDate'); setBulkDisposalDate(''); }}
+                className="bg-sky-600 hover:bg-sky-700 text-white text-sm py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <CalendarDays size={14} />
+                {t('transferLists.detail.assignDisposalDate')}
               </button>
               <button
                 onClick={handleBulkRemoveBox}
@@ -636,9 +698,8 @@ export default function TransferListDetailPage() {
             </div>
           </div>
 
-          {/* Assign box inline form */}
           {bulkAction === 'assignBox' && (
-            <div className="mt-3 pt-3 border-t border-indigo-200 flex items-end gap-3">
+            <div className="mt-3 pt-3 border-t border-indigo-200 flex flex-wrap items-end gap-3">
               <div className="flex-1 max-w-sm">
                 <label htmlFor="bulk-assign-boxNumber" className="text-xs font-medium text-indigo-700 mb-1 block">{t('transferLists.detail.boxNumber')}</label>
                 <BoxNumberInput
@@ -656,6 +717,65 @@ export default function TransferListDetailPage() {
               </button>
               <button
                 onClick={() => { setBulkAction('none'); setBulkBoxNumber(''); }}
+                className="btn-secondary text-sm py-2 px-3"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          )}
+
+          {bulkAction === 'storageLocation' && (
+            <div className="mt-3 pt-3 border-t border-indigo-200 flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[240px] max-w-xl">
+                <label htmlFor="bulk-storage-location" className="text-xs font-medium text-indigo-700 mb-1 block">{t('transferLists.detail.storageLocation')}</label>
+                <input
+                  id="bulk-storage-location"
+                  type="text"
+                  value={bulkStorageLocation}
+                  onChange={(e) => setBulkStorageLocation(e.target.value)}
+                  className="input"
+                  placeholder={t('transferLists.detail.storageLocationPlaceholder')}
+                />
+              </div>
+              <button
+                onClick={handleBulkUpdateStorageLocation}
+                disabled={bulkProcessing || !bulkStorageLocation.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+              >
+                {bulkProcessing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                {t('transferLists.detail.assign')}
+              </button>
+              <button
+                onClick={() => { setBulkAction('none'); setBulkStorageLocation(''); }}
+                className="btn-secondary text-sm py-2 px-3"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          )}
+
+          {bulkAction === 'disposalDate' && (
+            <div className="mt-3 pt-3 border-t border-indigo-200 flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[220px] max-w-sm">
+                <label htmlFor="bulk-disposal-date" className="text-xs font-medium text-indigo-700 mb-1 block">{t('transferLists.detail.destructionDate')}</label>
+                <input
+                  id="bulk-disposal-date"
+                  type="date"
+                  value={bulkDisposalDate}
+                  onChange={(e) => setBulkDisposalDate(e.target.value)}
+                  className="input"
+                />
+              </div>
+              <button
+                onClick={handleBulkUpdateDisposalDate}
+                disabled={bulkProcessing || !bulkDisposalDate}
+                className="bg-sky-600 hover:bg-sky-700 text-white text-sm py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+              >
+                {bulkProcessing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                {t('transferLists.detail.assign')}
+              </button>
+              <button
+                onClick={() => { setBulkAction('none'); setBulkDisposalDate(''); }}
                 className="btn-secondary text-sm py-2 px-3"
               >
                 {t('common.cancel')}

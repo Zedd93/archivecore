@@ -15,6 +15,8 @@ import {
   changeTransferListStatusSchema,
   bulkDeleteItemsSchema,
   bulkAssignBoxSchema,
+  bulkUpdateStorageLocationSchema,
+  bulkUpdateDisposalDateSchema,
 } from '@archivecore/shared';
 
 const router = Router();
@@ -109,6 +111,22 @@ router.post('/:id/items/bulk-assign-box',
   validate(bulkAssignBoxSchema),
   auditLog('transfer_list_item', 'transfer_list_item.bulk_assign_box'),
   (req, res, next) => transferListController.bulkAssignBox(req, res, next)
+);
+
+router.post('/:id/items/bulk-storage-location',
+  ...auth,
+  requirePermission(Permissions.TRANSFER_LIST_WRITE),
+  validate(bulkUpdateStorageLocationSchema),
+  auditLog('transfer_list_item', 'transfer_list_item.bulk_storage_location'),
+  (req, res, next) => transferListController.bulkUpdateStorageLocation(req, res, next)
+);
+
+router.post('/:id/items/bulk-disposal-date',
+  ...auth,
+  requirePermission(Permissions.TRANSFER_LIST_WRITE),
+  validate(bulkUpdateDisposalDateSchema),
+  auditLog('transfer_list_item', 'transfer_list_item.bulk_disposal_date'),
+  (req, res, next) => transferListController.bulkUpdateDisposalDate(req, res, next)
 );
 
 // ─── Import from Excel/CSV ───────────────────────────────

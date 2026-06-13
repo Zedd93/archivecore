@@ -44,6 +44,16 @@ export const bulkAssignBoxSchema = z.object({
   path: ['boxNumber'],
 });
 
+export const bulkUpdateStorageLocationSchema = z.object({
+  itemIds: z.array(z.string().uuid()).min(1, 'At least one item ID required'),
+  storageLocation: z.string().min(1, 'Lokalizacja jest wymagana').max(500),
+});
+
+export const bulkUpdateDisposalDateSchema = z.object({
+  itemIds: z.array(z.string().uuid()).min(1, 'At least one item ID required'),
+  disposalOrTransferDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Wymagany format RRRR-MM-DD'),
+});
+
 export const importTransferListSchema = z.object({
   items: z.array(createTransferListItemSchema).min(1, 'Spis musi zawierać przynajmniej jedną pozycję'),
 });
