@@ -653,8 +653,8 @@
 
   "search": {
     "title": "Wyszukiwanie",
-    "subtitle": "Szukaj w kartonach, teczkach, dokumentach i aktach osobowych",
-    "placeholder": "Wpisz co najmniej 2 znaki... (numer kartonu, tytuł, PESEL, kod QR)",
+    "subtitle": "Szukaj w kartonach, teczkach, pozycjach spisów, dokumentach, OCR i aktach osobowych",
+    "placeholder": "Wpisz co najmniej 2 znaki... (numer kartonu, tytuł teczki, treść OCR, kod QR)",
     "filterLabel": "Filtruj:",
     "typeBox": "Karton",
     "typeFolder": "Teczka",

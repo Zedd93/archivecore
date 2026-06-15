@@ -54,8 +54,18 @@ export default function SearchPage() {
       navigate(`/hr/${result.id}`);
       return;
     }
+    if (result.metadata?.hrFolderId) {
+      navigate(`/hr/${result.metadata.hrFolderId}`);
+      return;
+    }
     const boxId = result.metadata?.boxId;
-    if (boxId) navigate(`/boxes/${boxId}`);
+    if (boxId) {
+      navigate(`/boxes/${boxId}`);
+      return;
+    }
+    if (result.metadata?.transferListId) {
+      navigate(`/transfer-lists/${result.metadata.transferListId}`);
+    }
   };
 
   return (

@@ -653,8 +653,8 @@
 
   "search": {
     "title": "Search",
-    "subtitle": "Search boxes, folders, documents and HR records",
-    "placeholder": "Enter at least 2 characters... (box number, title, PESEL, QR code)",
+    "subtitle": "Search boxes, folders, transfer list items, documents, OCR and HR records",
+    "placeholder": "Enter at least 2 characters... (box number, folder title, OCR content, QR code)",
     "filterLabel": "Filter:",
     "typeBox": "Box",
     "typeFolder": "Folder",

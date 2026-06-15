@@ -70,9 +70,12 @@ export class SearchService {
     }
     if (types.includes('folder')) {
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchTransferListItems(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
       searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
@@ -99,6 +102,7 @@ export class SearchService {
           { title: { contains: query, mode: 'insensitive' } },
           { boxNumber: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
+          { notes: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
           { keywords: { has: query } },
         ],
@@ -115,7 +119,7 @@ export class SearchService {
       id: box.id,
       title: `${box.boxNumber} — ${box.title}`,
       subtitle: `${box.location?.fullPath || 'Brak lokalizacji'} | ${box.docType ? DOC_TYPE_LABELS[box.docType] || box.docType : '-'}`,
-      relevance: this.calculateRelevance(query, [box.title, box.boxNumber, box.description || '']),
+      relevance: this.calculateRelevance(query, [box.title, box.boxNumber, box.description || '', box.notes || '', box.docType || '']),
       metadata: { boxNumber: box.boxNumber, status: box.status, docType: box.docType },
     }));
   }
@@ -129,6 +133,7 @@ export class SearchService {
           { title: { contains: query, mode: 'insensitive' } },
           { folderNumber: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
+          { docType: { contains: query, mode: 'insensitive' } },
         ],
       },
       include: {
@@ -143,8 +148,60 @@ export class SearchService {
       id: folder.id,
       title: `${folder.folderNumber} — ${folder.title}`,
       subtitle: `Karton: ${folder.box.boxNumber}`,
-      relevance: this.calculateRelevance(query, [folder.title, folder.folderNumber]),
-      metadata: { folderNumber: folder.folderNumber, boxId: folder.boxId, boxNumber: folder.box.boxNumber },
+      relevance: this.calculateRelevance(query, [folder.title, folder.folderNumber, folder.description || '', folder.docType || '']),
+      metadata: { folderNumber: folder.folderNumber, boxId: folder.boxId, boxNumber: folder.box.boxNumber, docType: folder.docType },
+    }));
+  }
+
+  private async searchTransferListItems(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+    const items = await prisma.transferListItem.findMany({
+      where: {
+        transferList: { tenantId },
+        ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
+        OR: [
+          { folderTitle: { contains: query, mode: 'insensitive' } },
+          { folderSignature: { contains: query, mode: 'insensitive' } },
+          { categoryCode: { contains: query, mode: 'insensitive' } },
+          { storageLocation: { contains: query, mode: 'insensitive' } },
+          { notes: { contains: query, mode: 'insensitive' } },
+          { transferList: { title: { contains: query, mode: 'insensitive' } } },
+          { transferList: { listNumber: { contains: query, mode: 'insensitive' } } },
+          { box: { boxNumber: { contains: query, mode: 'insensitive' } } },
+        ],
+      },
+      include: {
+        transferList: { select: { id: true, listNumber: true, title: true } },
+        box: { select: { id: true, boxNumber: true, department: true } },
+      },
+      take: limit,
+      orderBy: { ordinalNumber: 'asc' },
+    });
+
+    return items.map(item => ({
+      type: 'folder' as const,
+      id: item.id,
+      title: `${item.folderSignature} — ${item.folderTitle}`,
+      subtitle: `Spis ZO: ${item.transferList.listNumber} | Karton: ${item.box?.boxNumber || '—'}`,
+      relevance: this.calculateRelevance(query, [
+        item.folderTitle,
+        item.folderSignature,
+        item.categoryCode,
+        item.storageLocation || '',
+        item.notes || '',
+        item.transferList.title,
+        item.transferList.listNumber,
+        item.box?.boxNumber || '',
+      ]),
+      metadata: {
+        folderNumber: item.folderSignature,
+        boxId: item.boxId,
+        boxNumber: item.box?.boxNumber,
+        transferListId: item.transferListId,
+        transferListNumber: item.transferList.listNumber,
+        source: 'transfer_list_item',
+        categoryCode: item.categoryCode,
+        department: item.box?.department,
+      },
     }));
   }
 
@@ -157,11 +214,14 @@ export class SearchService {
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
+          { attachments: { some: { fileName: { contains: query, mode: 'insensitive' } } } },
+          { attachments: { some: { ocrText: { contains: query, mode: 'insensitive' } } } },
         ],
       },
       include: {
-        folder: { select: { folderNumber: true, box: { select: { id: true, boxNumber: true } } } },
-        box: { select: { id: true, boxNumber: true } },
+        folder: { select: { folderNumber: true, box: { select: { id: true, boxNumber: true, department: true } } } },
+        box: { select: { id: true, boxNumber: true, department: true } },
+        attachments: { select: { fileName: true, ocrText: true }, take: 3 },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -174,9 +234,144 @@ export class SearchService {
       subtitle: doc.folder
         ? `Teczka: ${doc.folder.folderNumber} | Karton: ${doc.folder.box?.boxNumber || '-'}`
         : `Karton: ${doc.box?.boxNumber || '-'}`,
-      relevance: this.calculateRelevance(query, [doc.title, doc.description || '']),
-      metadata: { docType: doc.docType, docDate: doc.docDate, boxId: doc.boxId || doc.folder?.box?.id },
+      relevance: this.calculateRelevance(query, [
+        doc.title,
+        doc.description || '',
+        doc.docType || '',
+        ...doc.attachments.flatMap((attachment) => [attachment.fileName, attachment.ocrText || '']),
+      ]),
+      metadata: {
+        docType: doc.docType,
+        docDate: doc.docDate,
+        boxId: doc.boxId || doc.folder?.box?.id,
+        boxNumber: doc.box?.boxNumber || doc.folder?.box?.boxNumber,
+        department: doc.box?.department || doc.folder?.box?.department,
+      },
     }));
+  }
+
+  private async searchHRDocuments(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
+    const documents = await prisma.hRDocument.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { docType: { contains: query, mode: 'insensitive' } },
+          { notes: { contains: query, mode: 'insensitive' } },
+          { attachment: { fileName: { contains: query, mode: 'insensitive' } } },
+          { attachment: { ocrText: { contains: query, mode: 'insensitive' } } },
+        ],
+      },
+      include: {
+        attachment: { select: { fileName: true, ocrText: true } },
+        hrFolderPart: {
+          select: {
+            partCode: true,
+            hrFolder: {
+              select: {
+                id: true,
+                employeeFirstName: true,
+                employeeLastName: true,
+                department: true,
+                boxId: true,
+                box: { select: { id: true, boxNumber: true } },
+              },
+            },
+          },
+        },
+      },
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return documents.map(doc => {
+      const folder = doc.hrFolderPart.hrFolder;
+      return {
+        type: 'document' as const,
+        id: doc.id,
+        title: doc.title,
+        subtitle: `Akta osobowe: ${folder.employeeLastName} ${folder.employeeFirstName} | Część ${doc.hrFolderPart.partCode}`,
+        relevance: this.calculateRelevance(query, [
+          doc.title,
+          doc.docType || '',
+          doc.notes || '',
+          doc.attachment?.fileName || '',
+          doc.attachment?.ocrText || '',
+          folder.employeeLastName,
+          folder.employeeFirstName,
+        ]),
+        metadata: {
+          docType: doc.docType,
+          docDate: doc.docDate,
+          hrFolderId: folder.id,
+          boxId: folder.boxId,
+          boxNumber: folder.box?.boxNumber,
+          department: folder.department,
+          source: 'hr_document',
+        },
+      };
+    });
+  }
+
+  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+    const attachments = await prisma.attachment.findMany({
+      where: {
+        tenantId,
+        ...(department ? {
+          OR: [
+            { box: { department: { equals: department, mode: 'insensitive' } } },
+            { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+            { document: { box: { department: { equals: department, mode: 'insensitive' } } } },
+            { document: { folder: { box: { department: { equals: department, mode: 'insensitive' } } } } },
+          ],
+        } : {}),
+        AND: [
+          {
+            OR: [
+              { fileName: { contains: query, mode: 'insensitive' } },
+              { ocrText: { contains: query, mode: 'insensitive' } },
+              { document: { title: { contains: query, mode: 'insensitive' } } },
+              { folder: { title: { contains: query, mode: 'insensitive' } } },
+              { box: { title: { contains: query, mode: 'insensitive' } } },
+              { box: { boxNumber: { contains: query, mode: 'insensitive' } } },
+            ],
+          },
+        ],
+      },
+      include: {
+        box: { select: { id: true, boxNumber: true, title: true, department: true } },
+        folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, department: true } } } },
+        document: { select: { id: true, title: true, box: { select: { id: true, boxNumber: true, department: true } }, folder: { select: { box: { select: { id: true, boxNumber: true, department: true } } } } } },
+      },
+      take: limit,
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    return attachments.map(attachment => {
+      const box = attachment.box || attachment.folder?.box || attachment.document?.box || attachment.document?.folder?.box;
+      const relatedTitle = attachment.document?.title || attachment.folder?.title || attachment.box?.title || attachment.fileName;
+      return {
+        type: 'document' as const,
+        id: attachment.id,
+        title: attachment.fileName,
+        subtitle: `${relatedTitle} | Karton: ${box?.boxNumber || '—'}`,
+        relevance: this.calculateRelevance(query, [
+          attachment.fileName,
+          attachment.ocrText || '',
+          attachment.document?.title || '',
+          attachment.folder?.title || '',
+          attachment.box?.title || '',
+          box?.boxNumber || '',
+        ]),
+        metadata: {
+          boxId: box?.id,
+          boxNumber: box?.boxNumber,
+          department: box?.department,
+          source: 'attachment',
+          mimeType: attachment.mimeType,
+        },
+      };
+    });
   }
 
   private async searchHRFolders(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
@@ -188,6 +383,9 @@ export class SearchService {
           { employeeLastName: { contains: query, mode: 'insensitive' } },
           { department: { contains: query, mode: 'insensitive' } },
           { position: { contains: query, mode: 'insensitive' } },
+          { notes: { contains: query, mode: 'insensitive' } },
+          { parts: { some: { description: { contains: query, mode: 'insensitive' } } } },
+          { parts: { some: { hrDocuments: { some: { title: { contains: query, mode: 'insensitive' } } } } } },
         ],
       },
       select: {
@@ -196,8 +394,10 @@ export class SearchService {
         employeeLastName: true,
         department: true,
         position: true,
+        notes: true,
         employmentStatus: true,
         createdAt: true,
+        parts: { select: { description: true }, take: 5 },
       },
       take: limit,
       orderBy: { employeeLastName: 'asc' },
@@ -209,7 +409,12 @@ export class SearchService {
       title: `${folder.employeeLastName} ${folder.employeeFirstName}`,
       subtitle: `${folder.department || '-'} | ${folder.position || '-'}`,
       relevance: this.calculateRelevance(query, [
-        folder.employeeLastName, folder.employeeFirstName, folder.department || '', folder.position || '',
+        folder.employeeLastName,
+        folder.employeeFirstName,
+        folder.department || '',
+        folder.position || '',
+        folder.notes || '',
+        ...folder.parts.map((part) => part.description || ''),
       ]),
       metadata: { employmentStatus: folder.employmentStatus, department: folder.department },
     }));

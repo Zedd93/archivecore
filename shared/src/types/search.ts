@@ -13,11 +13,11 @@ export interface ISearchFilters {
   dateFrom?: string;
   dateTo?: string;
   keywords?: string[];
-  entityTypes?: ('box' | 'folder' | 'hr_folder')[];
+  entityTypes?: ('box' | 'folder' | 'document' | 'hr_folder')[];
 }
 
 export interface ISearchResult {
-  entityType: 'box' | 'folder' | 'hr_folder';
+  entityType: 'box' | 'folder' | 'document' | 'hr_folder';
   entityId: string;
   title: string;
   subtitle: string | null;
