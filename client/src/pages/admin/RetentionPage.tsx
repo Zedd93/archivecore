@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useCreate } from '@/hooks/useApi';
-import { DOC_TYPES } from '@archivecore/shared';
+import { DOC_TYPES, RoleCode } from '@archivecore/shared';
+import { useAuth } from '@/contexts/AuthContext';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -13,8 +14,10 @@ const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
 
 export default function RetentionPage() {
   const { t } = useTranslation();
+  const { hasRole } = useAuth();
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
   const [reviewDays, setReviewDays] = useState(90);
+  const canManageGlobalPolicies = hasRole(RoleCode.SUPER_ADMIN);
 
   const { data: policies, isLoading: polLoading } = useQuery({
     queryKey: ['retention-policies'],
@@ -41,6 +44,13 @@ export default function RetentionPage() {
   const policyColumns: Column<any>[] = [
     { key: 'name', header: t('common.name'), render: (item) => <span className="font-medium">{item.name}</span> },
     { key: 'docType', header: t('admin.retention.createModal.docType'), render: (item) => item.docType || t('common.all') },
+    {
+      key: 'scope',
+      header: t('admin.retention.scope'),
+      render: (item) => item.tenantId
+        ? <span className="badge-blue">{t('admin.retention.scopeTenant')}</span>
+        : <span className="badge-purple">{t('admin.retention.scopeGlobal')}</span>,
+    },
     { key: 'retentionYears', header: t('admin.retention.createModal.period'), render: (item) => formatRetentionYears(item.retentionYears) },
     {
       key: 'retentionTrigger',
@@ -76,6 +86,7 @@ export default function RetentionPage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     await createPolicy.mutateAsync({
+      scope: canManageGlobalPolicies ? fd.get('scope') || 'tenant' : 'tenant',
       name: fd.get('name'),
       docType: fd.get('docType') || undefined,
       retentionYears: parseInt(fd.get('retentionYears') as string),
@@ -130,6 +141,20 @@ export default function RetentionPage() {
       <Modal isOpen={showCreatePolicy} onClose={() => setShowCreatePolicy(false)} title={t('admin.retention.createModal.title')} size="md">
         <form onSubmit={handleCreatePolicy} className="space-y-4">
           <div><label htmlFor="retention-create-name" className="label-text">{t('common.name')} *</label><input id="retention-create-name" name="name" className="input-field" required /></div>
+          {canManageGlobalPolicies ? (
+            <div>
+              <label htmlFor="retention-create-scope" className="label-text">{t('admin.retention.scope')}</label>
+              <select id="retention-create-scope" name="scope" className="input-field" defaultValue="global">
+                <option value="global">{t('admin.retention.scopeGlobal')}</option>
+                <option value="tenant">{t('admin.retention.scopeTenant')}</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">{t('admin.retention.scopeHint')}</p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              {t('admin.retention.tenantOnlyHint')}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="retention-create-docType" className="label-text">{t('admin.retention.createModal.docType')}</label>

@@ -1,33 +1,69 @@
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
-import { Permissions } from '@archivecore/shared';
+import { IJwtPayload, Permissions, RoleCode } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 
 export class RetentionService {
-  async listPolicies(tenantId: string) {
-    return prisma.retentionPolicy.findMany({
-      where: { OR: [{ tenantId }, { tenantId: null }] },
+  private isSuperAdmin(actor: IJwtPayload) {
+    return actor.roles.includes(RoleCode.SUPER_ADMIN);
+  }
+
+  private assertCanManageGlobalPolicy(actor: IJwtPayload) {
+    if (!this.isSuperAdmin(actor)) {
+      throw Object.assign(
+        new Error('Tylko Super Admin może zarządzać globalnymi politykami retencji'),
+        { statusCode: 403 }
+      );
+    }
+  }
+
+  async listPolicies(tenantId: string | null) {
+    const where: Prisma.RetentionPolicyWhereInput = tenantId
+      ? { OR: [{ tenantId }, { tenantId: null }] }
+      : { tenantId: null };
+
+    const policies = await prisma.retentionPolicy.findMany({
+      where,
       include: {
         rules: true,
         _count: { select: { boxes: true } },
       },
-      orderBy: { name: 'asc' },
+      orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
     });
+
+    return policies.map((policy) => ({
+      ...policy,
+      scope: policy.tenantId ? 'tenant' : 'global',
+    }));
   }
 
-  async getPolicy(id: string, tenantId: string) {
+  async getPolicy(id: string, tenantId: string | null) {
+    const where: Prisma.RetentionPolicyWhereInput = tenantId
+      ? { id, OR: [{ tenantId }, { tenantId: null }] }
+      : { id, tenantId: null };
+
     const policy = await prisma.retentionPolicy.findFirst({
-      where: { id, OR: [{ tenantId }, { tenantId: null }] },
+      where,
       include: { rules: true, _count: { select: { boxes: true } } },
     });
     if (!policy) throw Object.assign(new Error('Polityka retencji nie znaleziona'), { statusCode: 404 });
-    return policy;
+    return {
+      ...policy,
+      scope: policy.tenantId ? 'tenant' : 'global',
+    };
   }
 
-  async createPolicy(tenantId: string, data: any) {
+  async createPolicy(tenantId: string | null, actor: IJwtPayload, data: any) {
+    const scope = data.scope || 'tenant';
+    if (scope === 'global') {
+      this.assertCanManageGlobalPolicy(actor);
+    } else if (!tenantId) {
+      throw Object.assign(new Error('Wybierz tenanta, aby dodać politykę specyficzną dla tenanta'), { statusCode: 400 });
+    }
+
     return prisma.retentionPolicy.create({
       data: {
-        tenantId,
+        tenantId: scope === 'global' ? null : tenantId,
         name: data.name,
         docType: data.docType,
         retentionYears: data.retentionYears,
@@ -48,8 +84,12 @@ export class RetentionService {
     });
   }
 
-  async updatePolicy(id: string, tenantId: string, data: any) {
-    await this.getPolicy(id, tenantId);
+  async updatePolicy(id: string, tenantId: string | null, actor: IJwtPayload, data: any) {
+    const policy = await this.getPolicy(id, tenantId);
+    if (!policy.tenantId) {
+      this.assertCanManageGlobalPolicy(actor);
+    }
+
     return prisma.retentionPolicy.update({
       where: { id },
       data: {
@@ -64,8 +104,12 @@ export class RetentionService {
     });
   }
 
-  async deletePolicy(id: string, tenantId: string) {
+  async deletePolicy(id: string, tenantId: string | null, actor: IJwtPayload) {
     const policy = await this.getPolicy(id, tenantId);
+    if (!policy.tenantId) {
+      this.assertCanManageGlobalPolicy(actor);
+    }
+
     if (policy._count.boxes > 0) {
       throw Object.assign(
         new Error('Nie można usunąć polityki — przypisane kartony'),
@@ -78,10 +122,17 @@ export class RetentionService {
   }
 
   // Calculate and update retention dates for boxes with a specific policy
-  async recalculateForPolicy(policyId: string, tenantId: string) {
+  async recalculateForPolicy(policyId: string, tenantId: string | null, actor: IJwtPayload) {
     const policy = await this.getPolicy(policyId, tenantId);
+    if (!policy.tenantId && !tenantId) {
+      this.assertCanManageGlobalPolicy(actor);
+    }
+
+    const boxWhere: Prisma.BoxWhereInput = { retentionPolicyId: policyId };
+    if (tenantId) boxWhere.tenantId = tenantId;
+
     const boxes = await prisma.box.findMany({
-      where: { retentionPolicyId: policyId },
+      where: boxWhere,
     });
 
     let updated = 0;

@@ -4,6 +4,7 @@ export type RetentionAction = 'dispose' | 'review' | 'transfer' | 'extend';
 export interface IRetentionPolicy {
   id: string;
   tenantId: string | null;
+  scope?: 'global' | 'tenant';
   name: string;
   docType: string | null;
   retentionYears: number;
@@ -24,6 +25,7 @@ export interface IRetentionRule {
 }
 
 export interface ICreateRetentionPolicy {
+  scope?: 'global' | 'tenant';
   name: string;
   docType?: string;
   retentionYears: number;

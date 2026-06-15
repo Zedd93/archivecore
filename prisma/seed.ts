@@ -215,10 +215,10 @@ async function main() {
   console.log('  📅 Tworzenie polityk retencji...');
   await prisma.retentionPolicy.upsert({
     where: { id: '00000000-0000-0000-0000-000000000020' },
-    update: {},
+    update: { tenantId: null },
     create: {
       id: '00000000-0000-0000-0000-000000000020',
-      tenantId: tenant.id,
+      tenantId: null,
       name: 'Standardowa 10 lat',
       docType: null,
       retentionYears: 10,
@@ -230,10 +230,10 @@ async function main() {
 
   await prisma.retentionPolicy.upsert({
     where: { id: '00000000-0000-0000-0000-000000000021' },
-    update: {},
+    update: { tenantId: null },
     create: {
       id: '00000000-0000-0000-0000-000000000021',
-      tenantId: tenant.id,
+      tenantId: null,
       name: 'Akta osobowe — nowy okres (10 lat)',
       docType: 'personnel_files',
       retentionYears: 10,
@@ -245,10 +245,10 @@ async function main() {
 
   await prisma.retentionPolicy.upsert({
     where: { id: '00000000-0000-0000-0000-000000000022' },
-    update: {},
+    update: { tenantId: null },
     create: {
       id: '00000000-0000-0000-0000-000000000022',
-      tenantId: tenant.id,
+      tenantId: null,
       name: 'Akta osobowe — stary okres (50 lat)',
       docType: 'personnel_files',
       retentionYears: 50,

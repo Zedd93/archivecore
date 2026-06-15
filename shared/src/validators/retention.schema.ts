@@ -12,6 +12,7 @@ const retentionRuleSchema = z.object({
 });
 
 export const createRetentionPolicySchema = z.object({
+  scope: z.enum(['global', 'tenant']).default('tenant'),
   name: z.string().min(1, 'Nazwa jest wymagana').max(200),
   docType: optionalDocTypeSchema,
   retentionYears: z.number().int().min(1, 'Okres retencji musi wynosić min. 1 rok').max(100),
@@ -21,7 +22,7 @@ export const createRetentionPolicySchema = z.object({
   rules: z.array(retentionRuleSchema).optional(),
 });
 
-export const updateRetentionPolicySchema = createRetentionPolicySchema.omit({ rules: true }).partial();
+export const updateRetentionPolicySchema = createRetentionPolicySchema.omit({ rules: true, scope: true }).partial();
 
 export const initiateDisposalSchema = z.object({
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
