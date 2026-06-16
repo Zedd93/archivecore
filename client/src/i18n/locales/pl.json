@@ -231,6 +231,9 @@
     "borrower": "Wypożyczający",
     "borrowedAt": "Wypożyczono",
     "expectedReturnAt": "Planowany zwrot",
+    "returnAction": "Zwróć",
+    "returnConfirm": "Czy na pewno oznaczyć tę pozycję jako zwróconą i zakończyć wypożyczenie, jeśli była ostatnia?",
+    "returned": "Wypożyczenie zwrócone",
     "documentSearchPlaceholder": "Szukaj dokumentu po tytule lub opisie...",
     "itemTypes": {
       "box": "Karton",
@@ -899,6 +902,7 @@
       "order.assign": "Przypisano zlecenie",
       "order.complete": "Zakończono zlecenie",
       "order.cancel": "Anulowano zlecenie",
+      "order_item.return": "Zwrócono pozycję wypożyczenia",
       "hr.create": "Utworzono akta osobowe",
       "hr.update": "Zaktualizowano akta",
       "hr.add_document": "Dodano dokument",

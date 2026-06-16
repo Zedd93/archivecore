@@ -120,6 +120,14 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async returnLoanItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const order = await orderService.returnLoanItem(req.params.id, req.params.itemId, req.tenantId, req.user!.userId);
+      return successResponse(res, order);
+    } catch (err) { next(err); }
+  }
+
   async getOverdueSla(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

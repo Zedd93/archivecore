@@ -36,6 +36,7 @@ router.patch('/:id/assign', ...auth, requirePermission(Permissions.ORDER_PROCESS
 
 // Item status
 router.patch('/:id/items/:itemId/status', ...auth, requirePermission(Permissions.ORDER_PROCESS), validate(updateOrderItemStatusSchema), auditLog('order_item', 'order_item.status'), (req, res, next) => orderController.updateItemStatus(req, res, next));
+router.patch('/:id/items/:itemId/return', ...auth, requirePermission(Permissions.ORDER_COMPLETE), auditLog('order_item', 'order_item.return'), (req, res, next) => orderController.returnLoanItem(req, res, next));
 
 // Custody events
 router.post('/:id/custody', ...auth, requirePermission(Permissions.ORDER_PROCESS), validate(createCustodyEventSchema), auditLog('custody_event', 'custody.create'), (req, res, next) => orderController.createCustodyEvent(req, res, next));

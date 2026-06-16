@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import { useCreate } from '@/hooks/useApi';
+import { useAuth } from '@/contexts/AuthContext';
 import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import { ArchiveRestore, Box, FileText, Plus } from 'lucide-react';
+import { getApiErrorMessage } from '@/utils/apiError';
+import toast from 'react-hot-toast';
+import { ArchiveRestore, Box, FileText, Plus, RotateCcw } from 'lucide-react';
 
 interface SelectedBox {
   id: string;
@@ -48,6 +51,8 @@ function formatDate(value?: string | null) {
 export default function LoansPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
@@ -64,6 +69,22 @@ export default function LoansPage() {
   });
 
   const createLoan = useCreate('/orders', ['orders', 'active-loans'], t('loans.requestCreated'));
+  const returnLoan = useMutation({
+    mutationFn: async (item: any) => {
+      const { data } = await api.patch(`/orders/${item.order.id}/items/${item.id}/return`);
+      return data.data;
+    },
+    onSuccess: () => {
+      toast.success(t('loans.returned'));
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['boxes'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err: any) => {
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
+    },
+  });
 
   const resetForm = () => {
     setSelectedBoxes([]);
@@ -96,6 +117,11 @@ export default function LoansPage() {
     resetForm();
     refetch();
     if (created?.id) navigate(`/orders/${created.id}`);
+  };
+
+  const handleReturnLoan = (item: any) => {
+    if (!window.confirm(t('loans.returnConfirm'))) return;
+    returnLoan.mutate(item);
   };
 
   const columns: Column<any>[] = [
@@ -161,6 +187,23 @@ export default function LoansPage() {
         </button>
       ),
     },
+    ...(hasPermission('order.complete') ? [{
+      key: 'actions',
+      header: t('common.actions'),
+      render: (item: any) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleReturnLoan(item);
+          }}
+          disabled={returnLoan.isPending}
+          className="btn-secondary text-xs whitespace-nowrap"
+        >
+          <RotateCcw size={14} /> {t('loans.returnAction')}
+        </button>
+      ),
+    }] : []),
   ];
 
   return (

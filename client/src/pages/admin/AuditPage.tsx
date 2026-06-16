@@ -61,6 +61,7 @@ const AUDIT_ACTION_OPTIONS = [
   'order.assign',
   'order_item.create',
   'order_item.status',
+  'order_item.return',
   'policy.create',
   'policy.update',
   'policy.delete',

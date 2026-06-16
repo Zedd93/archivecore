@@ -43,6 +43,17 @@ function parseExpectedReturnAt(value?: string | null): Date | undefined {
 }
 
 export class OrderService {
+  private getOrderItemBoxId(item: any): string | null {
+    return item.boxId
+      || item.box?.id
+      || item.folder?.box?.id
+      || item.document?.box?.id
+      || item.document?.folder?.box?.id
+      || item.transferListItem?.box?.id
+      || item.hrFolder?.box?.id
+      || null;
+  }
+
   private async notifyOrderStatus(order: any, newStatus: OrderStatus, actorId: string) {
     const permissionsByStatus: Partial<Record<OrderStatus, (typeof Permissions)[keyof typeof Permissions][]>> = {
       submitted: [Permissions.ORDER_APPROVE],
@@ -387,9 +398,9 @@ export class OrderService {
 
     const deliveredAt = new Date();
     const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
-    const boxIds = order.items.map((item: any) => (
-      item.boxId || item.folder?.box?.id || item.document?.box?.id || item.document?.folder?.box?.id || item.transferListItem?.box?.id
-    )).filter(Boolean);
+    const boxIds = order.items
+      .map((item: any) => this.getOrderItemBoxId(item))
+      .filter((boxId: string | null): boxId is string => Boolean(boxId));
     const boxStatus = order.orderType === 'checkout'
       ? 'checked_out'
       : order.orderType === 'return_order'
@@ -458,6 +469,95 @@ export class OrderService {
     });
 
     return this.getById(id, tenantId);
+  }
+
+  async returnLoanItem(orderId: string, itemId: string, tenantId: string, userId: string) {
+    const order = await this.getById(orderId, tenantId);
+    if (order.orderType !== 'checkout') {
+      throw Object.assign(new Error('Zwrot można wykonać tylko dla wypożyczenia'), { statusCode: 400 });
+    }
+    if (!['delivered', 'completed'].includes(order.status)) {
+      throw Object.assign(new Error('Zwrot można wykonać dopiero po wydaniu wypożyczenia'), { statusCode: 400 });
+    }
+
+    const item = order.items.find((entry: any) => entry.id === itemId);
+    if (!item) throw Object.assign(new Error('Pozycja nie znaleziona'), { statusCode: 404 });
+    if (item.itemStatus === OrderItemStatus.returned) {
+      throw Object.assign(new Error('Pozycja została już zwrócona'), { statusCode: 400 });
+    }
+    if (item.itemStatus !== OrderItemStatus.delivered) {
+      throw Object.assign(new Error('Zwracać można tylko wydane pozycje'), { statusCode: 400 });
+    }
+
+    const returnedAt = new Date();
+    const boxId = this.getOrderItemBoxId(item);
+    const operations: Prisma.PrismaPromise<any>[] = [
+      prisma.orderItem.update({
+        where: { id: itemId },
+        data: { itemStatus: OrderItemStatus.returned },
+      }),
+    ];
+
+    if (boxId) {
+      operations.push(
+        prisma.custodyEvent.create({
+          data: {
+            orderId,
+            boxId,
+            eventType: 'return_event',
+            fromUserId: order.requestedBy,
+            toUserId: userId,
+            notes: `Zwrot pozycji z wypożyczenia ${order.orderNumber}`,
+            eventAt: returnedAt,
+          },
+        })
+      );
+    }
+
+    const remainingDeliveredItems = order.items.filter((entry: any) => (
+      entry.id !== itemId && entry.itemStatus === OrderItemStatus.delivered
+    ));
+    if (remainingDeliveredItems.length === 0 && order.status !== 'completed') {
+      operations.push(
+        prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'completed', completedAt: returnedAt },
+        })
+      );
+    }
+
+    await prisma.$transaction(operations);
+
+    if (boxId) {
+      const stillCheckedOut = await prisma.orderItem.count({
+        where: {
+          id: { not: itemId },
+          itemStatus: OrderItemStatus.delivered,
+          order: {
+            tenantId,
+            orderType: 'checkout',
+            status: { in: ['delivered', 'completed'] },
+          },
+          OR: [
+            { boxId },
+            { folder: { boxId } },
+            { document: { boxId } },
+            { document: { folder: { boxId } } },
+            { transferListItem: { boxId } },
+            { hrFolder: { boxId } },
+          ],
+        },
+      });
+
+      if (stillCheckedOut === 0) {
+        await prisma.box.updateMany({
+          where: { id: boxId, tenantId },
+          data: { status: 'active' },
+        });
+      }
+    }
+
+    return this.getById(orderId, tenantId);
   }
 
   async cancel(id: string, tenantId: string, userId: string, notes?: string) {
