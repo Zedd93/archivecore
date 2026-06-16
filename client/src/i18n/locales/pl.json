@@ -190,9 +190,9 @@
       "title": "Nowe zlecenie",
       "type": "Typ zlecenia *",
       "priority": "Priorytet",
-      "priorityNormal": "Normalny (24h)",
-      "priorityHigh": "Wysoki (8h)",
-      "priorityUrgent": "Pilny (4h)",
+      "priorityNormal": "Normalny (48h)",
+      "priorityHigh": "Wysoki (24h)",
+      "priorityUrgent": "Maksymalny (8h)",
       "boxIds": "Kartony *",
       "boxIdsPlaceholder": "Wyszukaj po numerze kartonu, np. K-2026-000001",
       "notes": "Notatki",
@@ -230,6 +230,7 @@
     "itemType": "Typ",
     "borrower": "Wypożyczający",
     "borrowedAt": "Wypożyczono",
+    "expectedReturnAt": "Planowany zwrot",
     "documentSearchPlaceholder": "Szukaj dokumentu po tytule lub opisie...",
     "itemTypes": {
       "box": "Karton",
@@ -243,6 +244,7 @@
       "title": "Zgłoś wypożyczenie",
       "boxes": "Kartony do wypożyczenia",
       "documents": "Dokumenty do wypożyczenia",
+      "expectedReturnAt": "Proponowana data zwrotu",
       "notesPlaceholder": "Uzasadnienie / uwagi do wypożyczenia...",
       "submit": "Utwórz zgłoszenie"
     }
@@ -954,7 +956,7 @@
     "priority": {
       "normal": "Normalny",
       "high": "Wysoki",
-      "urgent": "Pilny"
+      "urgent": "Maksymalny"
     },
     "employment": {
       "active": "Zatrudniony",

@@ -67,7 +67,7 @@ export const ORDER_TYPE_LABELS: Record<string, string> = {
 export const PRIORITY_LABELS: Record<string, string> = {
   normal: 'Normalny',
   high: 'Wysoki',
-  urgent: 'Pilny',
+  urgent: 'Maksymalny',
 };
 
 // ======= Employment Status Labels =======

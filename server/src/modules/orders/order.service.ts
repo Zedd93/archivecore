@@ -6,11 +6,11 @@ import { notificationService } from '../notifications/notification.service';
 
 function calculateSlaDeadline(priority: string): Date {
   const slaMap: Record<string, number> = {
-    normal: SLA_LEVELS[0].hours,
-    high: SLA_LEVELS[1].hours,
-    urgent: SLA_LEVELS[2].hours,
+    normal: SLA_LEVELS.find(level => level.code === 'normal')?.hours || 48,
+    high: SLA_LEVELS.find(level => level.code === 'high')?.hours || 24,
+    urgent: SLA_LEVELS.find(level => level.code === 'urgent')?.hours || 8,
   };
-  const hours = slaMap[priority] || 24;
+  const hours = slaMap[priority] || 48;
   const now = new Date();
   let remaining = hours;
   const current = new Date(now);
@@ -24,6 +24,22 @@ function calculateSlaDeadline(priority: string): Date {
     }
   }
   return current;
+}
+
+function parseExpectedReturnAt(value?: string | null): Date | undefined {
+  if (!value) return undefined;
+  const trimmed = String(value).trim();
+  if (!trimmed) return undefined;
+
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? new Date(`${trimmed}T12:00:00.000Z`)
+    : new Date(trimmed);
+
+  if (Number.isNaN(date.getTime())) {
+    throw Object.assign(new Error('Nieprawidłowa planowana data zwrotu'), { statusCode: 400 });
+  }
+
+  return date;
 }
 
 export class OrderService {
@@ -256,6 +272,7 @@ export class OrderService {
         status: 'draft',
         requestedBy: userId,
         slaDeadline,
+        expectedReturnAt: parseExpectedReturnAt(data.expectedReturnAt),
         notes: data.notes,
         items: {
           create: resolvedItems,
@@ -518,6 +535,7 @@ export class OrderService {
             requester: { select: { id: true, firstName: true, lastName: true, email: true } },
             assignee: { select: { id: true, firstName: true, lastName: true } },
             completedAt: true,
+            expectedReturnAt: true,
             createdAt: true,
             status: true,
           },

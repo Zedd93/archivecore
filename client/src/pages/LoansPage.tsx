@@ -30,6 +30,21 @@ const ITEM_TYPE_ICON: Record<string, React.ReactNode> = {
   hr_folder: <FileText size={16} className="text-purple-600" />,
 };
 
+function toDateInputValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function getDefaultExpectedReturnDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  return toDateInputValue(date);
+}
+
+function formatDate(value?: string | null) {
+  return value ? new Date(value).toLocaleDateString('pl-PL') : '—';
+}
+
 export default function LoansPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -37,6 +52,7 @@ export default function LoansPage() {
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [priority, setPriority] = useState('normal');
+  const [expectedReturnAt, setExpectedReturnAt] = useState(getDefaultExpectedReturnDate);
   const [notes, setNotes] = useState('');
 
   const { data: activeLoans = [], isLoading, refetch } = useQuery({
@@ -53,6 +69,7 @@ export default function LoansPage() {
     setSelectedBoxes([]);
     setSelectedDocuments([]);
     setPriority('normal');
+    setExpectedReturnAt(getDefaultExpectedReturnDate());
     setNotes('');
   };
 
@@ -71,6 +88,7 @@ export default function LoansPage() {
     const created: any = await createLoan.mutateAsync({
       orderType: 'checkout',
       priority,
+      expectedReturnAt,
       notes: notes || undefined,
       items,
     });
@@ -113,6 +131,19 @@ export default function LoansPage() {
       key: 'deliveredAt',
       header: t('loans.borrowedAt'),
       render: (item) => item.deliveredAt ? new Date(item.deliveredAt).toLocaleString('pl-PL') : '—',
+    },
+    {
+      key: 'expectedReturnAt',
+      header: t('loans.expectedReturnAt'),
+      render: (item) => {
+        const dateValue = item.order?.expectedReturnAt;
+        const isOverdue = dateValue && toDateInputValue(new Date(dateValue)) < toDateInputValue(new Date());
+        return (
+          <span className={isOverdue ? 'font-medium text-red-600' : ''}>
+            {formatDate(dateValue)}
+          </span>
+        );
+      },
     },
     {
       key: 'order',
@@ -190,6 +221,18 @@ export default function LoansPage() {
           </div>
 
           <div>
+            <label htmlFor="loan-expected-return" className="label-text">{t('loans.createModal.expectedReturnAt')}</label>
+            <input
+              id="loan-expected-return"
+              type="date"
+              value={expectedReturnAt}
+              min={toDateInputValue(new Date())}
+              onChange={(e) => setExpectedReturnAt(e.target.value)}
+              className="input-field"
+            />
+          </div>
+
+          <div>
             <label htmlFor="loan-notes" className="label-text">{t('orders.createModal.notes')}</label>
             <textarea
               id="loan-notes"
@@ -207,7 +250,7 @@ export default function LoansPage() {
             </button>
             <button
               type="submit"
-              disabled={createLoan.isPending || (selectedBoxes.length + selectedDocuments.length === 0)}
+              disabled={createLoan.isPending || !expectedReturnAt || (selectedBoxes.length + selectedDocuments.length === 0)}
               className="btn-primary"
             >
               {createLoan.isPending ? t('common.creating') : t('loans.createModal.submit')}

@@ -15,6 +15,7 @@ export interface IOrder {
   approvedBy: string | null;
   assignedTo: string | null;
   slaDeadline: string | null;
+  expectedReturnAt: string | null;
   completedAt: string | null;
   notes: string | null;
   createdAt: string;
@@ -46,6 +47,7 @@ export interface IOrderItem {
 export interface ICreateOrder {
   orderType: OrderType;
   priority?: OrderPriority;
+  expectedReturnAt?: string;
   notes?: string;
   items: { boxId?: string; boxNumber?: string; folderId?: string; documentId?: string; transferListItemId?: string; hrFolderId?: string }[];
 }

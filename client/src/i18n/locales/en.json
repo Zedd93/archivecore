@@ -190,9 +190,9 @@
       "title": "New order",
       "type": "Order type *",
       "priority": "Priority",
-      "priorityNormal": "Normal (24h)",
-      "priorityHigh": "High (8h)",
-      "priorityUrgent": "Urgent (4h)",
+      "priorityNormal": "Normal (48h)",
+      "priorityHigh": "High (24h)",
+      "priorityUrgent": "Maximum (8h)",
       "boxIds": "Boxes *",
       "boxIdsPlaceholder": "Search by box number, e.g. K-2026-000001",
       "notes": "Notes",
@@ -230,6 +230,7 @@
     "itemType": "Type",
     "borrower": "Borrower",
     "borrowedAt": "Borrowed at",
+    "expectedReturnAt": "Expected return",
     "documentSearchPlaceholder": "Search document by title or description...",
     "itemTypes": {
       "box": "Box",
@@ -243,6 +244,7 @@
       "title": "Request a loan",
       "boxes": "Boxes to borrow",
       "documents": "Documents to borrow",
+      "expectedReturnAt": "Proposed return date",
       "notesPlaceholder": "Reason / notes for the loan...",
       "submit": "Create request"
     }
@@ -954,7 +956,7 @@
     "priority": {
       "normal": "Normal",
       "high": "High",
-      "urgent": "Urgent"
+      "urgent": "Maximum"
     },
     "employment": {
       "active": "Employed",

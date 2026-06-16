@@ -524,20 +524,21 @@ model HRDocument {
 }
 
 model Order {
-  id          String        @id @default(uuid()) @db.Uuid
-  tenantId    String        @db.Uuid
-  orderNumber String        @unique @db.VarChar(50)
-  orderType   OrderType
-  status      OrderStatus   @default(draft)
-  priority    OrderPriority @default(normal)
-  requestedBy String        @db.Uuid
-  approvedBy  String?       @db.Uuid
-  assignedTo  String?       @db.Uuid
-  slaDeadline DateTime?
-  completedAt DateTime?
-  notes       String?       @db.Text
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id               String        @id @default(uuid()) @db.Uuid
+  tenantId         String        @db.Uuid
+  orderNumber      String        @unique @db.VarChar(50)
+  orderType        OrderType
+  status           OrderStatus   @default(draft)
+  priority         OrderPriority @default(normal)
+  requestedBy      String        @db.Uuid
+  approvedBy       String?       @db.Uuid
+  assignedTo       String?       @db.Uuid
+  slaDeadline      DateTime?
+  expectedReturnAt DateTime?
+  completedAt      DateTime?
+  notes            String?       @db.Text
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   requester     User           @relation("OrderRequester", fields: [requestedBy], references: [id])
@@ -549,6 +550,7 @@ model Order {
   @@index([tenantId, status])
   @@index([orderNumber])
   @@index([slaDeadline])
+  @@index([expectedReturnAt])
   @@map("orders")
 }
 

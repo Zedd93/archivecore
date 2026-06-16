@@ -267,6 +267,12 @@ export default function OrderDetailPage() {
                   {order.slaDeadline ? new Date(order.slaDeadline).toLocaleString('pl-PL') : '—'}
                 </dd>
               </div>
+              {order.expectedReturnAt && (
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">{t('loans.expectedReturnAt')}</dt>
+                  <dd>{new Date(order.expectedReturnAt).toLocaleDateString('pl-PL')}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('boxes.createdAt')}</dt>
                 <dd>{new Date(order.createdAt).toLocaleString('pl-PL')}</dd>

@@ -14,6 +14,7 @@ const orderItemSchema = z.object({
 export const createOrderSchema = z.object({
   orderType: z.enum(['checkout', 'return_order', 'transfer', 'disposal']),
   priority: z.enum(['normal', 'high', 'urgent']).default('normal'),
+  expectedReturnAt: z.string().min(1).optional(),
   notes: z.string().optional(),
   items: z.array(orderItemSchema).min(1, 'Zlecenie musi zawierać co najmniej jedną pozycję'),
 });

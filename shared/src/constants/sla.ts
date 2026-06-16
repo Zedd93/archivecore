@@ -6,10 +6,9 @@ export interface ISlaLevel {
 }
 
 export const SLA_LEVELS: ISlaLevel[] = [
-  { code: 'standard', label: 'Standardowy', hours: 24, description: '24 godziny robocze' },
-  { code: 'high', label: 'Wysoki', hours: 8, description: '8 godzin roboczych' },
-  { code: 'urgent', label: 'Pilny', hours: 4, description: '4 godziny robocze' },
-  { code: 'express', label: 'Ekspresowy', hours: 2, description: '2 godziny robocze' },
+  { code: 'normal', label: 'Normalny', hours: 48, description: '48 godzin roboczych' },
+  { code: 'high', label: 'Wysoki', hours: 24, description: '24 godziny robocze' },
+  { code: 'urgent', label: 'Maksymalny', hours: 8, description: '8 godzin roboczych' },
 ];
 
 export const BUSINESS_HOURS = {

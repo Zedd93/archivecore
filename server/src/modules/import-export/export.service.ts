@@ -59,6 +59,7 @@ const ORDER_COLUMNS: ExportColumn[] = [
   { header: 'Realizujący', key: 'assignee', transform: (_v, row) => row.assignee ? `${row.assignee.firstName} ${row.assignee.lastName}` : '' },
   { header: 'Uwagi', key: 'notes' },
   { header: 'Termin SLA', key: 'slaDeadline', transform: (v) => v ? new Date(v).toISOString().replace('T', ' ').substring(0, 19) : '' },
+  { header: 'Planowany zwrot', key: 'expectedReturnAt', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Liczba pozycji', key: 'itemsCount', transform: (_v, row) => row._count?.items ?? 0 },
   { header: 'Data utworzenia', key: 'createdAt', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Data zakończenia', key: 'completedAt', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
