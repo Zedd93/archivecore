@@ -112,6 +112,59 @@ export class BoxService {
       ];
     }
 
+    if (filters.search && !filters.sortBy) {
+      const rawSearch = String(filters.search).trim();
+      const lowerSearch = rawSearch.toLowerCase();
+      const startsWithSearch = `${lowerSearch}%`;
+      const containsSearch = `%${lowerSearch}%`;
+      const whereSql = buildBoxWhereSql(filters, tenantId, department, locationIds);
+
+      const [sortedIds, total] = await Promise.all([
+        prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+          SELECT "id"
+          FROM "boxes"
+          WHERE ${whereSql}
+          ORDER BY
+            CASE
+              WHEN lower("boxNumber") = ${lowerSearch}
+                OR lower("title") = ${lowerSearch}
+                OR lower("qrCode") = ${lowerSearch}
+                THEN 0
+              WHEN lower("boxNumber") LIKE ${startsWithSearch}
+                OR lower("title") LIKE ${startsWithSearch}
+                THEN 1
+              WHEN lower("boxNumber") LIKE ${containsSearch}
+                OR lower("title") LIKE ${containsSearch}
+                OR lower("qrCode") LIKE ${containsSearch}
+                THEN 2
+              ELSE 3
+            END ASC,
+            regexp_replace(lower("title"), '[0-9]+$', '') ASC,
+            COALESCE(NULLIF(substring("title" from '[0-9]+$'), '')::bigint, 0) ASC,
+            regexp_replace("boxNumber", '[0-9]+$', '') ASC,
+            COALESCE(NULLIF(substring("boxNumber" from '[0-9]+$'), '')::bigint, 0) ASC,
+            "boxNumber" ASC
+          OFFSET ${skip}
+          LIMIT ${take}
+        `),
+        prisma.box.count({ where }),
+      ]);
+
+      const ids = sortedIds.map(row => row.id);
+      if (ids.length === 0) return { data: [], total };
+
+      const rows = await prisma.box.findMany({
+        where: { id: { in: ids } },
+        include: {
+          location: { select: { id: true, fullPath: true, code: true } },
+          tenant: { select: { id: true, name: true, shortCode: true } },
+          _count: { select: { folders: true, documents: true, attachments: true, transferListItems: true } },
+        },
+      });
+      const rowById = new Map(rows.map(row => [row.id, row]));
+      return { data: ids.map(id => rowById.get(id)).filter(Boolean), total };
+    }
+
     if (sortBy === 'boxNumber') {
       const sortDirection = sortOrder === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
       const whereSql = buildBoxWhereSql(filters, tenantId, department, locationIds);
