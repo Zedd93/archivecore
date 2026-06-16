@@ -553,27 +553,30 @@ model Order {
 }
 
 model OrderItem {
-  id          String          @id @default(uuid()) @db.Uuid
-  orderId     String          @db.Uuid
-  boxId       String?         @db.Uuid
-  folderId    String?         @db.Uuid
-  documentId  String?         @db.Uuid
-  hrFolderId  String?         @db.Uuid
-  itemStatus  OrderItemStatus @default(pending)
-  pickedAt    DateTime?
-  deliveredAt DateTime?
-  pickedById  String?         @db.Uuid
+  id                 String          @id @default(uuid()) @db.Uuid
+  orderId            String          @db.Uuid
+  boxId              String?         @db.Uuid
+  folderId           String?         @db.Uuid
+  documentId         String?         @db.Uuid
+  transferListItemId String?         @db.Uuid
+  hrFolderId         String?         @db.Uuid
+  itemStatus         OrderItemStatus @default(pending)
+  pickedAt           DateTime?
+  deliveredAt        DateTime?
+  pickedById         String?         @db.Uuid
 
-  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  box      Box?      @relation(fields: [boxId], references: [id])
-  folder   Folder?   @relation(fields: [folderId], references: [id])
-  document Document? @relation(fields: [documentId], references: [id])
-  hrFolder HRFolder? @relation(fields: [hrFolderId], references: [id])
-  picker   User?     @relation("ItemPicker", fields: [pickedById], references: [id])
+  order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  box              Box?              @relation(fields: [boxId], references: [id])
+  folder           Folder?           @relation(fields: [folderId], references: [id])
+  document         Document?         @relation(fields: [documentId], references: [id])
+  transferListItem TransferListItem? @relation(fields: [transferListItemId], references: [id])
+  hrFolder         HRFolder?         @relation(fields: [hrFolderId], references: [id])
+  picker           User?             @relation("ItemPicker", fields: [pickedById], references: [id])
 
   @@index([orderId])
   @@index([boxId])
   @@index([documentId])
+  @@index([transferListItemId])
   @@map("order_items")
 }
 
@@ -779,6 +782,7 @@ model TransferListItem {
 
   transferList TransferList @relation(fields: [transferListId], references: [id], onDelete: Cascade)
   box          Box?         @relation(fields: [boxId], references: [id])
+  orderItems   OrderItem[]
 
   @@index([transferListId])
   @@index([boxId])

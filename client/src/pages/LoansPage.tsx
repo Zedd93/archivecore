@@ -19,12 +19,14 @@ interface SelectedBox {
 interface SelectedDocument {
   id: string;
   title: string;
+  source?: 'document' | 'transfer_list_item';
 }
 
 const ITEM_TYPE_ICON: Record<string, React.ReactNode> = {
   box: <Box size={16} className="text-blue-500" />,
   folder: <ArchiveRestore size={16} className="text-yellow-600" />,
   document: <FileText size={16} className="text-green-600" />,
+  transfer_list_item: <FileText size={16} className="text-green-600" />,
   hr_folder: <FileText size={16} className="text-purple-600" />,
 };
 
@@ -58,7 +60,11 @@ export default function LoansPage() {
     e.preventDefault();
     const items = [
       ...selectedBoxes.map((box) => ({ boxId: box.id })),
-      ...selectedDocuments.map((doc) => ({ documentId: doc.id })),
+      ...selectedDocuments.map((doc) => (
+        doc.source === 'transfer_list_item'
+          ? { transferListItemId: doc.id }
+          : { documentId: doc.id }
+      )),
     ];
     if (items.length === 0) return;
 

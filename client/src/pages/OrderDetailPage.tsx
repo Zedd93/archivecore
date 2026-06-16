@@ -220,6 +220,15 @@ export default function OrderDetailPage() {
                         )}
                       </div>
                     )}
+                    {item.transferListItem && (
+                      <div className="text-sm">
+                        <span className="font-mono font-medium text-green-700">{item.transferListItem.folderSignature}</span>
+                        <span className="text-gray-500 ml-2">{item.transferListItem.folderTitle}</span>
+                        {item.transferListItem.box?.boxNumber && (
+                          <span className="text-xs text-gray-400 ml-2">📦 {item.transferListItem.box.boxNumber}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <StatusBadge status={item.itemStatus} type="orderItem" />
                 </div>

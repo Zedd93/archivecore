@@ -8,8 +8,10 @@ interface SelectedDocument {
   id: string;
   title: string;
   docType?: string | null;
+  source?: 'document' | 'transfer_list_item';
   box?: { id: string; boxNumber: string } | null;
   folder?: { id: string; folderNumber: string; title?: string | null } | null;
+  transferList?: { id: string; listNumber: string; title: string } | null;
 }
 
 interface DocumentPickerProps {
@@ -60,13 +62,13 @@ export default function DocumentPicker({
   const { data: results = [], isFetching } = useQuery({
     queryKey: ['document-picker', debouncedSearch],
     queryFn: async () => {
-      if (!debouncedSearch || debouncedSearch.length < 2) return [];
+      if (!debouncedSearch.trim()) return [];
       const { data } = await api.get('/documents', {
-        params: { search: debouncedSearch, limit: 10 },
+        params: { search: debouncedSearch, limit: 10, loanable: true },
       });
       return (data.data || []) as SelectedDocument[];
     },
-    enabled: debouncedSearch.length >= 2,
+    enabled: debouncedSearch.trim().length >= 1,
     staleTime: 30_000,
   });
 
@@ -78,8 +80,10 @@ export default function DocumentPicker({
       id: doc.id,
       title: doc.title,
       docType: doc.docType,
+      source: doc.source || 'document',
       box: doc.box,
       folder: doc.folder,
+      transferList: doc.transferList,
     };
     onChange(maxSelected === 1 ? [selected] : [...value, selected]);
     setSearch('');
@@ -150,7 +154,12 @@ export default function DocumentPicker({
               >
                 <div className="text-sm font-medium text-gray-900 truncate">{doc.title}</div>
                 <div className="text-xs text-gray-500 truncate">
-                  {doc.box?.boxNumber || doc.folder?.folderNumber || t('common.noData', 'Brak danych')}
+                  {[
+                    doc.source === 'transfer_list_item' ? t('boxes.transferListItems', 'Pozycja spisu ZO') : t('loans.itemTypes.document'),
+                    doc.folder?.folderNumber,
+                    doc.box?.boxNumber,
+                    doc.transferList?.listNumber,
+                  ].filter(Boolean).join(' | ') || t('common.noData', 'Brak danych')}
                 </div>
               </button>
             ))

@@ -235,6 +235,7 @@
       "box": "Box",
       "folder": "Folder",
       "document": "Document",
+      "transfer_list_item": "Transfer list item",
       "hr_folder": "HR record",
       "unknown": "Item"
     },

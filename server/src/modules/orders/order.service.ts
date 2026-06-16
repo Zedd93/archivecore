@@ -121,6 +121,26 @@ export class OrderService {
       };
     }
 
+    if (item.transferListItemId) {
+      const transferListItem = await prisma.transferListItem.findFirst({
+        where: {
+          id: item.transferListItemId,
+          transferList: { tenantId },
+          ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!transferListItem) {
+        throw Object.assign(new Error('Pozycja spisu nie istnieje albo nie masz do niej dostępu'), { statusCode: 404 });
+      }
+
+      return {
+        transferListItemId: transferListItem.id,
+        itemStatus: OrderItemStatus.pending,
+      };
+    }
+
     return {
       folderId: item.folderId,
       hrFolderId: item.hrFolderId,
@@ -180,6 +200,16 @@ export class OrderService {
                 docType: true,
                 box: { select: { id: true, boxNumber: true, title: true } },
                 folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+              },
+            },
+            transferListItem: {
+              select: {
+                id: true,
+                folderSignature: true,
+                folderTitle: true,
+                categoryCode: true,
+                box: { select: { id: true, boxNumber: true, title: true } },
+                transferList: { select: { id: true, listNumber: true, title: true } },
               },
             },
             hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
@@ -265,6 +295,16 @@ export class OrderService {
             folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
           },
         },
+        transferListItem: {
+          select: {
+            id: true,
+            folderSignature: true,
+            folderTitle: true,
+            categoryCode: true,
+            box: { select: { id: true, boxNumber: true, title: true } },
+            transferList: { select: { id: true, listNumber: true, title: true } },
+          },
+        },
         hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
         picker: { select: { id: true, firstName: true, lastName: true } },
       },
@@ -331,7 +371,7 @@ export class OrderService {
     const deliveredAt = new Date();
     const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
     const boxIds = order.items.map((item: any) => (
-      item.boxId || item.folder?.box?.id || item.document?.box?.id || item.document?.folder?.box?.id
+      item.boxId || item.folder?.box?.id || item.document?.box?.id || item.document?.folder?.box?.id || item.transferListItem?.box?.id
     )).filter(Boolean);
     const boxStatus = order.orderType === 'checkout'
       ? 'checked_out'
@@ -465,6 +505,7 @@ export class OrderService {
             { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
             { document: { box: { department: { equals: department, mode: 'insensitive' } } } },
             { document: { folder: { box: { department: { equals: department, mode: 'insensitive' } } } } },
+            { transferListItem: { box: { department: { equals: department, mode: 'insensitive' } } } },
           ],
         } : {}),
       },
@@ -492,6 +533,16 @@ export class OrderService {
             folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } } } },
           },
         },
+        transferListItem: {
+          select: {
+            id: true,
+            folderSignature: true,
+            folderTitle: true,
+            categoryCode: true,
+            box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } },
+            transferList: { select: { id: true, listNumber: true, title: true } },
+          },
+        },
         hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true, box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } } } },
       },
       orderBy: { deliveredAt: 'desc' },
@@ -510,6 +561,7 @@ export class OrderService {
         boxId: true,
         folderId: true,
         documentId: true,
+        transferListItemId: true,
         hrFolderId: true,
         deliveredAt: true,
       },
@@ -520,8 +572,9 @@ export class OrderService {
       const key = item.boxId ? `box:${item.boxId}`
         : item.folderId ? `folder:${item.folderId}`
           : item.documentId ? `document:${item.documentId}`
-            : item.hrFolderId ? `hr:${item.hrFolderId}`
-              : null;
+            : item.transferListItemId ? `transferListItem:${item.transferListItemId}`
+              : item.hrFolderId ? `hr:${item.hrFolderId}`
+                : null;
       if (!key || !item.deliveredAt) continue;
       const current = returnedAfter.get(key);
       if (!current || item.deliveredAt > current) returnedAfter.set(key, item.deliveredAt);
@@ -529,12 +582,13 @@ export class OrderService {
 
     return checkoutItems
       .filter((item) => {
-        const parentBox = item.box || item.folder?.box || item.document?.box || item.document?.folder?.box || item.hrFolder?.box || null;
+        const parentBox = item.box || item.folder?.box || item.document?.box || item.document?.folder?.box || item.transferListItem?.box || item.hrFolder?.box || null;
         const key = item.boxId ? `box:${item.boxId}`
           : item.folderId ? `folder:${item.folderId}`
             : item.documentId ? `document:${item.documentId}`
-              : item.hrFolderId ? `hr:${item.hrFolderId}`
-                : null;
+              : item.transferListItemId ? `transferListItem:${item.transferListItemId}`
+                : item.hrFolderId ? `hr:${item.hrFolderId}`
+                  : null;
         if (!key || !item.deliveredAt) return false;
         const returnedAt = returnedAfter.get(key);
         const parentBoxReturnedAt = parentBox ? returnedAfter.get(`box:${parentBox.id}`) : undefined;
@@ -544,17 +598,19 @@ export class OrderService {
           && (!parentFolderReturnedAt || parentFolderReturnedAt < item.deliveredAt);
       })
       .map((item) => {
-        const parentBox = item.box || item.folder?.box || item.document?.box || item.document?.folder?.box || item.hrFolder?.box || null;
+        const parentBox = item.box || item.folder?.box || item.document?.box || item.document?.folder?.box || item.transferListItem?.box || item.hrFolder?.box || null;
         const itemType = item.box ? 'box'
           : item.folder ? 'folder'
             : item.document ? 'document'
-              : item.hrFolder ? 'hr_folder'
-                : 'unknown';
+              : item.transferListItem ? 'transfer_list_item'
+                : item.hrFolder ? 'hr_folder'
+                  : 'unknown';
         const title = item.box ? `${item.box.boxNumber} — ${item.box.title}`
           : item.folder ? `${item.folder.folderNumber} — ${item.folder.title}`
             : item.document ? item.document.title
-              : item.hrFolder ? `${item.hrFolder.employeeLastName} ${item.hrFolder.employeeFirstName}`
-                : '—';
+              : item.transferListItem ? `${item.transferListItem.folderSignature} — ${item.transferListItem.folderTitle}`
+                : item.hrFolder ? `${item.hrFolder.employeeLastName} ${item.hrFolder.employeeFirstName}`
+                  : '—';
 
         return {
           id: item.id,

@@ -235,6 +235,7 @@
       "box": "Karton",
       "folder": "Teczka",
       "document": "Dokument",
+      "transfer_list_item": "Pozycja spisu ZO",
       "hr_folder": "Akta osobowe",
       "unknown": "Pozycja"
     },

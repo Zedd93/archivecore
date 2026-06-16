@@ -5,8 +5,9 @@ const orderItemSchema = z.object({
   boxNumber: z.string().min(1).max(50).optional(),
   folderId: z.string().uuid().optional(),
   documentId: z.string().uuid().optional(),
+  transferListItemId: z.string().uuid().optional(),
   hrFolderId: z.string().uuid().optional(),
-}).refine((item) => item.boxId || item.boxNumber || item.folderId || item.documentId || item.hrFolderId, {
+}).refine((item) => item.boxId || item.boxNumber || item.folderId || item.documentId || item.transferListItemId || item.hrFolderId, {
   message: 'Pozycja musi wskazywać karton, teczkę, dokument albo akta osobowe',
 });
 
