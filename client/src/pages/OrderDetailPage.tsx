@@ -205,6 +205,21 @@ export default function OrderDetailPage() {
                         <span className="text-gray-500 ml-2">{t('hr.title')}</span>
                       </div>
                     )}
+                    {item.folder && (
+                      <div className="text-sm">
+                        <span className="font-mono font-medium text-yellow-700">{item.folder.folderNumber}</span>
+                        <span className="text-gray-500 ml-2">{item.folder.title}</span>
+                        {item.folder.box?.boxNumber && <span className="text-xs text-gray-400 ml-2">📦 {item.folder.box.boxNumber}</span>}
+                      </div>
+                    )}
+                    {item.document && (
+                      <div className="text-sm">
+                        <span className="font-medium text-green-700">{item.document.title}</span>
+                        {(item.document.box?.boxNumber || item.document.folder?.box?.boxNumber) && (
+                          <span className="text-xs text-gray-400 ml-2">📦 {item.document.box?.boxNumber || item.document.folder?.box?.boxNumber}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <StatusBadge status={item.itemStatus} type="orderItem" />
                 </div>

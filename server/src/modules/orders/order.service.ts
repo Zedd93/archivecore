@@ -96,6 +96,31 @@ export class OrderService {
       };
     }
 
+    if (item.documentId) {
+      const document = await prisma.document.findFirst({
+        where: {
+          id: item.documentId,
+          tenantId,
+          ...(department ? {
+            OR: [
+              { box: { department: { equals: department, mode: 'insensitive' } } },
+              { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+            ],
+          } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!document) {
+        throw Object.assign(new Error('Dokument nie istnieje albo nie masz do niego dostępu'), { statusCode: 404 });
+      }
+
+      return {
+        documentId: document.id,
+        itemStatus: OrderItemStatus.pending,
+      };
+    }
+
     return {
       folderId: item.folderId,
       hrFolderId: item.hrFolderId,
@@ -147,7 +172,16 @@ export class OrderService {
         items: {
           include: {
             box: { select: { id: true, boxNumber: true, title: true, status: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
-            folder: { select: { id: true, folderNumber: true, title: true } },
+            folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+            document: {
+              select: {
+                id: true,
+                title: true,
+                docType: true,
+                box: { select: { id: true, boxNumber: true, title: true } },
+                folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+              },
+            },
             hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
             picker: { select: { id: true, firstName: true, lastName: true } },
           },
@@ -221,7 +255,16 @@ export class OrderService {
       },
       include: {
         box: { select: { id: true, boxNumber: true, title: true, status: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
-        folder: { select: { id: true, folderNumber: true, title: true } },
+        folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+        document: {
+          select: {
+            id: true,
+            title: true,
+            docType: true,
+            box: { select: { id: true, boxNumber: true, title: true } },
+            folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+          },
+        },
         hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
         picker: { select: { id: true, firstName: true, lastName: true } },
       },
@@ -287,7 +330,9 @@ export class OrderService {
 
     const deliveredAt = new Date();
     const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
-    const boxIds = order.items.map((item: any) => item.boxId).filter(Boolean);
+    const boxIds = order.items.map((item: any) => (
+      item.boxId || item.folder?.box?.id || item.document?.box?.id || item.document?.folder?.box?.id
+    )).filter(Boolean);
     const boxStatus = order.orderType === 'checkout'
       ? 'checked_out'
       : order.orderType === 'return_order'
@@ -403,6 +448,125 @@ export class OrderService {
         _count: { select: { items: true } },
       },
     });
+  }
+
+  async getActiveLoans(tenantId: string, department?: string) {
+    const checkoutItems = await prisma.orderItem.findMany({
+      where: {
+        itemStatus: OrderItemStatus.delivered,
+        order: {
+          tenantId,
+          orderType: 'checkout',
+          status: { in: ['delivered', 'completed'] },
+        },
+        ...(department ? {
+          OR: [
+            { box: { department: { equals: department, mode: 'insensitive' } } },
+            { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+            { document: { box: { department: { equals: department, mode: 'insensitive' } } } },
+            { document: { folder: { box: { department: { equals: department, mode: 'insensitive' } } } } },
+          ],
+        } : {}),
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            requestedBy: true,
+            requester: { select: { id: true, firstName: true, lastName: true, email: true } },
+            assignee: { select: { id: true, firstName: true, lastName: true } },
+            completedAt: true,
+            createdAt: true,
+            status: true,
+          },
+        },
+        box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } },
+        folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } } } },
+        document: {
+          select: {
+            id: true,
+            title: true,
+            docType: true,
+            box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } },
+            folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } } } },
+          },
+        },
+        hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true, box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } } } },
+      },
+      orderBy: { deliveredAt: 'desc' },
+    });
+
+    const returnItems = await prisma.orderItem.findMany({
+      where: {
+        itemStatus: OrderItemStatus.returned,
+        order: {
+          tenantId,
+          orderType: 'return_order',
+          status: { in: ['delivered', 'completed'] },
+        },
+      },
+      select: {
+        boxId: true,
+        folderId: true,
+        documentId: true,
+        hrFolderId: true,
+        deliveredAt: true,
+      },
+    });
+
+    const returnedAfter = new Map<string, Date>();
+    for (const item of returnItems) {
+      const key = item.boxId ? `box:${item.boxId}`
+        : item.folderId ? `folder:${item.folderId}`
+          : item.documentId ? `document:${item.documentId}`
+            : item.hrFolderId ? `hr:${item.hrFolderId}`
+              : null;
+      if (!key || !item.deliveredAt) continue;
+      const current = returnedAfter.get(key);
+      if (!current || item.deliveredAt > current) returnedAfter.set(key, item.deliveredAt);
+    }
+
+    return checkoutItems
+      .filter((item) => {
+        const parentBox = item.box || item.folder?.box || item.document?.box || item.document?.folder?.box || item.hrFolder?.box || null;
+        const key = item.boxId ? `box:${item.boxId}`
+          : item.folderId ? `folder:${item.folderId}`
+            : item.documentId ? `document:${item.documentId}`
+              : item.hrFolderId ? `hr:${item.hrFolderId}`
+                : null;
+        if (!key || !item.deliveredAt) return false;
+        const returnedAt = returnedAfter.get(key);
+        const parentBoxReturnedAt = parentBox ? returnedAfter.get(`box:${parentBox.id}`) : undefined;
+        const parentFolderReturnedAt = item.document?.folder?.id ? returnedAfter.get(`folder:${item.document.folder.id}`) : undefined;
+        return (!returnedAt || returnedAt < item.deliveredAt)
+          && (!parentBoxReturnedAt || parentBoxReturnedAt < item.deliveredAt)
+          && (!parentFolderReturnedAt || parentFolderReturnedAt < item.deliveredAt);
+      })
+      .map((item) => {
+        const parentBox = item.box || item.folder?.box || item.document?.box || item.document?.folder?.box || item.hrFolder?.box || null;
+        const itemType = item.box ? 'box'
+          : item.folder ? 'folder'
+            : item.document ? 'document'
+              : item.hrFolder ? 'hr_folder'
+                : 'unknown';
+        const title = item.box ? `${item.box.boxNumber} — ${item.box.title}`
+          : item.folder ? `${item.folder.folderNumber} — ${item.folder.title}`
+            : item.document ? item.document.title
+              : item.hrFolder ? `${item.hrFolder.employeeLastName} ${item.hrFolder.employeeFirstName}`
+                : '—';
+
+        return {
+          id: item.id,
+          itemType,
+          title,
+          deliveredAt: item.deliveredAt,
+          status: item.itemStatus,
+          order: item.order,
+          box: parentBox,
+          location: parentBox?.location?.fullPath || null,
+        };
+      });
   }
 }
 

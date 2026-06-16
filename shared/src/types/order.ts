@@ -34,6 +34,7 @@ export interface IOrderItem {
   orderId: string;
   boxId: string | null;
   folderId: string | null;
+  documentId: string | null;
   hrFolderId: string | null;
   itemStatus: OrderItemStatus;
   pickedAt: string | null;
@@ -45,7 +46,7 @@ export interface ICreateOrder {
   orderType: OrderType;
   priority?: OrderPriority;
   notes?: string;
-  items: { boxId?: string; boxNumber?: string; folderId?: string; hrFolderId?: string }[];
+  items: { boxId?: string; boxNumber?: string; folderId?: string; documentId?: string; hrFolderId?: string }[];
 }
 
 export interface ICustodyEvent {

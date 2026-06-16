@@ -221,6 +221,32 @@
     }
   },
 
+  "loans": {
+    "title": "Loans",
+    "subtitle": "Control documents, folders and boxes borrowed from the company archive",
+    "newRequest": "New loan request",
+    "empty": "No active loans",
+    "requestCreated": "Loan request created",
+    "itemType": "Type",
+    "borrower": "Borrower",
+    "borrowedAt": "Borrowed at",
+    "documentSearchPlaceholder": "Search document by title or description...",
+    "itemTypes": {
+      "box": "Box",
+      "folder": "Folder",
+      "document": "Document",
+      "hr_folder": "HR record",
+      "unknown": "Item"
+    },
+    "createModal": {
+      "title": "Request a loan",
+      "boxes": "Boxes to borrow",
+      "documents": "Documents to borrow",
+      "notesPlaceholder": "Reason / notes for the loan...",
+      "submit": "Create request"
+    }
+  },
+
   "hr": {
     "title": "HR Records",
     "subtitle": "Compliant with MRPiPS 2018 Regulation (amended 2023)",
@@ -805,6 +831,7 @@
       "dashboard": "Dashboard",
       "boxes": "Boxes",
       "locations": "Locations",
+      "loans": "Loans",
       "orders": "Orders",
       "hr": "Personnel Files",
       "labels": "QR Labels",

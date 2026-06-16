@@ -128,6 +128,14 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async getActiveLoans(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const loans = await orderService.getActiveLoans(req.tenantId, req.accessDepartment || undefined);
+      return successResponse(res, loans);
+    } catch (err) { next(err); }
+  }
+
   async createCustodyEvent(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

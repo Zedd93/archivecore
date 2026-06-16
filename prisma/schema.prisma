@@ -409,6 +409,7 @@ model Document {
   box         Box?         @relation(fields: [boxId], references: [id])
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   attachments Attachment[] @relation("DocumentAttachments")
+  orderItems  OrderItem[]
 
   @@index([folderId])
   @@index([boxId])
@@ -556,6 +557,7 @@ model OrderItem {
   orderId     String          @db.Uuid
   boxId       String?         @db.Uuid
   folderId    String?         @db.Uuid
+  documentId  String?         @db.Uuid
   hrFolderId  String?         @db.Uuid
   itemStatus  OrderItemStatus @default(pending)
   pickedAt    DateTime?
@@ -565,11 +567,13 @@ model OrderItem {
   order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   box      Box?      @relation(fields: [boxId], references: [id])
   folder   Folder?   @relation(fields: [folderId], references: [id])
+  document Document? @relation(fields: [documentId], references: [id])
   hrFolder HRFolder? @relation(fields: [hrFolderId], references: [id])
   picker   User?     @relation("ItemPicker", fields: [pickedById], references: [id])
 
   @@index([orderId])
   @@index([boxId])
+  @@index([documentId])
   @@map("order_items")
 }
 

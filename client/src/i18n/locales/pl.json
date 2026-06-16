@@ -221,6 +221,32 @@
     }
   },
 
+  "loans": {
+    "title": "Wypożyczenia",
+    "subtitle": "Kontrola dokumentów, teczek i kartonów wypożyczonych z archiwum zakładowego",
+    "newRequest": "Nowe wypożyczenie",
+    "empty": "Brak aktywnych wypożyczeń",
+    "requestCreated": "Zgłoszenie wypożyczenia utworzone",
+    "itemType": "Typ",
+    "borrower": "Wypożyczający",
+    "borrowedAt": "Wypożyczono",
+    "documentSearchPlaceholder": "Szukaj dokumentu po tytule lub opisie...",
+    "itemTypes": {
+      "box": "Karton",
+      "folder": "Teczka",
+      "document": "Dokument",
+      "hr_folder": "Akta osobowe",
+      "unknown": "Pozycja"
+    },
+    "createModal": {
+      "title": "Zgłoś wypożyczenie",
+      "boxes": "Kartony do wypożyczenia",
+      "documents": "Dokumenty do wypożyczenia",
+      "notesPlaceholder": "Uzasadnienie / uwagi do wypożyczenia...",
+      "submit": "Utwórz zgłoszenie"
+    }
+  },
+
   "hr": {
     "title": "Akta osobowe",
     "subtitle": "Zgodne z Rozporządzeniem MRPiPS 2018 (znow. 2023)",
@@ -805,6 +831,7 @@
       "dashboard": "Dashboard",
       "boxes": "Kartony",
       "locations": "Lokalizacje",
+      "loans": "Wypożyczenia",
       "orders": "Zlecenia",
       "hr": "Akta Osobowe",
       "labels": "Etykiety QR",
