@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -44,13 +44,19 @@ export default function DataTable<T extends Record<string, any>>({
   onSortChange,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const getItemId = (item: T, index: number) => rowKey ? rowKey(item) : item.id || String(index);
+
+  useEffect(() => {
+    setLastSelectedIndex(null);
+  }, [data]);
 
   const allSelected = selectable && data.length > 0 && data.every((item, i) => selectedIds?.has(getItemId(item, i)));
   const someSelected = selectable && data.some((item, i) => selectedIds?.has(getItemId(item, i)));
 
   const handleSelectAll = () => {
     if (!onSelectionChange) return;
+    setLastSelectedIndex(null);
     if (allSelected) {
       // Deselect all on current page
       const newSet = new Set(selectedIds);
@@ -64,14 +70,26 @@ export default function DataTable<T extends Record<string, any>>({
     }
   };
 
-  const handleSelectRow = (id: string) => {
+  const handleSelectRow = (id: string, index: number, shiftKey: boolean) => {
     if (!onSelectionChange) return;
     const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
+
+    if (shiftKey && lastSelectedIndex !== null) {
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const shouldSelectRange = !newSet.has(id);
+      data.slice(start, end + 1).forEach((item, offset) => {
+        const itemId = getItemId(item, start + offset);
+        if (shouldSelectRange) newSet.add(itemId);
+        else newSet.delete(itemId);
+      });
+    } else if (newSet.has(id)) {
       newSet.delete(id);
     } else {
       newSet.add(id);
     }
+
+    setLastSelectedIndex(index);
     onSelectionChange(newSet);
   };
 
@@ -161,11 +179,11 @@ export default function DataTable<T extends Record<string, any>>({
                     <input
                       type="checkbox"
                       checked={isSelected || false}
-                      onChange={(e) => {
+                      onChange={() => {}}
+                      onClick={(e) => {
                         e.stopPropagation();
-                        handleSelectRow(id);
+                        handleSelectRow(id, i, e.shiftKey);
                       }}
-                      onClick={(e) => e.stopPropagation()}
                       className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       aria-label={`Select row ${i + 1}`}
                     />
