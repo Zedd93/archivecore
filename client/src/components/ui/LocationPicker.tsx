@@ -86,6 +86,15 @@ function flattenTree(nodes: LocationNode[], excludeTypes: string[], excludeIds: 
   return result;
 }
 
+function getParentPath(fullPath: string) {
+  const parts = fullPath.split(' > ');
+  return parts.length > 1 ? parts.slice(0, -1).join(' > ') : '';
+}
+
+function formatLocationLabel(loc: Pick<FlatLocation, 'code' | 'name'>) {
+  return `${loc.code} — ${loc.name}`;
+}
+
 export default function LocationPicker({
   id,
   value,
@@ -212,7 +221,8 @@ export default function LocationPicker({
     }
   }, [open]);
 
-  const displayValue = selectedLocation?.fullPath ?? '';
+  const displayValue = selectedLocation ? formatLocationLabel(selectedLocation) : '';
+  const selectedParentPath = selectedLocation ? getParentPath(selectedLocation.fullPath) : '';
   const placeholderText = placeholder ?? t('locations.pickLocation', 'Select location...');
   const dropdown = (
     <div
@@ -254,8 +264,13 @@ export default function LocationPicker({
               value === loc.id ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
             }`}
           >
-            <span className="flex-shrink-0">{TYPE_ICONS[loc.type] || '\u{1F4C1}'}</span>
-            <span className="flex-1 truncate">{loc.fullPath}</span>
+            <span className="flex-shrink-0 pt-0.5">{TYPE_ICONS[loc.type] || '\u{1F4C1}'}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{formatLocationLabel(loc)}</span>
+              <span className="block truncate text-xs text-gray-500" title={loc.fullPath}>
+                {getParentPath(loc.fullPath) || loc.fullPath}
+              </span>
+            </span>
             <span className={`flex-shrink-0 ${TYPE_BADGE_COLORS[loc.type] || 'badge-gray'} text-xs`}>
               {t(TYPE_LABEL_KEYS[loc.type] || loc.type)}
             </span>
@@ -275,11 +290,19 @@ export default function LocationPicker({
           className="input-field flex min-h-[42px] w-full items-center pl-9 pr-16 text-left"
           aria-haspopup="listbox"
           aria-expanded={open}
+          title={selectedLocation?.fullPath}
         >
           <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <span className={`block truncate ${displayValue ? 'text-gray-900' : 'text-gray-400'}`}>
-            {displayValue || placeholderText}
-          </span>
+          {selectedLocation ? (
+            <span className="block min-w-0">
+              <span className="block truncate text-gray-900">{displayValue}</span>
+              {selectedParentPath && (
+                <span className="block truncate text-xs text-gray-500">{selectedParentPath}</span>
+              )}
+            </span>
+          ) : (
+            <span className="block truncate text-gray-400">{placeholderText}</span>
+          )}
         </button>
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {isLoading && <Loader2 size={14} className="animate-spin text-gray-400" />}
