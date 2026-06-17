@@ -12,27 +12,55 @@ import { useTranslation } from 'react-i18next';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 
+const CHUNK_RELOAD_KEY = 'archivecore-chunk-reload-attempted';
+
+function isChunkLoadError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError/i.test(message);
+}
+
+function lazyWithReload<T extends { default: React.ComponentType<any> }>(
+  importer: () => Promise<T>
+) {
+  return lazy(() =>
+    importer()
+      .then((module) => {
+        sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+        return module;
+      })
+      .catch((error) => {
+        if (isChunkLoadError(error) && !sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+          sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+          window.location.reload();
+          return new Promise<T>(() => {});
+        }
+
+        throw error;
+      })
+  );
+}
+
 // Lazy-loaded pages (code-split chunks)
-const BoxListPage = lazy(() => import('@/pages/BoxListPage'));
-const BoxDetailPage = lazy(() => import('@/pages/BoxDetailPage'));
-const OrderListPage = lazy(() => import('@/pages/OrderListPage'));
-const OrderDetailPage = lazy(() => import('@/pages/OrderDetailPage'));
-const LoansPage = lazy(() => import('@/pages/LoansPage'));
-const HRListPage = lazy(() => import('@/pages/HRListPage'));
-const HRDetailPage = lazy(() => import('@/pages/HRDetailPage'));
-const LocationsPage = lazy(() => import('@/pages/LocationsPage'));
-const LabelsPage = lazy(() => import('@/pages/LabelsPage'));
-const SearchPage = lazy(() => import('@/pages/SearchPage'));
-const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
-const UsersPage = lazy(() => import('@/pages/admin/UsersPage'));
-const TenantsPage = lazy(() => import('@/pages/admin/TenantsPage'));
-const AuditPage = lazy(() => import('@/pages/admin/AuditPage'));
-const RetentionPage = lazy(() => import('@/pages/admin/RetentionPage'));
-const TransferListPage = lazy(() => import('@/pages/TransferListPage'));
-const TransferListDetailPage = lazy(() => import('@/pages/TransferListDetailPage'));
-const ImportPage = lazy(() => import('@/pages/ImportPage'));
-const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
-const PublicSharePage = lazy(() => import('@/pages/PublicSharePage'));
+const BoxListPage = lazyWithReload(() => import('@/pages/BoxListPage'));
+const BoxDetailPage = lazyWithReload(() => import('@/pages/BoxDetailPage'));
+const OrderListPage = lazyWithReload(() => import('@/pages/OrderListPage'));
+const OrderDetailPage = lazyWithReload(() => import('@/pages/OrderDetailPage'));
+const LoansPage = lazyWithReload(() => import('@/pages/LoansPage'));
+const HRListPage = lazyWithReload(() => import('@/pages/HRListPage'));
+const HRDetailPage = lazyWithReload(() => import('@/pages/HRDetailPage'));
+const LocationsPage = lazyWithReload(() => import('@/pages/LocationsPage'));
+const LabelsPage = lazyWithReload(() => import('@/pages/LabelsPage'));
+const SearchPage = lazyWithReload(() => import('@/pages/SearchPage'));
+const ReportsPage = lazyWithReload(() => import('@/pages/ReportsPage'));
+const UsersPage = lazyWithReload(() => import('@/pages/admin/UsersPage'));
+const TenantsPage = lazyWithReload(() => import('@/pages/admin/TenantsPage'));
+const AuditPage = lazyWithReload(() => import('@/pages/admin/AuditPage'));
+const RetentionPage = lazyWithReload(() => import('@/pages/admin/RetentionPage'));
+const TransferListPage = lazyWithReload(() => import('@/pages/TransferListPage'));
+const TransferListDetailPage = lazyWithReload(() => import('@/pages/TransferListDetailPage'));
+const ImportPage = lazyWithReload(() => import('@/pages/ImportPage'));
+const SettingsPage = lazyWithReload(() => import('@/pages/SettingsPage'));
+const PublicSharePage = lazyWithReload(() => import('@/pages/PublicSharePage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {

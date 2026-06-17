@@ -1,6 +1,5 @@
-const CACHE_NAME = 'archivecore-v5';
+const CACHE_NAME = 'archivecore-v6';
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/robots.txt',
   '/icons/icon.svg',
@@ -8,7 +7,7 @@ const STATIC_ASSETS = [
   '/icons/icon-512.png',
 ];
 
-// Install — cache static shell
+// Install — cache static assets only. HTML must stay network-first after deploys.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -40,10 +39,10 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   if (request.url.includes('/api/')) return;
 
-  // For navigation requests — network first, fallback to cached index
+  // For navigation requests — always prefer the network so the app shell updates after deploys.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/'))
+      fetch(request)
     );
     return;
   }

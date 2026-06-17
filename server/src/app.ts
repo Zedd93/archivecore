@@ -82,7 +82,21 @@ app.get('/api/public/share/:token', ShareLinkController.publicAccess);
 // ─── Serve React Frontend in Production ──────────────────
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(__dirname, '../../client/dist');
-  app.use(express.static(clientDist));
+  app.use(express.static(clientDist, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store');
+        return;
+      }
+
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return;
+      }
+
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    },
+  }));
 
   // All non-API routes → React index.html (SPA)
   app.get('*', (_req, res) => {
@@ -93,6 +107,7 @@ if (config.nodeEnv === 'production') {
         path: _req.originalUrl,
       });
     }
+    res.setHeader('Cache-Control', 'no-store');
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 } else {
