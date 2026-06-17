@@ -79,7 +79,8 @@ export default function ReportsPage() {
     if (pct > 70) return 'bg-yellow-50 text-yellow-700 ring-yellow-200';
     return 'bg-green-50 text-green-700 ring-green-200';
   };
-  const getLocationTypeLabel = (type: string) => t(`locationTypes.${type}`, { defaultValue: type });
+  const getLocationTypeLabel = (type: string) => t(`statuses.locationType.${type}`, { defaultValue: type });
+  const occupancyItems = Array.isArray(occupancy) ? occupancy : [];
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
@@ -259,11 +260,12 @@ export default function ReportsPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {occupancy?.map((warehouseItem: any) => {
+            {occupancyItems.map((warehouseItem: any) => {
               const occupied = getOccupied(warehouseItem);
               const capacity = warehouseItem.capacity ?? 0;
               const pct = getOccupancyPercent(warehouseItem);
               const expanded = expandedWarehouseId === warehouseItem.id;
+              const childLocations = Array.isArray(warehouseItem.children) ? warehouseItem.children : [];
 
               return (
                 <div key={warehouseItem.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -310,7 +312,7 @@ export default function ReportsPage() {
                   >
                     <span>{t('reports.warehouseDetails')}</span>
                     <span className="flex items-center gap-2 text-xs text-gray-500">
-                      {warehouseItem.children?.length ?? 0} {t('reports.locationsInWarehouse')}
+                      {childLocations.length} {t('reports.locationsInWarehouse')}
                       {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </span>
                   </button>
@@ -318,7 +320,7 @@ export default function ReportsPage() {
                   {expanded && (
                     <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-3">
                       <div className="space-y-2">
-                        {warehouseItem.children?.map((loc: any) => {
+                        {childLocations.map((loc: any) => {
                           const detailOccupied = getOccupied(loc);
                           const detailCapacity = loc.capacity ?? 0;
                           const detailPct = getOccupancyPercent(loc);
@@ -348,7 +350,7 @@ export default function ReportsPage() {
                             </div>
                           );
                         })}
-                        {(!warehouseItem.children || warehouseItem.children.length === 0) && (
+                        {childLocations.length === 0 && (
                           <p className="text-sm text-gray-400">{t('reports.noWarehouseDetails')}</p>
                         )}
                       </div>
@@ -357,7 +359,7 @@ export default function ReportsPage() {
                 </div>
               );
             })}
-            {(!occupancy || occupancy.length === 0) && <p className="text-sm text-gray-400">{t('reports.noWarehouseOccupancy')}</p>}
+            {occupancyItems.length === 0 && <p className="text-sm text-gray-400">{t('reports.noWarehouseOccupancy')}</p>}
           </div>
         </div>
       </div>
