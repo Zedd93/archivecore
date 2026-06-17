@@ -618,7 +618,15 @@
     "hrByDepartment": "Records by department",
     "hrByStatus": "Records by employment status",
     "unknown": "Unknown",
-    "locationOccupancy": "Location occupancy"
+    "locationOccupancy": "Location occupancy",
+    "warehouseOccupancy": "Warehouse occupancy",
+    "warehouseOccupancyDesc": "The main view shows warehouses only. Rack, shelf, and slot details are available after opening a warehouse.",
+    "warehouseDetails": "Show warehouse details",
+    "locationsInWarehouse": "locations",
+    "occupied": "Occupied",
+    "capacity": "Capacity",
+    "noWarehouseOccupancy": "No warehouse occupancy data",
+    "noWarehouseDetails": "No child locations in this warehouse"
   },
 
   "locations": {

@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
-import { BarChart3, Loader2, PieChart, TrendingUp, Clock } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronRight, Clock, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
 
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(null);
 
   const { data: boxesByStatus, isLoading: l1 } = useQuery({
     queryKey: ['report-boxes-status'],
@@ -62,6 +64,22 @@ export default function ReportsPage() {
   const getOrderStatusLabel = (item: any) => t(`statuses.order.${item.status}`, { defaultValue: item.label || item.status });
   const getDocTypeLabel = (item: any) => t(`docTypes.${item.docType}`, { defaultValue: item.label || item.docType || t('reports.unknown') });
   const getEmploymentStatusLabel = (item: any) => t(`statuses.employment.${item.employmentStatus}`, { defaultValue: item.label || item.employmentStatus });
+  const getOccupied = (loc: any) => loc.aggregatedCount ?? loc.currentCount ?? 0;
+  const getOccupancyPercent = (loc: any) => {
+    const capacity = loc.capacity ?? 0;
+    return capacity > 0 ? Math.round((getOccupied(loc) / capacity) * 100) : 0;
+  };
+  const getOccupancyColor = (pct: number) => {
+    if (pct > 90) return 'bg-red-500';
+    if (pct > 70) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
+  const getOccupancyBadgeColor = (pct: number) => {
+    if (pct > 90) return 'bg-red-50 text-red-700 ring-red-200';
+    if (pct > 70) return 'bg-yellow-50 text-yellow-700 ring-yellow-200';
+    return 'bg-green-50 text-green-700 ring-green-200';
+  };
+  const getLocationTypeLabel = (type: string) => t(`locationTypes.${type}`, { defaultValue: type });
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
@@ -230,24 +248,116 @@ export default function ReportsPage() {
         </div>
 
         {/* Location occupancy */}
-        <div className="card">
-          <h2 className="text-lg font-semibold mb-4">{t('reports.locationOccupancy')}</h2>
-          <div className="space-y-3">
-            {occupancy?.slice(0, 10).map((loc: any) => {
-              const occupied = loc.aggregatedCount ?? loc.currentCount ?? 0;
-              const pct = loc.capacity ? Math.round((occupied / loc.capacity) * 100) : 0;
+        <div className="card lg:col-span-2">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Warehouse size={20} className="text-primary-600" />
+                {t('reports.warehouseOccupancy')}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">{t('reports.warehouseOccupancyDesc')}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {occupancy?.map((warehouseItem: any) => {
+              const occupied = getOccupied(warehouseItem);
+              const capacity = warehouseItem.capacity ?? 0;
+              const pct = getOccupancyPercent(warehouseItem);
+              const expanded = expandedWarehouseId === warehouseItem.id;
+
               return (
-                <div key={loc.id} className="flex items-center gap-3">
-                  <span className="text-sm flex-1 truncate">{loc.fullPath}</span>
-                  <span className="text-xs text-gray-500">{occupied}/{loc.capacity ?? '—'}</span>
-                  <div className="w-20 h-2 bg-gray-200 rounded-full">
-                    <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                <div key={warehouseItem.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+                          <Warehouse size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-gray-900 break-words">{warehouseItem.name || warehouseItem.fullPath}</h3>
+                          <p className="text-xs text-gray-500 break-words">{warehouseItem.fullPath}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${getOccupancyBadgeColor(pct)}`}>
+                      {pct}%
+                    </span>
                   </div>
-                  <span className="text-xs font-medium w-8 text-right">{pct}%</span>
+
+                  <div className="mt-5">
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="text-gray-500">{t('reports.occupied')}</span>
+                      <span className="font-medium text-gray-900">
+                        {occupied}/{capacity || '—'}
+                      </span>
+                    </div>
+                    <div className="h-4 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className={`h-full rounded-full transition-all ${getOccupancyColor(pct)}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                      <span>{t('reports.capacity')}</span>
+                      <span>{capacity || '—'}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setExpandedWarehouseId(expanded ? null : warehouseItem.id)}
+                    className="mt-4 flex w-full items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <span>{t('reports.warehouseDetails')}</span>
+                    <span className="flex items-center gap-2 text-xs text-gray-500">
+                      {warehouseItem.children?.length ?? 0} {t('reports.locationsInWarehouse')}
+                      {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </span>
+                  </button>
+
+                  {expanded && (
+                    <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-3">
+                      <div className="space-y-2">
+                        {warehouseItem.children?.map((loc: any) => {
+                          const detailOccupied = getOccupied(loc);
+                          const detailCapacity = loc.capacity ?? 0;
+                          const detailPct = getOccupancyPercent(loc);
+
+                          return (
+                            <div key={loc.id} className="rounded-lg bg-white p-3 shadow-sm">
+                              <div className="mb-2 flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 break-words">{loc.name || loc.fullPath}</p>
+                                  <p className="text-xs text-gray-500 break-words">{loc.fullPath}</p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                                  {getLocationTypeLabel(loc.type)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                                  <div
+                                    className={`h-full rounded-full ${getOccupancyColor(detailPct)}`}
+                                    style={{ width: `${Math.min(detailPct, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="w-20 text-right text-xs font-medium text-gray-700">
+                                  {detailOccupied}/{detailCapacity || '—'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {(!warehouseItem.children || warehouseItem.children.length === 0) && (
+                          <p className="text-sm text-gray-400">{t('reports.noWarehouseDetails')}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
-            {(!occupancy || occupancy.length === 0) && <p className="text-sm text-gray-400">{t('common.noData')}</p>}
+            {(!occupancy || occupancy.length === 0) && <p className="text-sm text-gray-400">{t('reports.noWarehouseOccupancy')}</p>}
           </div>
         </div>
       </div>

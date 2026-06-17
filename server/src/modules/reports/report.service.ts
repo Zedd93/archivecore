@@ -141,7 +141,7 @@ export class ReportService {
   async getLocationOccupancy(tenantId: string) {
     const [locations, boxesByLocation] = await Promise.all([
       prisma.location.findMany({
-        where: { tenantId, type: { in: ['rack', 'shelf'] } },
+        where: { tenantId, isActive: true },
         select: {
           id: true,
           parentId: true,
@@ -161,37 +161,62 @@ export class ReportService {
       }),
     ]);
 
-    const allLocations = await prisma.location.findMany({
-      where: { tenantId, isActive: true },
-      select: { id: true, parentId: true },
-    });
-
     const directCounts = new Map<string, number>();
     for (const row of boxesByLocation) {
       if (row.locationId) directCounts.set(row.locationId, row._count);
     }
 
+    const locationsById = new Map(locations.map((location) => [location.id, location]));
     const childrenByParent = new Map<string, string[]>();
-    for (const location of allLocations) {
+    for (const location of locations) {
       if (!location.parentId) continue;
       const children = childrenByParent.get(location.parentId) ?? [];
       children.push(location.id);
       childrenByParent.set(location.parentId, children);
     }
 
-    return locations.map((location) => {
-      const descendantIds = this.getDescendantIds(location.id, childrenByParent);
-      const aggregatedCount = descendantIds.reduce(
-        (sum, id) => sum + (directCounts.get(id) ?? 0),
-        0
-      );
+    const descendantsCache = new Map<string, string[]>();
+    const getDescendantIds = (locationId: string) => {
+      const cached = descendantsCache.get(locationId);
+      if (cached) return cached;
 
-      return {
-        ...location,
-        currentCount: directCounts.get(location.id) ?? 0,
-        aggregatedCount,
-      };
+      const ids = this.getDescendantIds(locationId, childrenByParent);
+      descendantsCache.set(locationId, ids);
+      return ids;
+    };
+
+    const getAggregatedCount = (locationId: string) =>
+      getDescendantIds(locationId).reduce((sum, id) => sum + (directCounts.get(id) ?? 0), 0);
+
+    const getDescendantCapacity = (locationId: string) =>
+      getDescendantIds(locationId)
+        .filter((id) => id !== locationId)
+        .reduce((sum, id) => sum + (locationsById.get(id)?.capacity ?? 0), 0);
+
+    const toReportNode = (location: (typeof locations)[number]) => ({
+      ...location,
+      currentCount: directCounts.get(location.id) ?? 0,
+      aggregatedCount: getAggregatedCount(location.id),
+      ownCapacity: location.capacity,
+      capacity: location.capacity ?? getDescendantCapacity(location.id),
     });
+
+    return locations
+      .filter((location) => location.type === 'warehouse')
+      .map((warehouse) => {
+        const detailLocations = getDescendantIds(warehouse.id)
+          .filter((id) => id !== warehouse.id)
+          .map((id) => locationsById.get(id))
+          .filter((location): location is (typeof locations)[number] => Boolean(location))
+          .map(toReportNode)
+          .sort((a, b) => a.fullPath.localeCompare(b.fullPath, 'pl', { numeric: true }));
+
+        return {
+          ...toReportNode(warehouse),
+          children: detailLocations,
+        };
+      })
+      .sort((a, b) => a.fullPath.localeCompare(b.fullPath, 'pl', { numeric: true }));
   }
 
   async getHRFoldersByDepartment(tenantId: string) {

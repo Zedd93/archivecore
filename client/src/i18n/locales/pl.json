@@ -618,7 +618,15 @@
     "hrByDepartment": "Akta wg działów",
     "hrByStatus": "Akta wg statusu zatrudnienia",
     "unknown": "Nieokreślony",
-    "locationOccupancy": "Zajętość lokalizacji"
+    "locationOccupancy": "Zajętość lokalizacji",
+    "warehouseOccupancy": "Zajętość magazynów",
+    "warehouseOccupancyDesc": "Główny widok pokazuje tylko magazyny. Szczegóły regałów, półek i miejsc są dostępne po kliknięciu w wybrany magazyn.",
+    "warehouseDetails": "Pokaż szczegóły magazynu",
+    "locationsInWarehouse": "lokalizacji",
+    "occupied": "Zajęte",
+    "capacity": "Pojemność",
+    "noWarehouseOccupancy": "Brak danych o zajętości magazynów",
+    "noWarehouseDetails": "Brak lokalizacji podrzędnych w tym magazynie"
   },
 
   "locations": {
