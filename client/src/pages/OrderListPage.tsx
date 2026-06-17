@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useList, useCreate } from '@/hooks/useApi';
+import { useList, useCreate, useDelete } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
 import { useTranslation } from 'react-i18next';
 import DataTable, { Column } from '@/components/ui/DataTable';
@@ -8,11 +8,14 @@ import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
-import { Plus, AlertTriangle, Download, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { RoleCode } from '@archivecore/shared';
+import { Plus, AlertTriangle, Download, Loader2, Trash2 } from 'lucide-react';
 
 export default function OrderListPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { hasRole } = useAuth();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
@@ -20,7 +23,9 @@ export default function OrderListPage() {
 
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters });
   const createOrder = useCreate('/orders', ['orders'], t('common.success'));
+  const deleteOrder = useDelete('/orders', ['orders'], t('orders.deleted'));
   const { exportData, isExporting } = useExport({ endpoint: '/export/orders', defaultFilename: 'zlecenia.xlsx' });
+  const canDeleteOrders = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'),
@@ -81,6 +86,30 @@ export default function OrderListPage() {
         );
       },
     },
+    ...(canDeleteOrders ? [{
+      key: 'actions',
+      header: t('common.actions'),
+      render: (item: any) => {
+        const canDelete = ['completed', 'cancelled'].includes(item.status);
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!canDelete) return;
+              if (!window.confirm(t('orders.confirmDelete'))) return;
+              deleteOrder.mutate(item.id);
+            }}
+            disabled={!canDelete || deleteOrder.isPending}
+            className="text-red-600 hover:text-red-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+            title={canDelete ? t('common.delete') : t('orders.deleteOnlyClosed')}
+            aria-label={t('common.delete')}
+          >
+            <Trash2 size={16} />
+          </button>
+        );
+      },
+    }] : []),
   ];
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {

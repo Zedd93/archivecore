@@ -22,6 +22,14 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const result = await orderService.delete(req.params.id, req.tenantId);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

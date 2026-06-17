@@ -2,10 +2,10 @@ import { Router } from 'express';
 import { orderController } from './order.controller';
 import { authenticate } from '../../middleware/auth';
 import { tenantContext } from '../../middleware/tenant';
-import { requirePermission } from '../../middleware/rbac';
+import { requirePermission, requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createOrderSchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema } from '@archivecore/shared';
+import { Permissions, RoleCode, createOrderSchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema } from '@archivecore/shared';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -16,6 +16,7 @@ router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));
 router.get('/:id/custody', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getCustodyByOrder(req, res, next));
+router.delete('/:id', ...auth, requirePermission(Permissions.ORDER_COMPLETE), requireRole(RoleCode.SUPER_ADMIN, RoleCode.DOXART_ADMIN), auditLog('order', 'order.delete'), (req, res, next) => orderController.delete(req, res, next));
 
 // Create
 router.post('/', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(createOrderSchema), auditLog('order', 'order.create'), (req, res, next) => orderController.create(req, res, next));

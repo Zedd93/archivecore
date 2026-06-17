@@ -257,6 +257,27 @@ export class OrderService {
     return order;
   }
 
+  async delete(id: string, tenantId: string) {
+    const order = await prisma.order.findFirst({
+      where: { id, tenantId },
+      select: { id: true, status: true },
+    });
+    if (!order) throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 });
+    if (!['completed', 'cancelled'].includes(order.status)) {
+      throw Object.assign(new Error('Można usuwać tylko zlecenia zakończone albo anulowane'), { statusCode: 400 });
+    }
+
+    await prisma.$transaction([
+      prisma.custodyEvent.updateMany({
+        where: { orderId: id },
+        data: { orderId: null },
+      }),
+      prisma.order.delete({ where: { id } }),
+    ]);
+
+    return { deleted: true };
+  }
+
   async create(data: any, tenantId: string, userId: string, department?: string) {
     // Generate order number
     const year = new Date().getFullYear();
