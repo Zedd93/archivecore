@@ -8,7 +8,7 @@ import Modal from '@/components/ui/Modal';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { MapPin, ChevronRight, ChevronDown, Box, Plus, Loader2, Pencil } from 'lucide-react';
+import { MapPin, ChevronRight, ChevronDown, Box, Plus, Loader2, Pencil, Copy } from 'lucide-react';
 
 interface LocationNode {
   id: string;
@@ -64,16 +64,18 @@ function LocationTree({
   depth = 0,
   canEdit,
   onEdit,
+  onCopy,
 }: {
   nodes: LocationNode[];
   depth?: number;
   canEdit: boolean;
   onEdit: (node: LocationNode) => void;
+  onCopy: (node: LocationNode) => void;
 }) {
   return (
     <div className="space-y-1" role={depth === 0 ? 'tree' : 'group'}>
       {nodes.map(node => (
-        <LocationTreeNode key={node.id} node={node} depth={depth} canEdit={canEdit} onEdit={onEdit} />
+        <LocationTreeNode key={node.id} node={node} depth={depth} canEdit={canEdit} onEdit={onEdit} onCopy={onCopy} />
       ))}
     </div>
   );
@@ -84,11 +86,13 @@ function LocationTreeNode({
   depth,
   canEdit,
   onEdit,
+  onCopy,
 }: {
   node: LocationNode;
   depth: number;
   canEdit: boolean;
   onEdit: (node: LocationNode) => void;
+  onCopy: (node: LocationNode) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -169,20 +173,31 @@ function LocationTreeNode({
             <Box size={14} />
           </button>
           {canEdit && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onEdit(node); }}
-              className="text-xs text-gray-500 hover:text-primary-700 whitespace-nowrap"
-              title={t('common.edit')}
-              aria-label={t('locations.edit')}
-            >
-              <Pencil size={14} />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onCopy(node); }}
+                className="text-xs text-gray-500 hover:text-primary-700 whitespace-nowrap"
+                title={t('locations.copy')}
+                aria-label={t('locations.copy')}
+              >
+                <Copy size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onEdit(node); }}
+                className="text-xs text-gray-500 hover:text-primary-700 whitespace-nowrap"
+                title={t('common.edit')}
+                aria-label={t('locations.edit')}
+              >
+                <Pencil size={14} />
+              </button>
+            </>
           )}
         </div>
       </div>
       {expanded && hasChildren && (
-        <LocationTree nodes={node.children} depth={depth + 1} canEdit={canEdit} onEdit={onEdit} />
+        <LocationTree nodes={node.children} depth={depth + 1} canEdit={canEdit} onEdit={onEdit} onCopy={onCopy} />
       )}
     </div>
   );
@@ -222,6 +237,20 @@ export default function LocationsPage() {
 
   const resetCreateForm = () => {
     setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId, address: '', description: '' });
+  };
+
+  const openCopyModal = (location: LocationNode) => {
+    setCreateForm({
+      name: '',
+      code: '',
+      type: location.type,
+      parentId: location.parentId || '',
+      capacity: location.capacity?.toString() || '',
+      tenantId: location.tenantId || activeTenantId,
+      address: location.address || '',
+      description: location.description || '',
+    });
+    setShowCreateModal(true);
   };
 
   const handleCreateParentChange = (parentId: string) => {
@@ -326,7 +355,7 @@ export default function LocationsPage() {
         {isLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary-500" size={32} /></div>
         ) : tree && tree.length > 0 ? (
-          <LocationTree nodes={tree} canEdit={canWriteLocations} onEdit={openEditModal} />
+          <LocationTree nodes={tree} canEdit={canWriteLocations} onEdit={openEditModal} onCopy={openCopyModal} />
         ) : (
           <div className="text-center py-12 text-gray-500">
             <MapPin size={48} className="mx-auto mb-4 text-gray-300" />
@@ -408,6 +437,16 @@ export default function LocationsPage() {
               onChange={handleCreateParentChange}
               tenantId={createForm.tenantId || undefined}
               placeholder={t('locations.parentLocationPlaceholder', 'Opcjonalnie — wybierz magazyn, strefę lub regał')}
+            />
+          </div>
+          <div>
+            <label className="label-text">{t('locations.description')}</label>
+            <textarea
+              value={createForm.description}
+              onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+              className="input-field"
+              rows={2}
+              placeholder={t('common.optional')}
             />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">

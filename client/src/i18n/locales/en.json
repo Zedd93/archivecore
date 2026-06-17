@@ -630,6 +630,7 @@
     "typeLevel": "Level",
     "typeSlot": "Slot",
     "edit": "Edit location",
+    "copy": "Copy location",
     "address": "Address",
     "addressPlaceholder": "e.g. 12 Warehouse St, Warsaw",
     "capacity": "Capacity",

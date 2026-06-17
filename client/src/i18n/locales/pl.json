@@ -630,6 +630,7 @@
     "typeLevel": "Poziom",
     "typeSlot": "Miejsce",
     "edit": "Edytuj lokalizację",
+    "copy": "Kopiuj lokalizację",
     "address": "Adres",
     "addressPlaceholder": "np. ul. Magazynowa 12, 00-001 Warszawa",
     "capacity": "Pojemność",
