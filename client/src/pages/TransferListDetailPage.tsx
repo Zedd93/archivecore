@@ -217,6 +217,7 @@ export default function TransferListDetailPage() {
 
   const items = itemsResult?.data || [];
   const itemsPagination = (itemsResult as any)?.pagination;
+  const getItemStorageLocation = (item: any) => item.storageLocation || item.box?.location?.fullPath || '';
 
   const resetForm = () => {
     setForm({
@@ -916,7 +917,12 @@ export default function TransferListDetailPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-600">{item.folderCount}</td>
-                    <td className="px-3 py-2.5 text-gray-600 text-xs truncate max-w-[160px]">{item.storageLocation || '—'}</td>
+                    <td
+                      className="px-3 py-2.5 text-gray-600 text-xs whitespace-normal break-words max-w-[220px]"
+                      title={getItemStorageLocation(item) || undefined}
+                    >
+                      {getItemStorageLocation(item) || '—'}
+                    </td>
                     <td className="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap">
                       {item.disposalOrTransferDate
                         ? new Date(item.disposalOrTransferDate).toLocaleDateString('pl-PL')

@@ -2,6 +2,14 @@ import { prisma } from '../../config/database';
 import { generateQrData, normalizeOptionalText } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 
+const TRANSFER_LIST_ITEM_BOX_SELECT = {
+  id: true,
+  boxNumber: true,
+  title: true,
+  qrCode: true,
+  location: { select: { id: true, code: true, name: true, fullPath: true } },
+} satisfies Prisma.BoxSelect;
+
 export class TransferListService {
   private ensureDraftStatus(list: { status: string }, message = 'Można edytować pozycje tylko w spisie o statusie roboczym') {
     if (list.status !== 'draft') {
@@ -49,7 +57,7 @@ export class TransferListService {
         items: {
           orderBy: { ordinalNumber: 'asc' },
           include: {
-            box: { select: { id: true, boxNumber: true, title: true, qrCode: true } },
+            box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
           },
         },
       },
@@ -180,7 +188,7 @@ export class TransferListService {
         boxId,
       },
       include: {
-        box: { select: { id: true, boxNumber: true, title: true, qrCode: true } },
+        box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
       },
     });
   }
@@ -211,7 +219,7 @@ export class TransferListService {
         boxId,
       },
       include: {
-        box: { select: { id: true, boxNumber: true, title: true, qrCode: true } },
+        box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
       },
     });
   }
@@ -272,7 +280,7 @@ export class TransferListService {
             boxId,
           },
           include: {
-            box: { select: { id: true, boxNumber: true, title: true, qrCode: true } },
+            box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
           },
         });
         created.push(record);
@@ -309,13 +317,18 @@ export class TransferListService {
     this.ensureDraftStatus(list);
 
     let boxId: string | null = null;
-    let box: { id: string; boxNumber: string; title: string } | null = null;
+    let box: { id: string; boxNumber: string; title: string; location: { id: string; code: string; name: string; fullPath: string } | null } | null = null;
     if (boxNumber && boxNumber.trim()) {
       boxId = await this.resolveBoxId(tenantId, userId, { boxNumber: boxNumber.trim() });
       if (boxId) {
         box = await prisma.box.findUnique({
           where: { id: boxId },
-          select: { id: true, boxNumber: true, title: true },
+          select: {
+            id: true,
+            boxNumber: true,
+            title: true,
+            location: { select: { id: true, code: true, name: true, fullPath: true } },
+          },
         });
       }
     }
@@ -421,7 +434,7 @@ export class TransferListService {
         take,
         orderBy: { ordinalNumber: 'asc' },
         include: {
-          box: { select: { id: true, boxNumber: true, title: true, qrCode: true } },
+          box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
         },
       }),
       prisma.transferListItem.count({ where }),
