@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDetail, useList, useCreate, useUpdate, useDelete } from '@/hooks/useApi';
@@ -11,7 +11,7 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import {
   Upload, Plus, Trash2, Edit2, Check, X,
-  FileSpreadsheet, Filter, Search, CheckCircle2, Archive, Box, PackagePlus,
+  FileSpreadsheet, Filter, Search, CheckCircle2, Archive, Box,
   Loader2, XCircle, MapPin, CalendarDays,
 } from 'lucide-react';
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
@@ -21,7 +21,7 @@ import { normalizeDisplayText } from '@archivecore/shared';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 
-// ─── Box Number Autocomplete ────────────────────────────
+// ─── Local transfer-list box number input ───────────────
 function BoxNumberInput({
   value,
   onChange,
@@ -30,112 +30,21 @@ function BoxNumberInput({
   onChange: (val: string) => void;
 }) {
   const { t } = useTranslation();
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  const fetchSuggestions = useCallback(async (query: string) => {
-    if (!query || query.length < 1) {
-      setSuggestions([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const { data } = await api.get('/boxes', { params: { search: query, limit: 8 } });
-      setSuggestions(data.data || []);
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleChange = (val: string) => {
-    onChange(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchSuggestions(val), 300);
-    setShowDropdown(true);
-  };
-
-  const selectBox = (box: any) => {
-    onChange(box.boxNumber);
-    setShowDropdown(false);
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const isNewBox = value.trim().length > 0 && !suggestions.some(
-    (b) => b.boxNumber.toLowerCase() === value.trim().toLowerCase()
-  );
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div>
       <div className="relative">
         <Box size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           type="text"
           value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          onFocus={() => { if (value) { fetchSuggestions(value); setShowDropdown(true); } }}
+          onChange={(e) => onChange(e.target.value)}
           className="input-field pl-9"
           placeholder={t('transferLists.detail.boxPlaceholder')}
           autoComplete="off"
         />
-        {loading && (
-          <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />
-        )}
       </div>
-
-      {showDropdown && (value.trim().length > 0) && (
-        <div className="absolute z-20 left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-48 overflow-y-auto">
-          {suggestions.map((box: any) => (
-            <button
-              key={box.id}
-              type="button"
-              onClick={() => selectBox(box)}
-              className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-sm border-b border-gray-50 last:border-0"
-            >
-              <Box size={14} className="text-primary-500 shrink-0" />
-              <span className="font-mono font-medium text-gray-900">{box.boxNumber}</span>
-              <span className="text-gray-400 truncate text-xs">— {box.title}</span>
-            </button>
-          ))}
-
-          {isNewBox && (
-            <button
-              type="button"
-              onClick={() => { onChange(value.trim()); setShowDropdown(false); }}
-              className="w-full px-3 py-2 text-left hover:bg-green-50 flex items-center gap-2 text-sm bg-green-50/50 border-t border-green-100"
-            >
-              <PackagePlus size={14} className="text-green-600 shrink-0" />
-              <span className="text-green-800 font-medium">{t('transferLists.detail.createNewBox')}</span>
-              <span className="font-mono text-green-700">{value.trim()}</span>
-            </button>
-          )}
-
-          {!loading && suggestions.length === 0 && !isNewBox && (
-            <div className="px-3 py-2 text-xs text-gray-400 text-center">{t('common.noResults')}</div>
-          )}
-        </div>
-      )}
-
-      {value.trim() && !showDropdown && isNewBox && (
-        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-          <PackagePlus size={12} />
-          {t('transferLists.detail.newBoxAuto')}
-        </p>
-      )}
+      <p className="mt-1 text-xs text-gray-500">{t('transferLists.detail.localBoxNumberHint')}</p>
     </div>
   );
 }
@@ -218,6 +127,7 @@ export default function TransferListDetailPage() {
   const items = itemsResult?.data || [];
   const itemsPagination = (itemsResult as any)?.pagination;
   const getItemStorageLocation = (item: any) => item.storageLocation || item.box?.location?.fullPath || '';
+  const getItemSourceBoxNumber = (item: any) => item.sourceBoxNumber || item.box?.boxNumber || '';
 
   const resetForm = () => {
     setForm({
@@ -290,7 +200,7 @@ export default function TransferListDetailPage() {
       storageLocation: item.storageLocation || '',
       disposalOrTransferDate: item.disposalOrTransferDate ? item.disposalOrTransferDate.split('T')[0] : '',
       notes: item.notes || '',
-      boxNumber: item.box?.boxNumber || '',
+      boxNumber: getItemSourceBoxNumber(item),
     });
     setEditingItem(item);
   };
@@ -424,7 +334,7 @@ export default function TransferListDetailPage() {
       });
       toast.success(t('transferLists.detail.assigned', {
         count: data.data.updated,
-        boxNumber: data.data.box?.boxNumber || bulkBoxNumber.trim(),
+        boxNumber: data.data.sourceBoxNumber || bulkBoxNumber.trim(),
       }));
       setSelectedItemIds(new Set());
       setBulkAction('none');
@@ -933,10 +843,15 @@ export default function TransferListDetailPage() {
                       {item.box ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); navigate(`/boxes/${item.box.id}`); }}
-                          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800"
+                          className="flex items-start gap-1 text-xs text-primary-600 hover:text-primary-800 text-left"
                         >
-                          <Box size={12} />
-                          {item.box.boxNumber}
+                          <Box size={12} className="mt-0.5 shrink-0" />
+                          <span>
+                            <span className="font-medium">{getItemSourceBoxNumber(item)}</span>
+                            {item.sourceBoxNumber && item.box.boxNumber !== item.sourceBoxNumber && (
+                              <span className="block text-[10px] text-gray-400">{item.box.boxNumber}</span>
+                            )}
+                          </span>
                         </button>
                       ) : (
                         <span className="text-xs text-gray-300">—</span>

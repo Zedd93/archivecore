@@ -125,30 +125,32 @@ export class TransferListService {
     await prisma.transferList.delete({ where: { id } });
   }
 
-  // ─── Resolve boxId from boxNumber or boxId (auto-create if not found) ───
-  private async resolveBoxId(tenantId: string, userId: string, data: any): Promise<string | null> {
-    if (data.boxId) return data.boxId;
-
-    const boxNumber = data.boxNumber?.trim();
-    if (!boxNumber) return null;
-
-    // Try to find existing box
-    const existing = await prisma.box.findFirst({
-      where: { tenantId, boxNumber: { equals: boxNumber, mode: 'insensitive' } },
-      select: { id: true },
+  private async generateSystemBoxNumber(tenantId: string) {
+    const year = new Date().getFullYear();
+    const lastBox = await prisma.box.findFirst({
+      where: { tenantId, boxNumber: { startsWith: `K-${year}-` } },
+      orderBy: { boxNumber: 'desc' },
+      select: { boxNumber: true },
     });
-    if (existing) return existing.id;
+    const lastSequence = lastBox ? parseInt(lastBox.boxNumber.split('-').pop() || '0', 10) : 0;
+    return `K-${year}-${(lastSequence + 1).toString().padStart(6, '0')}`;
+  }
 
-    // Auto-create new box with this number
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  private async createBoxForSourceNumber(
+    list: { id: string; tenantId: string; listNumber: string },
+    userId: string,
+    sourceBoxNumber: string
+  ) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: list.tenantId } });
     if (!tenant) return null;
 
+    const boxNumber = await this.generateSystemBoxNumber(list.tenantId);
     const qrCode = generateQrData(tenant.shortCode, boxNumber);
 
     const newBox = await prisma.box.create({
       data: {
-        tenantId,
-        title: `Karton ${boxNumber}`,
+        tenantId: list.tenantId,
+        title: `Karton ${sourceBoxNumber} (${list.listNumber})`,
         boxNumber,
         qrCode,
         createdById: userId,
@@ -159,11 +161,43 @@ export class TransferListService {
     return newBox.id;
   }
 
+  // ─── Resolve local transfer-list box number to a system box ─────────────
+  private async resolveTransferListBox(
+    list: { id: string; tenantId: string; listNumber: string },
+    userId: string,
+    data: any
+  ): Promise<{ boxId: string | null; sourceBoxNumber: string | null }> {
+    if (data.boxId) {
+      return {
+        boxId: data.boxId,
+        sourceBoxNumber: normalizeOptionalText(data.sourceBoxNumber ?? data.boxNumber) ?? null,
+      };
+    }
+
+    const sourceBoxNumber = normalizeOptionalText(data.sourceBoxNumber ?? data.boxNumber) ?? null;
+    if (!sourceBoxNumber) return { boxId: null, sourceBoxNumber: null };
+
+    const existingInList = await prisma.transferListItem.findFirst({
+      where: {
+        transferListId: list.id,
+        sourceBoxNumber: { equals: sourceBoxNumber, mode: 'insensitive' },
+        boxId: { not: null },
+      },
+      select: { boxId: true },
+    });
+    if (existingInList?.boxId) {
+      return { boxId: existingInList.boxId, sourceBoxNumber };
+    }
+
+    const boxId = await this.createBoxForSourceNumber(list, userId, sourceBoxNumber);
+    return { boxId, sourceBoxNumber };
+  }
+
   // ─── Add item to list ──────────────────────────────────
   async addItem(listId: string, tenantId: string, userId: string, data: any) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list, 'Można dodawać pozycje tylko w spisie o statusie roboczym');
-    const boxId = await this.resolveBoxId(list.tenantId, userId, data);
+    const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, data);
 
     // Get next ordinal number
     const lastItem = await prisma.transferListItem.findFirst({
@@ -186,6 +220,7 @@ export class TransferListService {
         disposalOrTransferDate: data.disposalOrTransferDate ? new Date(data.disposalOrTransferDate) : null,
         notes: data.notes,
         boxId,
+        sourceBoxNumber,
       },
       include: {
         box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
@@ -197,7 +232,7 @@ export class TransferListService {
   async updateItem(listId: string, itemId: string, tenantId: string, userId: string, data: any) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list);
-    const boxId = await this.resolveBoxId(list.tenantId, userId, data);
+    const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, data);
 
     const item = await prisma.transferListItem.findFirst({
       where: { id: itemId, transferListId: listId },
@@ -217,6 +252,7 @@ export class TransferListService {
         disposalOrTransferDate: data.disposalOrTransferDate ? new Date(data.disposalOrTransferDate) : null,
         notes: data.notes,
         boxId,
+        sourceBoxNumber,
       },
       include: {
         box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
@@ -255,7 +291,7 @@ export class TransferListService {
       ordinalNumber++;
 
       try {
-        const boxId = await this.resolveBoxId(list.tenantId, userId, item);
+        const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, item);
 
         // Safely parse dates
         const safeDate = (val: any): Date | null => {
@@ -278,6 +314,7 @@ export class TransferListService {
             disposalOrTransferDate: safeDate(item.disposalOrTransferDate),
             notes: item.notes ? String(item.notes).trim() : null,
             boxId,
+            sourceBoxNumber,
           },
           include: {
             box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
@@ -312,14 +349,20 @@ export class TransferListService {
   }
 
   // ─── Bulk assign box to items ────────────────────────
-  async bulkAssignBox(listId: string, tenantId: string, userId: string, itemIds: string[], boxNumber: string | null) {
+  async bulkAssignBox(listId: string, tenantId: string, userId: string, itemIds: string[], boxNumber: string | null, boxIdInput?: string | null) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list);
 
     let boxId: string | null = null;
+    let sourceBoxNumber: string | null = null;
     let box: { id: string; boxNumber: string; title: string; location: { id: string; code: string; name: string; fullPath: string } | null } | null = null;
-    if (boxNumber && boxNumber.trim()) {
-      boxId = await this.resolveBoxId(tenantId, userId, { boxNumber: boxNumber.trim() });
+    if (boxIdInput || (boxNumber && boxNumber.trim())) {
+      const resolved = await this.resolveTransferListBox(list, userId, {
+        boxId: boxIdInput,
+        boxNumber: boxNumber?.trim(),
+      });
+      boxId = resolved.boxId;
+      sourceBoxNumber = resolved.sourceBoxNumber;
       if (boxId) {
         box = await prisma.box.findUnique({
           where: { id: boxId },
@@ -338,10 +381,10 @@ export class TransferListService {
         id: { in: itemIds },
         transferListId: listId,
       },
-      data: { boxId },
+      data: { boxId, sourceBoxNumber },
     });
 
-    return { updated: result.count, box };
+    return { updated: result.count, box, sourceBoxNumber };
   }
 
   // ─── Bulk update storage location ────────────────────
@@ -421,6 +464,7 @@ export class TransferListService {
         { folderSignature: { contains: filters.search, mode: 'insensitive' } },
         { folderTitle: { contains: filters.search, mode: 'insensitive' } },
         { storageLocation: { contains: filters.search, mode: 'insensitive' } },
+        { sourceBoxNumber: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
     if (filters.boxId) where.boxId = filters.boxId;

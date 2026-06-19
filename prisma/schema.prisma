@@ -781,6 +781,7 @@ model TransferListItem {
   disposalOrTransferDate DateTime? @db.Date // Data zniszczenia lub przekazania do AP
   notes                  String?   @db.Text
   boxId                  String?   @db.Uuid // Powiązanie z kartonem
+  sourceBoxNumber        String?   @db.VarChar(100) // Lokalny numer kartonu ze spisu, np. "Karton 1"
 
   transferList TransferList @relation(fields: [transferListId], references: [id], onDelete: Cascade)
   box          Box?         @relation(fields: [boxId], references: [id])
@@ -788,6 +789,7 @@ model TransferListItem {
 
   @@index([transferListId])
   @@index([boxId])
+  @@index([sourceBoxNumber])
   @@index([folderSignature])
   @@index([categoryCode])
   @@map("transfer_list_items")

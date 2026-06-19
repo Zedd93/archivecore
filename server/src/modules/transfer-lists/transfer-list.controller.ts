@@ -115,7 +115,7 @@ export class TransferListController {
         return errorResponse(res, 'Wymagana lista identyfikatorów pozycji', 400);
       }
       const result = await transferListService.bulkAssignBox(
-        req.params.id, req.tenantId, req.user!.userId, itemIds, boxNumber ?? boxId ?? null
+        req.params.id, req.tenantId, req.user!.userId, itemIds, boxNumber ?? null, boxId ?? null
       );
       return successResponse(res, result);
     } catch (err) { next(err); }

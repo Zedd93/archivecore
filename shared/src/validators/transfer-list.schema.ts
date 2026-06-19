@@ -22,6 +22,7 @@ export const createTransferListItemSchema = z.object({
   notes: z.string().optional().nullable(),
   boxId: z.string().uuid('Nieprawidłowy identyfikator kartonu').optional().nullable(),
   boxNumber: z.string().max(100).optional().nullable(),
+  sourceBoxNumber: z.string().max(100).optional().nullable(),
 });
 
 export const updateTransferListItemSchema = createTransferListItemSchema.partial();
@@ -39,7 +40,8 @@ export const bulkAssignBoxSchema = z.object({
   itemIds: z.array(z.string().uuid()).min(1, 'At least one item ID required'),
   boxId: z.string().uuid('Nieprawidłowy identyfikator kartonu').optional().nullable(),
   boxNumber: z.string().max(100).optional().nullable(),
-}).refine((data) => data.boxId || data.boxNumber !== undefined, {
+  sourceBoxNumber: z.string().max(100).optional().nullable(),
+}).refine((data) => data.boxId || data.boxNumber !== undefined || data.sourceBoxNumber !== undefined, {
   message: 'Wymagany numer kartonu albo identyfikator kartonu',
   path: ['boxNumber'],
 });
