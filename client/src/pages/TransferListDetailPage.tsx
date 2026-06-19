@@ -20,6 +20,7 @@ import { getApiErrorMessage } from '@/utils/apiError';
 import { normalizeDisplayText } from '@archivecore/shared';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
+const ITEM_PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
 
 // ─── Local transfer-list box number input ───────────────
 function BoxNumberInput({
@@ -65,6 +66,7 @@ export default function TransferListDetailPage() {
 
   // Filters
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [boxFilter, setBoxFilter] = useState('');
@@ -109,7 +111,7 @@ export default function TransferListDetailPage() {
   );
 
   // Fetch items with pagination + filters
-  const itemParams: any = { page, limit: 50 };
+  const itemParams: any = { page, limit: pageSize };
   if (search) itemParams.search = search;
   if (categoryFilter) itemParams.categoryCode = categoryFilter;
   if (boxFilter) itemParams.hasBox = boxFilter;
@@ -128,6 +130,11 @@ export default function TransferListDetailPage() {
   const itemsPagination = (itemsResult as any)?.pagination;
   const getItemStorageLocation = (item: any) => item.storageLocation || item.box?.location?.fullPath || '';
   const getItemSourceBoxNumber = (item: any) => item.sourceBoxNumber || item.box?.boxNumber || '';
+  const handlePageSizeChange = (limit: number) => {
+    setPageSize(limit);
+    setPage(1);
+    setSelectedItemIds(new Set());
+  };
 
   const resetForm = () => {
     setForm({
@@ -885,13 +892,15 @@ export default function TransferListDetailPage() {
             </tbody>
           </table>
         </div>
-        {itemsPagination && itemsPagination.totalPages > 1 && (
+        {itemsPagination && (
           <div className="px-4 py-3 border-t border-gray-100">
             <Pagination
               page={itemsPagination.page}
               total={itemsPagination.total}
-              limit={itemsPagination.limit}
+              limit={pageSize}
               onPageChange={setPage}
+              pageSizeOptions={ITEM_PAGE_SIZE_OPTIONS}
+              onLimitChange={handlePageSizeChange}
             />
           </div>
         )}
