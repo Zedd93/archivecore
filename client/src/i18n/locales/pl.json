@@ -839,6 +839,7 @@
     "title": "Dashboard",
     "subtitle": "Przegląd stanu archiwum",
     "totalBoxes": "Kartony ogółem",
+    "totalFolders": "Teczki ogółem",
     "activeBoxes": "aktywnych",
     "hrRecords": "Akta osobowe",
     "activeOrders": "Aktywne zlecenia",

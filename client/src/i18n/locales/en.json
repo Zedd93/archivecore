@@ -839,6 +839,7 @@
     "title": "Dashboard",
     "subtitle": "Archive status overview",
     "totalBoxes": "Total boxes",
+    "totalFolders": "Total folders",
     "activeBoxes": "active",
     "hrRecords": "HR records",
     "activeOrders": "Active orders",

@@ -1,7 +1,7 @@
 import { useDashboardKPIs } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
 import KPICard from '@/components/ui/KPICard';
-import { Box, ClipboardList, UserCircle, MapPin, AlertTriangle, Clock, Users, Archive } from 'lucide-react';
+import { Box, ClipboardList, UserCircle, MapPin, AlertTriangle, Clock, Users, Archive, FolderOpen } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -24,13 +24,19 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <KPICard
           title={t('dashboard.totalBoxes')}
           value={kpis?.totalBoxes ?? 0}
           icon={<Box size={24} />}
           color="blue"
           change={`${kpis?.activeBoxes ?? 0} ${t('dashboard.activeBoxes')}`}
+        />
+        <KPICard
+          title={t('dashboard.totalFolders')}
+          value={kpis?.totalFolders ?? 0}
+          icon={<FolderOpen size={24} />}
+          color="purple"
         />
         <KPICard
           title={t('boxes.statusIssued')}
@@ -42,7 +48,7 @@ export default function DashboardPage() {
           title={t('dashboard.hrRecords')}
           value={kpis?.totalHRFolders ?? 0}
           icon={<UserCircle size={24} />}
-          color="purple"
+          color="blue"
         />
         <KPICard
           title={t('dashboard.activeOrders')}
