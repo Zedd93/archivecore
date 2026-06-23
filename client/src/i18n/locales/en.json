@@ -850,6 +850,13 @@
     "activeUsers": "Active users",
     "quickActions": "Quick actions",
     "newBox": "New box",
+    "newFolder": "New folder",
+    "newFolderTitle": "New folder in a transfer list",
+    "transferListForFolder": "Transfer list",
+    "chooseTransferList": "Choose transfer list",
+    "noDraftTransferLists": "No draft transfer lists. Folders can be added only to lists in Draft status.",
+    "createFolder": "Add folder",
+    "folderCreated": "Folder added to transfer list",
     "newOrder": "New order",
     "newHr": "New record",
     "search": "Search"

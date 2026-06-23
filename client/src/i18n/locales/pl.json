@@ -850,6 +850,13 @@
     "activeUsers": "Aktywni użytkownicy",
     "quickActions": "Szybkie akcje",
     "newBox": "Nowy karton",
+    "newFolder": "Nowa teczka",
+    "newFolderTitle": "Nowa teczka w Spisie ZO",
+    "transferListForFolder": "Spis ZO",
+    "chooseTransferList": "Wybierz Spis ZO",
+    "noDraftTransferLists": "Brak roboczych Spisów ZO. Teczki można dodawać tylko do spisów w statusie Szkic.",
+    "createFolder": "Dodaj teczkę",
+    "folderCreated": "Teczka dodana do Spisu ZO",
     "newOrder": "Nowe zlecenie",
     "newHr": "Nowe akta",
     "search": "Szukaj"
