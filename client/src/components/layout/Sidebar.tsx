@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  LayoutDashboard, Box, MapPin, FileText, ClipboardList,
+  LayoutDashboard, Box, MapPin, FolderOpen, ClipboardList,
   Users, QrCode, Search, BarChart3, Shield, Clock,
   Building2, Settings, UserCircle, FileSpreadsheet, X, Upload, ArchiveRestore,
 } from 'lucide-react';
@@ -18,6 +18,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/', labelKey: 'layout.nav.dashboard', icon: <LayoutDashboard size={20} /> },
   { to: '/boxes', labelKey: 'layout.nav.boxes', icon: <Box size={20} />, permission: 'box.read' },
+  { to: '/folders', labelKey: 'layout.nav.folders', icon: <FolderOpen size={20} />, permission: 'folder.read' },
   { to: '/locations', labelKey: 'layout.nav.locations', icon: <MapPin size={20} />, permission: 'location.read' },
   { to: '/loans', labelKey: 'layout.nav.loans', icon: <ArchiveRestore size={20} />, permission: 'order.read' },
   { to: '/orders', labelKey: 'layout.nav.orders', icon: <ClipboardList size={20} />, permission: 'order.read' },

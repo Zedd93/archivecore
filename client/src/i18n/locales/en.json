@@ -158,6 +158,23 @@
     }
   },
 
+  "folders": {
+    "title": "Folders",
+    "subtitle": "Smallest archive units: transfer-list folders and manually added folders",
+    "searchPlaceholder": "Search by sign, title, box, location, or transfer list...",
+    "sourceAll": "All sources",
+    "sourceTransferList": "From transfer lists",
+    "sourceManual": "Added manually",
+    "folder": "Folder",
+    "dateRange": "Date range",
+    "category": "Cat.",
+    "box": "Box",
+    "location": "Location",
+    "source": "Source",
+    "empty": "No folders",
+    "folderCount": "Folder count: {{count}}"
+  },
+
   "orders": {
     "title": "Orders",
     "subtitle": "Issues, returns, transfers and destruction",
@@ -849,6 +866,7 @@
     "nav": {
       "dashboard": "Dashboard",
       "boxes": "Boxes",
+      "folders": "Folders",
       "locations": "Locations",
       "loans": "Loans",
       "orders": "Orders",

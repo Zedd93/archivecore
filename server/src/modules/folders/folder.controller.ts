@@ -4,6 +4,15 @@ import { successResponse, paginatedResponse, errorResponse } from '../../utils/r
 import { parsePagination } from '../../utils/pagination';
 
 export class FolderController {
+  async listAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { skip, take, page, limit } = parsePagination(req.query as any);
+      const { data, total } = await folderService.listAll(req.tenantId, req.query, skip, take, req.accessDepartment || undefined);
+      return paginatedResponse(res, data, total, page, limit);
+    } catch (err) { next(err); }
+  }
+
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

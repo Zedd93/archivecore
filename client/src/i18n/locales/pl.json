@@ -158,6 +158,23 @@
     }
   },
 
+  "folders": {
+    "title": "Teczki",
+    "subtitle": "Najmniejsze jednostki archiwalne: teczki ze spisów ZO i teczki dodane ręcznie",
+    "searchPlaceholder": "Szukaj po znaku, tytule, kartonie, lokalizacji lub spisie...",
+    "sourceAll": "Wszystkie źródła",
+    "sourceTransferList": "Ze spisów ZO",
+    "sourceManual": "Dodane ręcznie",
+    "folder": "Teczka",
+    "dateRange": "Daty skrajne",
+    "category": "Kat.",
+    "box": "Karton",
+    "location": "Lokalizacja",
+    "source": "Źródło",
+    "empty": "Brak teczek",
+    "folderCount": "Liczba teczek: {{count}}"
+  },
+
   "orders": {
     "title": "Zlecenia",
     "subtitle": "Wydania, zwroty, transfery i brakowanie",
@@ -849,6 +866,7 @@
     "nav": {
       "dashboard": "Dashboard",
       "boxes": "Kartony",
+      "folders": "Teczki",
       "locations": "Lokalizacje",
       "loans": "Wypożyczenia",
       "orders": "Zlecenia",

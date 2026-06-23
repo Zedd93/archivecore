@@ -10,6 +10,7 @@ import { validate } from '../../middleware/validate';
 const router = Router();
 const auth = [authenticate, tenantContext];
 
+router.get('/', ...auth, requirePermission(Permissions.FOLDER_READ), (req, res, next) => folderController.listAll(req, res, next));
 router.get('/box/:boxId', ...auth, requirePermission(Permissions.FOLDER_READ), (req, res, next) => folderController.list(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.FOLDER_READ), (req, res, next) => folderController.getById(req, res, next));
 router.post('/', ...auth, requirePermission(Permissions.FOLDER_WRITE), validate(createFolderSchema), auditLog('folder', 'folder.create'), (req, res, next) => folderController.create(req, res, next));
