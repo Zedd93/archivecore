@@ -148,6 +148,26 @@ export class OrderService {
       };
     }
 
+    if (item.folderId) {
+      const folder = await prisma.folder.findFirst({
+        where: {
+          id: item.folderId,
+          tenantId,
+          ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!folder) {
+        throw Object.assign(new Error('Teczka nie istnieje albo nie masz do niej dostępu'), { statusCode: 404 });
+      }
+
+      return {
+        folderId: folder.id,
+        itemStatus: OrderItemStatus.pending,
+      };
+    }
+
     if (item.transferListItemId) {
       const transferListItem = await prisma.transferListItem.findFirst({
         where: {

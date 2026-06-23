@@ -2,35 +2,35 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
-import { FileText, Loader2, X } from 'lucide-react';
+import { FileSpreadsheet, FolderOpen, Loader2, X } from 'lucide-react';
+import { normalizeDisplayText } from '@archivecore/shared';
 
-interface SelectedDocument {
+export interface SelectedFolder {
   id: string;
+  source: 'manual' | 'transfer_list';
+  folderNumber?: string | null;
   title: string;
+  categoryCode?: string | null;
   docType?: string | null;
-  source?: 'document' | 'transfer_list_item';
-  box?: { id: string; boxNumber: string } | null;
-  folder?: { id: string; folderNumber: string; title?: string | null } | null;
+  box?: { id: string; boxNumber: string; title?: string | null } | null;
   transferList?: { id: string; listNumber: string; title: string } | null;
 }
 
-interface DocumentPickerProps {
-  value?: SelectedDocument[];
-  onChange: (documents: SelectedDocument[]) => void;
+interface FolderPickerProps {
+  value?: SelectedFolder[];
+  onChange: (folders: SelectedFolder[]) => void;
   placeholder?: string;
   className?: string;
   maxSelected?: number;
-  includeTransferListItems?: boolean;
 }
 
-export default function DocumentPicker({
+export default function FolderPicker({
   value = [],
   onChange,
   placeholder,
   className = '',
   maxSelected,
-  includeTransferListItems = true,
-}: DocumentPickerProps) {
+}: FolderPickerProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -62,30 +62,31 @@ export default function DocumentPicker({
   }, []);
 
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['document-picker', debouncedSearch, includeTransferListItems],
+    queryKey: ['folder-picker', debouncedSearch],
     queryFn: async () => {
       if (!debouncedSearch.trim()) return [];
-      const { data } = await api.get('/documents', {
-        params: { search: debouncedSearch, limit: 10, loanable: true, includeTransferListItems },
+      const { data } = await api.get('/folders', {
+        params: { search: debouncedSearch, limit: 10 },
       });
-      return (data.data || []) as SelectedDocument[];
+      return (data.data || []) as SelectedFolder[];
     },
     enabled: debouncedSearch.trim().length >= 1,
     staleTime: 30_000,
   });
 
-  const selectedIds = new Set(value.map((doc) => doc.id));
-  const filteredResults = results.filter((doc) => !selectedIds.has(doc.id));
+  const selectedKeys = new Set(value.map((folder) => `${folder.source}:${folder.id}`));
+  const filteredResults = results.filter((folder) => !selectedKeys.has(`${folder.source}:${folder.id}`));
 
-  const selectDocument = (doc: SelectedDocument) => {
-    const selected = {
-      id: doc.id,
-      title: doc.title,
-      docType: doc.docType,
-      source: doc.source || 'document',
-      box: doc.box,
-      folder: doc.folder,
-      transferList: doc.transferList,
+  const selectFolder = (folder: SelectedFolder) => {
+    const selected: SelectedFolder = {
+      id: folder.id,
+      source: folder.source,
+      folderNumber: folder.folderNumber,
+      title: folder.title,
+      categoryCode: folder.categoryCode,
+      docType: folder.docType,
+      box: folder.box,
+      transferList: folder.transferList,
     };
     onChange(maxSelected === 1 ? [selected] : [...value, selected]);
     setSearch('');
@@ -93,24 +94,26 @@ export default function DocumentPicker({
     setOpen(false);
   };
 
-  const removeDocument = (id: string) => {
-    onChange(value.filter((doc) => doc.id !== id));
+  const removeFolder = (folder: SelectedFolder) => {
+    onChange(value.filter((entry) => !(entry.id === folder.id && entry.source === folder.source)));
   };
 
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {value.map((doc) => (
+          {value.map((folder) => (
             <span
-              key={doc.id}
-              className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-md px-2 py-0.5 text-sm"
+              key={`${folder.source}-${folder.id}`}
+              className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-md px-2 py-0.5 text-sm"
             >
-              <FileText size={12} />
-              <span className="max-w-[220px] truncate">{doc.title}</span>
+              {folder.source === 'transfer_list' ? <FileSpreadsheet size={12} /> : <FolderOpen size={12} />}
+              <span className="max-w-[260px] truncate">
+                {folder.folderNumber ? `${folder.folderNumber} - ` : ''}{normalizeDisplayText(folder.title)}
+              </span>
               <button
                 type="button"
-                onClick={() => removeDocument(doc.id)}
+                onClick={() => removeFolder(folder)}
                 className="hover:text-red-600"
                 aria-label={t('common.remove', 'Usuń')}
               >
@@ -123,7 +126,7 @@ export default function DocumentPicker({
 
       {(!maxSelected || value.length < maxSelected) && (
         <div className="relative">
-          <FileText size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <FolderOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={search}
@@ -131,8 +134,9 @@ export default function DocumentPicker({
             onFocus={() => {
               if (search) setOpen(true);
             }}
-            placeholder={placeholder || t('loans.documentSearchPlaceholder')}
+            placeholder={placeholder || t('loans.folderSearchPlaceholder')}
             className="input-field pl-9"
+            autoComplete="off"
           />
           {isFetching && (
             <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />
@@ -147,20 +151,22 @@ export default function DocumentPicker({
               <Loader2 size={14} className="animate-spin" /> {t('common.loading')}
             </div>
           ) : filteredResults.length > 0 ? (
-            filteredResults.map((doc) => (
+            filteredResults.map((folder) => (
               <button
-                key={doc.id}
+                key={`${folder.source}-${folder.id}`}
                 type="button"
-                onClick={() => selectDocument(doc)}
+                onClick={() => selectFolder(folder)}
                 className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0"
               >
-                <div className="text-sm font-medium text-gray-900 truncate">{doc.title}</div>
+                <div className="text-sm font-medium text-gray-900 break-words">
+                  {normalizeDisplayText(folder.title)}
+                </div>
                 <div className="text-xs text-gray-500 truncate">
                   {[
-                    doc.source === 'transfer_list_item' ? t('boxes.transferListItems', 'Pozycja spisu ZO') : t('loans.itemTypes.document'),
-                    doc.folder?.folderNumber,
-                    doc.box?.boxNumber,
-                    doc.transferList?.listNumber,
+                    folder.source === 'transfer_list' ? t('loans.itemTypes.transfer_list_item') : t('loans.itemTypes.folder'),
+                    folder.folderNumber,
+                    folder.box?.boxNumber,
+                    folder.transferList?.listNumber,
                   ].filter(Boolean).join(' | ') || t('common.noData', 'Brak danych')}
                 </div>
               </button>

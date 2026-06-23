@@ -255,17 +255,19 @@
     "returnConfirm": "Czy na pewno oznaczyć tę pozycję jako zwróconą i zakończyć wypożyczenie, jeśli była ostatnia?",
     "returned": "Wypożyczenie zwrócone",
     "documentSearchPlaceholder": "Szukaj dokumentu po tytule lub opisie...",
+    "folderSearchPlaceholder": "Szukaj teczki po znaku, tytule, kartonie lub spisie...",
     "itemTypes": {
       "box": "Karton",
       "folder": "Teczka",
       "document": "Dokument",
-      "transfer_list_item": "Pozycja spisu ZO",
+      "transfer_list_item": "Teczka ze spisu ZO",
       "hr_folder": "Akta osobowe",
       "unknown": "Pozycja"
     },
     "createModal": {
       "title": "Zgłoś wypożyczenie",
       "boxes": "Kartony do wypożyczenia",
+      "folders": "Teczki do wypożyczenia",
       "documents": "Dokumenty do wypożyczenia",
       "expectedReturnAt": "Proponowana data zwrotu",
       "notesPlaceholder": "Uzasadnienie / uwagi do wypożyczenia...",

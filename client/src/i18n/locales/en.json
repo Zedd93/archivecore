@@ -255,17 +255,19 @@
     "returnConfirm": "Mark this item as returned and complete the loan if it was the last active item?",
     "returned": "Loan item returned",
     "documentSearchPlaceholder": "Search document by title or description...",
+    "folderSearchPlaceholder": "Search folder by sign, title, box, or transfer list...",
     "itemTypes": {
       "box": "Box",
       "folder": "Folder",
       "document": "Document",
-      "transfer_list_item": "Transfer list item",
+      "transfer_list_item": "Transfer-list folder",
       "hr_folder": "HR record",
       "unknown": "Item"
     },
     "createModal": {
       "title": "Request a loan",
       "boxes": "Boxes to borrow",
+      "folders": "Folders to borrow",
       "documents": "Documents to borrow",
       "expectedReturnAt": "Proposed return date",
       "notesPlaceholder": "Reason / notes for the loan...",

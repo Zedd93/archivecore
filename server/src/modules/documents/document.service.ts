@@ -54,6 +54,7 @@ export class DocumentService {
     const search = String(filters.search).trim();
     if (!search) return { data: [], total: 0 };
     const insensitive = Prisma.QueryMode.insensitive;
+    const includeTransferListItems = filters.includeTransferListItems !== 'false';
 
     const documentWhere: Prisma.DocumentWhereInput = {
       tenantId,
@@ -109,16 +110,16 @@ export class DocumentService {
           box: { select: { id: true, boxNumber: true } },
         },
       }),
-      prisma.transferListItem.findMany({
+      includeTransferListItems ? prisma.transferListItem.findMany({
         where: transferListItemWhere,
         take: Math.max(take + skip, 500),
         include: {
           box: { select: { id: true, boxNumber: true } },
           transferList: { select: { id: true, listNumber: true, title: true } },
         },
-      }),
+      }) : Promise.resolve([]),
       prisma.document.count({ where: documentWhere }),
-      prisma.transferListItem.count({ where: transferListItemWhere }),
+      includeTransferListItems ? prisma.transferListItem.count({ where: transferListItemWhere }) : Promise.resolve(0),
     ]);
 
     const data = [

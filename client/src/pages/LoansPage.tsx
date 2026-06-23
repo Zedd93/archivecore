@@ -7,6 +7,7 @@ import { useCreate } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
+import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { getApiErrorMessage } from '@/utils/apiError';
@@ -55,6 +56,7 @@ export default function LoansPage() {
   const { hasPermission } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
+  const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [priority, setPriority] = useState('normal');
   const [expectedReturnAt, setExpectedReturnAt] = useState(getDefaultExpectedReturnDate);
@@ -88,6 +90,7 @@ export default function LoansPage() {
 
   const resetForm = () => {
     setSelectedBoxes([]);
+    setSelectedFolders([]);
     setSelectedDocuments([]);
     setPriority('normal');
     setExpectedReturnAt(getDefaultExpectedReturnDate());
@@ -98,6 +101,11 @@ export default function LoansPage() {
     e.preventDefault();
     const items = [
       ...selectedBoxes.map((box) => ({ boxId: box.id })),
+      ...selectedFolders.map((folder) => (
+        folder.source === 'transfer_list'
+          ? { transferListItemId: folder.id }
+          : { folderId: folder.id }
+      )),
       ...selectedDocuments.map((doc) => (
         doc.source === 'transfer_list_item'
           ? { transferListItemId: doc.id }
@@ -246,11 +254,21 @@ export default function LoansPage() {
           </div>
 
           <div>
+            <label className="label-text">{t('loans.createModal.folders')}</label>
+            <FolderPicker
+              value={selectedFolders}
+              onChange={setSelectedFolders}
+              placeholder={t('loans.folderSearchPlaceholder')}
+            />
+          </div>
+
+          <div>
             <label className="label-text">{t('loans.createModal.documents')}</label>
             <DocumentPicker
               value={selectedDocuments}
               onChange={setSelectedDocuments}
               placeholder={t('loans.documentSearchPlaceholder')}
+              includeTransferListItems={false}
             />
           </div>
 
@@ -293,7 +311,7 @@ export default function LoansPage() {
             </button>
             <button
               type="submit"
-              disabled={createLoan.isPending || !expectedReturnAt || (selectedBoxes.length + selectedDocuments.length === 0)}
+              disabled={createLoan.isPending || !expectedReturnAt || (selectedBoxes.length + selectedFolders.length + selectedDocuments.length === 0)}
               className="btn-primary"
             >
               {createLoan.isPending ? t('common.creating') : t('loans.createModal.submit')}
