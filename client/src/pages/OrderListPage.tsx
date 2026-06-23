@@ -8,9 +8,22 @@ import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
+import DocumentPicker from '@/components/ui/DocumentPicker';
+import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleCode } from '@archivecore/shared';
 import { Plus, AlertTriangle, Download, Loader2, Trash2 } from 'lucide-react';
+
+interface SelectedBox {
+  id: string;
+  boxNumber: string;
+}
+
+interface SelectedDocument {
+  id: string;
+  title: string;
+  source?: 'document' | 'transfer_list_item';
+}
 
 export default function OrderListPage() {
   const navigate = useNavigate();
@@ -18,7 +31,9 @@ export default function OrderListPage() {
   const { hasRole } = useAuth();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
+  const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
+  const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [filters, setFilters] = useState({ search: '', status: '', orderType: '' });
 
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters });
@@ -26,6 +41,7 @@ export default function OrderListPage() {
   const deleteOrder = useDelete('/orders', ['orders'], t('orders.deleted'));
   const { exportData, isExporting } = useExport({ endpoint: '/export/orders', defaultFilename: 'zlecenia.xlsx' });
   const canDeleteOrders = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
+  const selectedItemCount = selectedBoxes.length + selectedFolders.length + selectedDocuments.length;
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'),
@@ -114,15 +130,34 @@ export default function OrderListPage() {
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (selectedItemCount === 0) return;
     const fd = new FormData(e.currentTarget);
     await createOrder.mutateAsync({
       orderType: fd.get('orderType'),
       priority: fd.get('priority') || 'normal',
       notes: fd.get('notes') || undefined,
-      items: selectedBoxes.map(b => ({ boxId: b.id })),
+      items: [
+        ...selectedBoxes.map((box) => ({ boxId: box.id })),
+        ...selectedFolders.map((folder) => (
+          folder.source === 'transfer_list'
+            ? { transferListItemId: folder.id }
+            : { folderId: folder.id }
+        )),
+        ...selectedDocuments.map((doc) => (
+          doc.source === 'transfer_list_item'
+            ? { transferListItemId: doc.id }
+            : { documentId: doc.id }
+        )),
+      ],
     });
     setShowCreate(false);
+    resetCreateForm();
+  };
+
+  const resetCreateForm = () => {
     setSelectedBoxes([]);
+    setSelectedFolders([]);
+    setSelectedDocuments([]);
   };
 
   return (
@@ -189,7 +224,7 @@ export default function OrderListPage() {
       </div>
 
       {/* Create Modal */}
-      <Modal isOpen={showCreate} onClose={() => { setShowCreate(false); setSelectedBoxes([]); }} title={t('orders.createModal.title')} size="lg">
+      <Modal isOpen={showCreate} onClose={() => { setShowCreate(false); resetCreateForm(); }} title={t('orders.createModal.title')} size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -219,12 +254,29 @@ export default function OrderListPage() {
             />
           </div>
           <div>
+            <label className="label-text">{t('orders.createModal.folders')}</label>
+            <FolderPicker
+              value={selectedFolders}
+              onChange={setSelectedFolders}
+              placeholder={t('orders.createModal.foldersPlaceholder')}
+            />
+          </div>
+          <div>
+            <label className="label-text">{t('orders.createModal.documents')}</label>
+            <DocumentPicker
+              value={selectedDocuments}
+              onChange={setSelectedDocuments}
+              placeholder={t('orders.createModal.documentsPlaceholder')}
+              includeTransferListItems={false}
+            />
+          </div>
+          <div>
             <label htmlFor="order-create-notes" className="label-text">{t('orders.createModal.notes')}</label>
             <textarea id="order-create-notes" name="notes" className="input-field" rows={3} placeholder={t('orders.createModal.notesPlaceholder')} />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => { setShowCreate(false); setSelectedBoxes([]); }} className="btn-secondary">{t('common.cancel')}</button>
-            <button type="submit" disabled={createOrder.isPending} className="btn-primary">
+            <button type="button" onClick={() => { setShowCreate(false); resetCreateForm(); }} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="submit" disabled={createOrder.isPending || selectedItemCount === 0} className="btn-primary">
               {createOrder.isPending ? t('common.creating') : t('orders.createModal.submit')}
             </button>
           </div>

@@ -12,11 +12,19 @@ import ActivityTimeline from '@/components/ui/ActivityTimeline';
 import ShareButton from '@/components/ui/ShareButton';
 import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
+import DocumentPicker from '@/components/ui/DocumentPicker';
+import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus } from 'lucide-react';
 
 // Status flow steps
 const STATUS_STEPS = ['draft', 'submitted', 'approved', 'in_progress', 'ready', 'delivered', 'completed'];
+
+interface SelectedDocument {
+  id: string;
+  title: string;
+  source?: 'document' | 'transfer_list_item';
+}
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -29,9 +37,11 @@ export default function OrderDetailPage() {
     ['order', 'orders', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
     t('orders.detail.statusChanged')
   );
-  const [showAddBox, setShowAddBox] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
-  const [addingBoxes, setAddingBoxes] = useState(false);
+  const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
+  const [addingItems, setAddingItems] = useState(false);
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'), return_order: t('orders.typeReturn'),
@@ -61,25 +71,44 @@ export default function OrderDetailPage() {
 
   const canAddItems = hasPermission('order.create') || hasPermission('order.process');
 
-  const handleAddBoxes = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!id || selectedBoxes.length === 0) return;
+  const resetAddItemForm = () => {
+    setSelectedBoxes([]);
+    setSelectedFolders([]);
+    setSelectedDocuments([]);
+  };
 
-    setAddingBoxes(true);
+  const handleAddItems = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const items = [
+      ...selectedBoxes.map((box) => ({ boxId: box.id })),
+      ...selectedFolders.map((folder) => (
+        folder.source === 'transfer_list'
+          ? { transferListItemId: folder.id }
+          : { folderId: folder.id }
+      )),
+      ...selectedDocuments.map((doc) => (
+        doc.source === 'transfer_list_item'
+          ? { transferListItemId: doc.id }
+          : { documentId: doc.id }
+      )),
+    ];
+    if (!id || items.length === 0) return;
+
+    setAddingItems(true);
     try {
       await Promise.all(
-        selectedBoxes.map((box) => api.post(`/orders/${id}/items`, { boxId: box.id }))
+        items.map((item) => api.post(`/orders/${id}/items`, item))
       );
-      toast.success(t('orders.detail.itemAdded', 'Karton dodany do zlecenia'));
-      setSelectedBoxes([]);
-      setShowAddBox(false);
+      toast.success(t('orders.detail.itemAdded', 'Pozycja dodana do zlecenia'));
+      resetAddItemForm();
+      setShowAddItem(false);
       queryClient.invalidateQueries({ queryKey: ['order'] });
       queryClient.invalidateQueries({ queryKey: ['order', id] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
-      setAddingBoxes(false);
+      setAddingItems(false);
     }
   };
 
@@ -182,8 +211,8 @@ export default function OrderDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('orders.detail.items', { count: order.items?.length || 0 })}</h2>
             {canAddItems && !['completed', 'cancelled'].includes(order.status) && (
-              <button type="button" onClick={() => setShowAddBox(true)} className="btn-secondary flex items-center gap-2 text-sm">
-                <Plus size={14} /> {t('orders.detail.addBox', 'Dodaj karton')}
+              <button type="button" onClick={() => setShowAddItem(true)} className="btn-secondary flex items-center gap-2 text-sm">
+                <Plus size={14} /> {t('orders.detail.addItem', 'Dodaj pozycję')}
               </button>
             )}
           </div>
@@ -302,12 +331,12 @@ export default function OrderDetailPage() {
       </div>
 
       <Modal
-        isOpen={showAddBox}
-        onClose={() => { setShowAddBox(false); setSelectedBoxes([]); }}
-        title={t('orders.detail.addBoxTitle', 'Dodaj karton do zlecenia')}
+        isOpen={showAddItem}
+        onClose={() => { setShowAddItem(false); resetAddItemForm(); }}
+        title={t('orders.detail.addItemTitle', 'Dodaj pozycję do zlecenia')}
         size="lg"
       >
-        <form onSubmit={handleAddBoxes} className="space-y-4">
+        <form onSubmit={handleAddItems} className="space-y-4">
           <div>
             <label className="label-text">{t('orders.createModal.boxIds')}</label>
             <BoxPicker
@@ -316,16 +345,37 @@ export default function OrderDetailPage() {
               placeholder={t('orders.createModal.boxIdsPlaceholder')}
             />
           </div>
+          <div>
+            <label className="label-text">{t('orders.createModal.folders')}</label>
+            <FolderPicker
+              value={selectedFolders}
+              onChange={setSelectedFolders}
+              placeholder={t('orders.createModal.foldersPlaceholder')}
+            />
+          </div>
+          <div>
+            <label className="label-text">{t('orders.createModal.documents')}</label>
+            <DocumentPicker
+              value={selectedDocuments}
+              onChange={setSelectedDocuments}
+              placeholder={t('orders.createModal.documentsPlaceholder')}
+              includeTransferListItems={false}
+            />
+          </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button
               type="button"
-              onClick={() => { setShowAddBox(false); setSelectedBoxes([]); }}
+              onClick={() => { setShowAddItem(false); resetAddItemForm(); }}
               className="btn-secondary"
             >
               {t('common.cancel')}
             </button>
-            <button type="submit" disabled={addingBoxes || selectedBoxes.length === 0} className="btn-primary">
-              {addingBoxes ? t('common.saving', 'Zapisywanie...') : t('orders.detail.addBox', 'Dodaj karton')}
+            <button
+              type="submit"
+              disabled={addingItems || (selectedBoxes.length + selectedFolders.length + selectedDocuments.length === 0)}
+              className="btn-primary"
+            >
+              {addingItems ? t('common.saving', 'Zapisywanie...') : t('orders.detail.addItem', 'Dodaj pozycję')}
             </button>
           </div>
         </form>
