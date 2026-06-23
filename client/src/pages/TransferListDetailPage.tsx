@@ -7,6 +7,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import LocationPicker from '@/components/ui/LocationPicker';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import {
@@ -83,6 +84,7 @@ export default function TransferListDetailPage() {
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<'none' | 'assignBox' | 'storageLocation' | 'disposalDate'>('none');
   const [bulkBoxNumber, setBulkBoxNumber] = useState('');
+  const [bulkStorageLocationId, setBulkStorageLocationId] = useState('');
   const [bulkStorageLocation, setBulkStorageLocation] = useState('');
   const [bulkDisposalDate, setBulkDisposalDate] = useState('');
   const [bulkProcessing, setBulkProcessing] = useState(false);
@@ -379,7 +381,7 @@ export default function TransferListDetailPage() {
   };
 
   const handleBulkUpdateStorageLocation = async () => {
-    if (!bulkStorageLocation.trim()) {
+    if (!bulkStorageLocationId || !bulkStorageLocation.trim()) {
       toast.error(t('transferLists.detail.enterStorageLocation'));
       return;
     }
@@ -392,6 +394,7 @@ export default function TransferListDetailPage() {
       toast.success(t('transferLists.detail.storageLocationUpdated', { count: data.data.updated }));
       setSelectedItemIds(new Set());
       setBulkAction('none');
+      setBulkStorageLocationId('');
       setBulkStorageLocation('');
       refetchItems();
     } catch (err: any) {
@@ -622,7 +625,7 @@ export default function TransferListDetailPage() {
                 {t('transferLists.detail.assignBox')}
               </button>
               <button
-                onClick={() => { setBulkAction('storageLocation'); setBulkStorageLocation(''); }}
+                onClick={() => { setBulkAction('storageLocation'); setBulkStorageLocationId(''); setBulkStorageLocation(''); }}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors"
               >
                 <MapPin size={14} />
@@ -684,25 +687,25 @@ export default function TransferListDetailPage() {
             <div className="mt-3 pt-3 border-t border-indigo-200 flex flex-wrap items-end gap-3">
               <div className="flex-1 min-w-[240px] max-w-xl">
                 <label htmlFor="bulk-storage-location" className="text-xs font-medium text-indigo-700 mb-1 block">{t('transferLists.detail.storageLocation')}</label>
-                <input
+                <LocationPicker
                   id="bulk-storage-location"
-                  type="text"
-                  value={bulkStorageLocation}
-                  onChange={(e) => setBulkStorageLocation(e.target.value)}
-                  className="input"
+                  value={bulkStorageLocationId}
+                  onChange={setBulkStorageLocationId}
+                  onLocationChange={(location) => setBulkStorageLocation(location?.fullPath || '')}
                   placeholder={t('transferLists.detail.storageLocationPlaceholder')}
+                  excludeTypes={['warehouse', 'zone', 'rack']}
                 />
               </div>
               <button
                 onClick={handleBulkUpdateStorageLocation}
-                disabled={bulkProcessing || !bulkStorageLocation.trim()}
+                disabled={bulkProcessing || !bulkStorageLocationId || !bulkStorageLocation.trim()}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
               >
                 {bulkProcessing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {t('transferLists.detail.assign')}
               </button>
               <button
-                onClick={() => { setBulkAction('none'); setBulkStorageLocation(''); }}
+                onClick={() => { setBulkAction('none'); setBulkStorageLocationId(''); setBulkStorageLocation(''); }}
                 className="btn-secondary text-sm py-2 px-3"
               >
                 {t('common.cancel')}

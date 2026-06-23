@@ -28,6 +28,7 @@ interface LocationPickerProps {
   id?: string;
   value?: string;
   onChange: (locationId: string) => void;
+  onLocationChange?: (location: FlatLocation | null) => void;
   placeholder?: string;
   excludeTypes?: string[];
   excludeIds?: string[];
@@ -99,6 +100,7 @@ export default function LocationPicker({
   id,
   value,
   onChange,
+  onLocationChange,
   placeholder,
   excludeTypes = [],
   excludeIds = [],
@@ -188,6 +190,7 @@ export default function LocationPicker({
 
   function handleSelect(loc: FlatLocation) {
     onChange(loc.id);
+    onLocationChange?.(loc);
     setSearch('');
     setOpen(false);
   }
@@ -195,6 +198,7 @@ export default function LocationPicker({
   function handleClear(e: React.MouseEvent) {
     e.stopPropagation();
     onChange('');
+    onLocationChange?.(null);
     setSearch('');
     setOpen(false);
   }
