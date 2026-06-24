@@ -77,7 +77,14 @@ export default function TransferListDetailPage() {
   const [showEditListTitle, setShowEditListTitle] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [importing, setImporting] = useState(false);
-  const [editListTitle, setEditListTitle] = useState('');
+  const [editListMeta, setEditListMeta] = useState({
+    listNumber: '',
+    title: '',
+    transferringUnit: '',
+    receivingUnit: '',
+    transferDate: '',
+    notes: '',
+  });
   const [updatingListTitle, setUpdatingListTitle] = useState(false);
 
   // Selection & bulk actions
@@ -262,13 +269,29 @@ export default function TransferListDetailPage() {
   };
 
   const openEditListTitle = () => {
-    setEditListTitle(normalizeDisplayText(list.title));
+    setEditListMeta({
+      listNumber: list.listNumber || '',
+      title: normalizeDisplayText(list.title),
+      transferringUnit: normalizeDisplayText(list.transferringUnit || ''),
+      receivingUnit: normalizeDisplayText(list.receivingUnit || ''),
+      transferDate: list.transferDate ? list.transferDate.split('T')[0] : '',
+      notes: normalizeDisplayText(list.notes || ''),
+    });
     setShowEditListTitle(true);
+  };
+
+  const updateEditListMeta = (field: keyof typeof editListMeta, value: string) => {
+    setEditListMeta((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleUpdateListTitle = async (e: React.FormEvent) => {
     e.preventDefault();
-    const nextTitle = normalizeDisplayText(editListTitle).trim();
+    const nextListNumber = normalizeDisplayText(editListMeta.listNumber).trim();
+    const nextTitle = normalizeDisplayText(editListMeta.title).trim();
+    if (!nextListNumber) {
+      toast.error(t('transferLists.detail.listNumberRequired'));
+      return;
+    }
     if (!nextTitle) {
       toast.error(t('transferLists.detail.titleRequired'));
       return;
@@ -276,7 +299,14 @@ export default function TransferListDetailPage() {
 
     setUpdatingListTitle(true);
     try {
-      await api.put(`/transfer-lists/${id}`, { title: nextTitle });
+      await api.put(`/transfer-lists/${id}`, {
+        listNumber: nextListNumber,
+        title: nextTitle,
+        transferringUnit: editListMeta.transferringUnit,
+        receivingUnit: editListMeta.receivingUnit,
+        transferDate: editListMeta.transferDate || null,
+        notes: editListMeta.notes,
+      });
       toast.success(t('transferLists.detail.titleUpdated'));
       setShowEditListTitle(false);
       refetchList();
@@ -477,7 +507,7 @@ export default function TransferListDetailPage() {
               className="btn-secondary flex items-center gap-2 text-sm"
             >
               <Edit2 size={16} />
-              {t('transferLists.detail.editTitle')}
+              {t('transferLists.detail.editMetadata')}
             </button>
           )}
           {canWrite && list.status === 'draft' && (
@@ -1057,21 +1087,79 @@ export default function TransferListDetailPage() {
       <Modal
         isOpen={showEditListTitle}
         onClose={() => setShowEditListTitle(false)}
-        title={t('transferLists.detail.editTitle')}
-        size="md"
+        title={t('transferLists.detail.editMetadata')}
+        size="lg"
       >
         <form onSubmit={handleUpdateListTitle} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="edit-list-number" className="label-text">{t('transferLists.listNumber')} *</label>
+              <input
+                id="edit-list-number"
+                type="text"
+                data-autofocus
+                value={editListMeta.listNumber}
+                onChange={(e) => updateEditListMeta('listNumber', e.target.value)}
+                className="input-field"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-list-transfer-date" className="label-text">{t('transferLists.transferDate')}</label>
+              <input
+                id="edit-list-transfer-date"
+                type="date"
+                value={editListMeta.transferDate}
+                onChange={(e) => updateEditListMeta('transferDate', e.target.value)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
           <div>
             <label htmlFor="edit-list-title" className="label-text">{t('transferLists.listTitle')} *</label>
             <input
               id="edit-list-title"
               type="text"
-              data-autofocus
-              value={editListTitle}
-              onChange={(e) => setEditListTitle(e.target.value)}
+              value={editListMeta.title}
+              onChange={(e) => updateEditListMeta('title', e.target.value)}
               className="input-field"
               placeholder={t('transferLists.importModal.titlePlaceholder')}
               required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="edit-list-transferring-unit" className="label-text">{t('transferLists.senderUnit')}</label>
+              <input
+                id="edit-list-transferring-unit"
+                type="text"
+                value={editListMeta.transferringUnit}
+                onChange={(e) => updateEditListMeta('transferringUnit', e.target.value)}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-list-receiving-unit" className="label-text">{t('transferLists.receiverUnit')}</label>
+              <input
+                id="edit-list-receiving-unit"
+                type="text"
+                value={editListMeta.receivingUnit}
+                onChange={(e) => updateEditListMeta('receivingUnit', e.target.value)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="edit-list-notes" className="label-text">{t('transferLists.createModal.notes')}</label>
+            <textarea
+              id="edit-list-notes"
+              value={editListMeta.notes}
+              onChange={(e) => updateEditListMeta('notes', e.target.value)}
+              className="input-field"
+              rows={3}
             />
           </div>
 
@@ -1086,7 +1174,7 @@ export default function TransferListDetailPage() {
             <button
               type="submit"
               className="btn-primary"
-              disabled={updatingListTitle || !editListTitle.trim()}
+              disabled={updatingListTitle || !editListMeta.listNumber.trim() || !editListMeta.title.trim()}
             >
               {updatingListTitle ? t('common.saving') : t('common.save')}
             </button>

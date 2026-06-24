@@ -17,6 +17,22 @@ export class TransferListService {
     }
   }
 
+  private getListOrderBy(filters: any): Prisma.TransferListOrderByWithRelationInput {
+    const sortOrder: Prisma.SortOrder = String(filters.sortOrder || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+    switch (filters.sortBy) {
+      case 'listNumber':
+        return { listNumber: sortOrder };
+      case 'title':
+        return { title: sortOrder };
+      case 'transferDate':
+        return { transferDate: sortOrder };
+      case 'createdAt':
+      default:
+        return { createdAt: sortOrder };
+    }
+  }
+
   // ─── List all transfer lists for a tenant ─────────────
   async list(tenantId: string, filters: any, skip: number, take: number) {
     const where: Prisma.TransferListWhereInput = { tenantId };
@@ -36,7 +52,7 @@ export class TransferListService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: this.getListOrderBy(filters),
         include: {
           createdBy: { select: { id: true, firstName: true, lastName: true } },
           _count: { select: { items: true } },
@@ -98,14 +114,36 @@ export class TransferListService {
 
   // ─── Update transfer list ──────────────────────────────
   async update(id: string, tenantId: string, data: any) {
-    await this.getById(id, tenantId);
+    const list = await this.getById(id, tenantId);
+    const nextListNumber = data.listNumber === undefined ? undefined : normalizeOptionalText(data.listNumber);
+
+    if (data.listNumber !== undefined && !nextListNumber) {
+      throw Object.assign(new Error('Numer spisu jest wymagany'), { statusCode: 400 });
+    }
+
+    if (nextListNumber && nextListNumber !== list.listNumber) {
+      const existing = await prisma.transferList.findFirst({
+        where: {
+          tenantId,
+          listNumber: nextListNumber,
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+
+      if (existing) {
+        throw Object.assign(new Error('Spis o takim numerze już istnieje'), { statusCode: 409 });
+      }
+    }
+
     return prisma.transferList.update({
       where: { id },
       data: {
+        listNumber: nextListNumber,
         title: data.title === undefined ? undefined : normalizeOptionalText(data.title),
         transferringUnit: data.transferringUnit === undefined ? undefined : normalizeOptionalText(data.transferringUnit),
         receivingUnit: data.receivingUnit === undefined ? undefined : normalizeOptionalText(data.receivingUnit),
-        transferDate: data.transferDate ? new Date(data.transferDate) : undefined,
+        transferDate: data.transferDate === undefined ? undefined : data.transferDate ? new Date(data.transferDate) : null,
         notes: data.notes === undefined ? undefined : normalizeOptionalText(data.notes),
         status: data.status,
       },

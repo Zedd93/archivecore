@@ -8,7 +8,10 @@ export const createTransferListSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const updateTransferListSchema = createTransferListSchema.partial();
+export const updateTransferListSchema = createTransferListSchema.partial().extend({
+  listNumber: z.string().min(1, 'Numer spisu jest wymagany').max(50).optional(),
+  transferDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Wymagany format RRRR-MM-DD').optional().nullable(),
+});
 
 export const createTransferListItemSchema = z.object({
   folderSignature: z.string().min(1, 'Znak teczki jest wymagany').max(100),

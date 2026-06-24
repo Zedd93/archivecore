@@ -25,6 +25,8 @@ export default function TransferListPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -56,7 +58,7 @@ export default function TransferListPage() {
   const canWrite = hasPermission('transfer_list.write');
   const canImport = hasPermission('transfer_list.import');
 
-  const params: any = { page, limit: 20 };
+  const params: any = { page, limit: 20, sortBy, sortOrder };
   if (search) params.search = search;
   if (statusFilter) params.status = statusFilter;
 
@@ -314,7 +316,7 @@ export default function TransferListPage() {
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <button
-            onClick={() => exportData({ format: 'xlsx', search, status: statusFilter })}
+            onClick={() => exportData({ format: 'xlsx', search, status: statusFilter, sortBy, sortOrder })}
             disabled={isExporting}
             className="btn-secondary flex-1 sm:flex-none"
           >
@@ -367,6 +369,24 @@ export default function TransferListPage() {
               <option value="archived">{t('transferLists.statusArchived')}</option>
             </select>
           </div>
+          <select
+            value={`${sortBy}:${sortOrder}`}
+            onChange={(e) => {
+              const [nextSortBy, nextSortOrder] = e.target.value.split(':');
+              setSortBy(nextSortBy);
+              setSortOrder(nextSortOrder as 'asc' | 'desc');
+              setPage(1);
+            }}
+            className="input-field w-auto"
+            aria-label={t('transferLists.sort.label')}
+          >
+            <option value="createdAt:desc">{t('transferLists.sort.newest')}</option>
+            <option value="createdAt:asc">{t('transferLists.sort.oldest')}</option>
+            <option value="listNumber:asc">{t('transferLists.sort.numberAsc')}</option>
+            <option value="listNumber:desc">{t('transferLists.sort.numberDesc')}</option>
+            <option value="title:asc">{t('transferLists.sort.titleAsc')}</option>
+            <option value="title:desc">{t('transferLists.sort.titleDesc')}</option>
+          </select>
         </div>
       </div>
 
