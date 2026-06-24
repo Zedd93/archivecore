@@ -48,6 +48,13 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     statusCode = 400;
     message = 'Baza danych wymaga migracji dla planowanej daty zwrotu wypożyczenia. Uruchom migracje Prisma i zrestartuj aplikację.';
   }
+  if (prismaCode === 'P2002') {
+    const target = (err as any).meta?.target;
+    statusCode = 409;
+    message = Array.isArray(target) && target.includes('orderNumber')
+      ? 'Nie udało się nadać unikalnego numeru zlecenia. Spróbuj ponownie.'
+      : 'Konflikt unikalności danych w bazie. Szczegóły zapisano w logach serwera.';
+  }
   if (statusCode === 500 && prismaCode) {
     statusCode = 400;
     message = `Błąd bazy danych (${prismaCode}). Szczegóły zapisano w logach serwera.`;

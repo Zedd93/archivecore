@@ -42,6 +42,28 @@ function parseExpectedReturnAt(value?: string | null): Date | undefined {
   return date;
 }
 
+function getMonthlyOrderNumberPrefix(date = new Date()) {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `Z-${year}${month}-`;
+}
+
+function parseOrderNumberSequence(orderNumber: string, prefix: string) {
+  if (!orderNumber.startsWith(prefix)) return 0;
+  const sequence = Number.parseInt(orderNumber.slice(prefix.length), 10);
+  return Number.isFinite(sequence) ? sequence : 0;
+}
+
+function isPrismaUniqueError(err: unknown, field?: string) {
+  const anyErr = err as any;
+  if (anyErr?.code !== 'P2002') return false;
+  if (!field) return true;
+
+  const target = anyErr.meta?.target;
+  if (Array.isArray(target)) return target.includes(field);
+  return String(target || anyErr.message || '').includes(field);
+}
+
 export class OrderService {
   private getOrderItemBoxId(item: any): string | null {
     return item.boxId
@@ -270,6 +292,36 @@ export class OrderService {
     }
   }
 
+  private async generateOrderNumber() {
+    const prefix = getMonthlyOrderNumberPrefix();
+    const latestOrders = await prisma.order.findMany({
+      where: { orderNumber: { startsWith: prefix } },
+      orderBy: { orderNumber: 'desc' },
+      take: 25,
+      select: { orderNumber: true },
+    });
+    const maxSequence = latestOrders.reduce(
+      (max, order) => Math.max(max, parseOrderNumberSequence(order.orderNumber, prefix)),
+      0
+    );
+
+    return `${prefix}${(maxSequence + 1).toString().padStart(5, '0')}`;
+  }
+
+  private async createOrderWithUniqueNumber(data: any, tenantId: string, userId: string, resolvedItems: any[], slaDeadline: Date) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const orderNumber = await this.generateOrderNumber();
+      try {
+        return await this.createOrderWithItems(data, tenantId, userId, resolvedItems, orderNumber, slaDeadline);
+      } catch (err) {
+        if (isPrismaUniqueError(err, 'orderNumber')) continue;
+        throw err;
+      }
+    }
+
+    throw Object.assign(new Error('Nie udało się nadać unikalnego numeru zlecenia. Spróbuj ponownie za chwilę.'), { statusCode: 409 });
+  }
+
   async list(tenantId: string, filters: any, skip: number, take: number) {
     const where: Prisma.OrderWhereInput = { tenantId };
 
@@ -374,20 +426,9 @@ export class OrderService {
   }
 
   async create(data: any, tenantId: string, userId: string, department?: string) {
-    // Generate order number
-    const year = new Date().getFullYear();
-    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
-    const lastOrder = await prisma.order.findFirst({
-      where: { tenantId, orderNumber: { startsWith: `Z-${year}${month}-` } },
-      orderBy: { orderNumber: 'desc' },
-    });
-    const seq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
-    const orderNumber = `Z-${year}${month}-${seq.toString().padStart(5, '0')}`;
-
-    // Calculate SLA deadline
     const slaDeadline = calculateSlaDeadline(data.priority || 'normal');
     const resolvedItems = await this.resolveOrderItems(data.items, tenantId, department);
-    const order = await this.createOrderWithItems(data, tenantId, userId, resolvedItems, orderNumber, slaDeadline);
+    const order = await this.createOrderWithUniqueNumber(data, tenantId, userId, resolvedItems, slaDeadline);
 
     return order;
   }
