@@ -15,6 +15,19 @@ export class UserService {
     return Boolean(actor?.roles.includes(RoleCode.SUPER_ADMIN));
   }
 
+  private withEffectiveRolePermissions<T extends { userRoles?: Array<{ role: { code: string; permissions?: any } }> }>(user: T): T {
+    return {
+      ...user,
+      userRoles: user.userRoles?.map((userRole) => ({
+        ...userRole,
+        role: {
+          ...userRole.role,
+          permissions: ROLE_PERMISSIONS[userRole.role.code as RoleCode] ?? userRole.role.permissions ?? [],
+        },
+      })),
+    };
+  }
+
   private manageableUserWhere(id: string, tenantId: string | null, actor: IJwtPayload): Prisma.UserWhereInput {
     if (this.canManageGlobalUsers(actor)) {
       return { id };
@@ -138,7 +151,7 @@ export class UserService {
     });
 
     if (!user) throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
-    return user;
+    return this.withEffectiveRolePermissions(user);
   }
 
   async create(data: any, tenantId: string | null, creator: IJwtPayload) {

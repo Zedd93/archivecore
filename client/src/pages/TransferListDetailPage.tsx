@@ -108,7 +108,7 @@ export default function TransferListDetailPage() {
   const canImport = hasPermission('transfer_list.import');
 
   // Fetch transfer list details
-  const { data: list, isLoading: listLoading, refetch: refetchList } = useDetail(
+  const { data: list, isLoading: listLoading, error: listError, refetch: refetchList } = useDetail(
     'transfer-list', '/transfer-lists', id
   );
 
@@ -432,7 +432,11 @@ export default function TransferListDetailPage() {
   }
 
   if (!list) {
-    return <div className="card p-8 text-center text-gray-500">{t('transferLists.detail.notFound')}</div>;
+    return (
+      <div className="card p-8 text-center text-gray-500">
+        {listError ? getApiErrorMessage(listError, t('common.genericError')) : t('transferLists.detail.notFound')}
+      </div>
+    );
   }
 
   const canEditItems = canWrite && list.status === 'draft';
