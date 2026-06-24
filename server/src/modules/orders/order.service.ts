@@ -173,7 +173,11 @@ export class OrderService {
         where: {
           id: item.transferListItemId,
           transferList: { tenantId },
-          ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
+          ...(department ? {
+            box: {
+              is: { department: { equals: department, mode: 'insensitive' } },
+            },
+          } : {}),
         },
         select: { id: true },
       });
@@ -188,11 +192,82 @@ export class OrderService {
       };
     }
 
-    return {
-      folderId: item.folderId,
-      hrFolderId: item.hrFolderId,
-      itemStatus: OrderItemStatus.pending,
-    };
+    if (item.hrFolderId) {
+      const hrFolder = await prisma.hRFolder.findFirst({
+        where: {
+          id: item.hrFolderId,
+          tenantId,
+        },
+        select: { id: true },
+      });
+
+      if (!hrFolder) {
+        throw Object.assign(new Error('Akta osobowe nie istnieją albo nie masz do nich dostępu'), { statusCode: 404 });
+      }
+
+      return {
+        hrFolderId: hrFolder.id,
+        itemStatus: OrderItemStatus.pending,
+      };
+    }
+
+    throw Object.assign(new Error('Pozycja zlecenia musi wskazywać karton, teczkę, dokument, pozycję spisu albo akta osobowe'), { statusCode: 400 });
+  }
+
+  private async resolveOrderItems(items: any[], tenantId: string, department?: string) {
+    const resolvedItems = await Promise.all(
+      items.map((item: any) => this.resolveOrderItem(item, tenantId, department))
+    );
+
+    if (resolvedItems.length === 0) {
+      throw Object.assign(new Error('Zlecenie musi zawierać co najmniej jedną pozycję'), { statusCode: 400 });
+    }
+
+    return resolvedItems;
+  }
+
+  private getCreateOrderMigrationHint(err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (
+      message.includes('transferListItemId') ||
+      message.includes('order_items_transferListItemId') ||
+      message.includes('expectedReturnAt')
+    ) {
+      return Object.assign(
+        new Error('Baza danych wymaga migracji dla zleceń teczek ze Spisów ZO. Uruchom migracje Prisma i zrestartuj aplikację.'),
+        { statusCode: 400 }
+      );
+    }
+
+    return err;
+  }
+
+  private async createOrderWithItems(data: any, tenantId: string, userId: string, resolvedItems: any[], orderNumber: string, slaDeadline: Date) {
+    try {
+      return await prisma.order.create({
+        data: {
+          tenantId,
+          orderNumber,
+          orderType: data.orderType,
+          priority: data.priority || 'normal',
+          status: 'draft',
+          requestedBy: userId,
+          slaDeadline,
+          expectedReturnAt: parseExpectedReturnAt(data.expectedReturnAt),
+          notes: data.notes,
+          items: {
+            create: resolvedItems,
+          },
+        },
+        include: {
+          requester: { select: { id: true, firstName: true, lastName: true } },
+          items: true,
+          _count: { select: { items: true } },
+        },
+      });
+    } catch (err) {
+      throw this.getCreateOrderMigrationHint(err);
+    }
   }
 
   async list(tenantId: string, filters: any, skip: number, take: number) {
@@ -311,31 +386,8 @@ export class OrderService {
 
     // Calculate SLA deadline
     const slaDeadline = calculateSlaDeadline(data.priority || 'normal');
-    const resolvedItems = await Promise.all(
-      data.items.map((item: any) => this.resolveOrderItem(item, tenantId, department))
-    );
-
-    const order = await prisma.order.create({
-      data: {
-        tenantId,
-        orderNumber,
-        orderType: data.orderType,
-        priority: data.priority || 'normal',
-        status: 'draft',
-        requestedBy: userId,
-        slaDeadline,
-        expectedReturnAt: parseExpectedReturnAt(data.expectedReturnAt),
-        notes: data.notes,
-        items: {
-          create: resolvedItems,
-        },
-      },
-      include: {
-        requester: { select: { id: true, firstName: true, lastName: true } },
-        items: true,
-        _count: { select: { items: true } },
-      },
-    });
+    const resolvedItems = await this.resolveOrderItems(data.items, tenantId, department);
+    const order = await this.createOrderWithItems(data, tenantId, userId, resolvedItems, orderNumber, slaDeadline);
 
     return order;
   }

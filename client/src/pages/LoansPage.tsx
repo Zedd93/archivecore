@@ -114,17 +114,21 @@ export default function LoansPage() {
     ];
     if (items.length === 0) return;
 
-    const created: any = await createLoan.mutateAsync({
-      orderType: 'checkout',
-      priority,
-      expectedReturnAt,
-      notes: notes || undefined,
-      items,
-    });
-    setShowCreate(false);
-    resetForm();
-    refetch();
-    if (created?.id) navigate(`/orders/${created.id}`);
+    try {
+      const created: any = await createLoan.mutateAsync({
+        orderType: 'checkout',
+        priority,
+        expectedReturnAt,
+        notes: notes || undefined,
+        items,
+      });
+      setShowCreate(false);
+      resetForm();
+      refetch();
+      if (created?.id) navigate(`/orders/${created.id}`);
+    } catch {
+      // Error toast is handled by useCreate.
+    }
   };
 
   const handleReturnLoan = (item: any) => {

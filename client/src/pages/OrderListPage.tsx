@@ -132,26 +132,30 @@ export default function OrderListPage() {
     e.preventDefault();
     if (selectedItemCount === 0) return;
     const fd = new FormData(e.currentTarget);
-    await createOrder.mutateAsync({
-      orderType: fd.get('orderType'),
-      priority: fd.get('priority') || 'normal',
-      notes: fd.get('notes') || undefined,
-      items: [
-        ...selectedBoxes.map((box) => ({ boxId: box.id })),
-        ...selectedFolders.map((folder) => (
-          folder.source === 'transfer_list'
-            ? { transferListItemId: folder.id }
-            : { folderId: folder.id }
-        )),
-        ...selectedDocuments.map((doc) => (
-          doc.source === 'transfer_list_item'
-            ? { transferListItemId: doc.id }
-            : { documentId: doc.id }
-        )),
-      ],
-    });
-    setShowCreate(false);
-    resetCreateForm();
+    try {
+      await createOrder.mutateAsync({
+        orderType: fd.get('orderType'),
+        priority: fd.get('priority') || 'normal',
+        notes: fd.get('notes') || undefined,
+        items: [
+          ...selectedBoxes.map((box) => ({ boxId: box.id })),
+          ...selectedFolders.map((folder) => (
+            folder.source === 'transfer_list'
+              ? { transferListItemId: folder.id }
+              : { folderId: folder.id }
+          )),
+          ...selectedDocuments.map((doc) => (
+            doc.source === 'transfer_list_item'
+              ? { transferListItemId: doc.id }
+              : { documentId: doc.id }
+          )),
+        ],
+      });
+      setShowCreate(false);
+      resetCreateForm();
+    } catch {
+      // Error toast is handled by useCreate.
+    }
   };
 
   const resetCreateForm = () => {
