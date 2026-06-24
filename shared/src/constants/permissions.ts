@@ -113,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
     Permissions.ATTACHMENT_READ,
     Permissions.SEARCH_OWN,
     Permissions.REPORT_VIEW,
+    Permissions.TRANSFER_LIST_READ, Permissions.TRANSFER_LIST_WRITE,
   ],
 
   [RoleCode.TENANT_EMPLOYEE]: [

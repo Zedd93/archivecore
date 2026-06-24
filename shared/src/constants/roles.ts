@@ -29,7 +29,7 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
 export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
   [RoleCode.SUPER_ADMIN]: 'Pełny dostęp do wszystkich tenantów i konfiguracji',
   [RoleCode.DOXART_ADMIN]: 'Obsługa archiwum i spisów wszystkich klientów bez administracji systemem',
-  [RoleCode.TENANT_LEADERSHIP]: 'Odczyt całej dokumentacji własnej firmy',
+  [RoleCode.TENANT_LEADERSHIP]: 'Dostęp do całej dokumentacji własnej firmy oraz edycja Spisów ZO',
   [RoleCode.TENANT_EMPLOYEE]: 'Odczyt dokumentacji własnej firmy ograniczony do przypisanego działu',
   [RoleCode.ADMIN_TENANT]: 'Zarządzanie użytkownikami i konfiguracją w ramach swojego tenanta',
   [RoleCode.COORDINATOR_ARCHIVE]: 'Operacje archiwalne, zlecenia, raporty, brakowanie',
