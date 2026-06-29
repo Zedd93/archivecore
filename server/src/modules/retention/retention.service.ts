@@ -2,10 +2,11 @@ import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { IJwtPayload, Permissions, RoleCode } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
+import { parseJrwaDocx } from './jrwa-import.parser';
 
 export class RetentionService {
-  private isSuperAdmin(actor: IJwtPayload) {
-    return actor.roles.includes(RoleCode.SUPER_ADMIN);
+  private isSuperAdmin(actor?: IJwtPayload) {
+    return Boolean(actor?.roles.includes(RoleCode.SUPER_ADMIN));
   }
 
   private assertCanManageGlobalPolicy(actor: IJwtPayload) {
@@ -17,15 +18,20 @@ export class RetentionService {
     }
   }
 
-  async listPolicies(tenantId: string | null) {
-    const where: Prisma.RetentionPolicyWhereInput = tenantId
-      ? { OR: [{ tenantId }, { tenantId: null }] }
+  async listPolicies(tenantId: string | null, actor?: IJwtPayload, requestedTenantId?: string) {
+    if (requestedTenantId && !this.isSuperAdmin(actor) && requestedTenantId !== tenantId) {
+      throw Object.assign(new Error('Nie masz dostępu do polityk retencji tego tenanta'), { statusCode: 403 });
+    }
+    const effectiveTenantId = requestedTenantId || tenantId;
+    const where: Prisma.RetentionPolicyWhereInput = effectiveTenantId
+      ? { OR: [{ tenantId: effectiveTenantId }, { tenantId: null }] }
       : { tenantId: null };
 
     const policies = await prisma.retentionPolicy.findMany({
       where,
       include: {
         rules: true,
+        tenant: { select: { id: true, name: true, shortCode: true } },
         _count: { select: { boxes: true } },
       },
       orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
@@ -82,6 +88,77 @@ export class RetentionService {
       },
       include: { rules: true },
     });
+  }
+
+  async previewJrwa(buffer: Buffer, originalName: string, targetTenantId: string, actor: IJwtPayload) {
+    this.assertCanManageGlobalPolicy(actor);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: targetTenantId },
+      select: { id: true, name: true, shortCode: true },
+    });
+    if (!tenant) throw Object.assign(new Error('Wybrany tenant nie istnieje'), { statusCode: 404 });
+
+    const parsed = await parseJrwaDocx(buffer);
+    return {
+      tenant,
+      fileName: originalName,
+      tableNumber: parsed.tableNumber,
+      rows: parsed.rows,
+      skipped: parsed.skipped,
+      summary: {
+        valid: parsed.rows.length,
+        skipped: parsed.skipped.length,
+        permanent: parsed.rows.filter((row) => row.isPermanent).length,
+        review: parsed.rows.filter((row) => row.requiresReview).length,
+      },
+    };
+  }
+
+  async importJrwa(buffer: Buffer, originalName: string, targetTenantId: string, actor: IJwtPayload) {
+    const preview = await this.previewJrwa(buffer, originalName, targetTenantId, actor);
+    const existingPolicies = await prisma.retentionPolicy.findMany({
+      where: {
+        tenantId: targetTenantId,
+        jrwaCode: { in: preview.rows.map((row) => row.jrwaCode) },
+      },
+      select: { id: true, jrwaCode: true },
+    });
+    const existingByCode = new Map(existingPolicies.map((policy) => [policy.jrwaCode, policy.id]));
+    let created = 0;
+    let updated = 0;
+    const operations = preview.rows.map((row) => {
+      const existingId = existingByCode.get(row.jrwaCode);
+      const data = {
+        name: row.name,
+        docType: row.docType,
+        retentionYears: row.retentionYears,
+        retentionTrigger: 'end_date' as const,
+        description: row.description,
+        jrwaCode: row.jrwaCode,
+        archivalCategory: row.archivalCategory,
+        isPermanent: row.isPermanent,
+        sourceFileName: originalName,
+        isActive: true,
+      };
+
+      if (existingId) {
+        updated++;
+        return prisma.retentionPolicy.update({ where: { id: existingId }, data });
+      }
+      created++;
+      return prisma.retentionPolicy.create({ data: { ...data, tenantId: targetTenantId } });
+    });
+
+    await prisma.$transaction(operations);
+
+    return {
+      created,
+      updated,
+      total: preview.rows.length,
+      skipped: preview.skipped,
+      tenant: preview.tenant,
+      fileName: originalName,
+    };
   }
 
   async updatePolicy(id: string, tenantId: string | null, actor: IJwtPayload, data: any) {
@@ -149,7 +226,7 @@ export class RetentionService {
           baseDate = box.createdAt;
       }
 
-      if (baseDate) {
+      if (baseDate && policy.retentionYears && !policy.isPermanent) {
         const retentionDate = new Date(baseDate);
         retentionDate.setFullYear(retentionDate.getFullYear() + policy.retentionYears);
 

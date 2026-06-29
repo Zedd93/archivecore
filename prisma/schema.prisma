@@ -638,9 +638,13 @@ model RetentionPolicy {
   tenantId         String?          @db.Uuid
   name             String           @db.VarChar(255)
   docType          String?          @db.VarChar(100)
-  retentionYears   Int
+  retentionYears   Int?
   retentionTrigger RetentionTrigger
   description      String?          @db.Text
+  jrwaCode         String?          @db.VarChar(20)
+  archivalCategory String?          @db.VarChar(20)
+  isPermanent      Boolean          @default(false)
+  sourceFileName   String?          @db.VarChar(500)
   isActive         Boolean          @default(true)
   createdAt        DateTime         @default(now())
 
@@ -649,6 +653,7 @@ model RetentionPolicy {
   boxes  Box[]
 
   @@index([tenantId])
+  @@index([tenantId, jrwaCode])
   @@map("retention_policies")
 }
 

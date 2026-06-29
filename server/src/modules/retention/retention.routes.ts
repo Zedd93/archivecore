@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { retentionController } from './retention.controller';
 import { authenticate } from '../../middleware/auth';
 import { tenantContext } from '../../middleware/tenant';
-import { requirePermission } from '../../middleware/rbac';
+import { requirePermission, requireRole } from '../../middleware/rbac';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createRetentionPolicySchema, updateRetentionPolicySchema, initiateDisposalSchema, approveDisposalSchema } from '@archivecore/shared';
+import { fileUpload } from '../../middleware/upload';
+import { Permissions, RoleCode, createRetentionPolicySchema, updateRetentionPolicySchema, initiateDisposalSchema, approveDisposalSchema } from '@archivecore/shared';
 import { validate } from '../../middleware/validate';
 
 const router = Router();
@@ -12,6 +13,8 @@ const auth = [authenticate, tenantContext];
 
 // Policies
 router.get('/policies', ...auth, requirePermission(Permissions.RETENTION_MANAGE), (req, res, next) => retentionController.listPolicies(req, res, next));
+router.post('/policies/jrwa/preview', ...auth, requirePermission(Permissions.RETENTION_MANAGE), requireRole(RoleCode.SUPER_ADMIN), fileUpload.single('file'), (req, res, next) => retentionController.previewJrwa(req, res, next));
+router.post('/policies/jrwa/import', ...auth, requirePermission(Permissions.RETENTION_MANAGE), requireRole(RoleCode.SUPER_ADMIN), fileUpload.single('file'), auditLog('retention_policy', 'policy.jrwa_import'), (req, res, next) => retentionController.importJrwa(req, res, next));
 router.get('/policies/:id', ...auth, requirePermission(Permissions.RETENTION_MANAGE), (req, res, next) => retentionController.getPolicy(req, res, next));
 router.post('/policies', ...auth, requirePermission(Permissions.RETENTION_MANAGE), validate(createRetentionPolicySchema), auditLog('retention_policy', 'policy.create'), (req, res, next) => retentionController.createPolicy(req, res, next));
 router.put('/policies/:id', ...auth, requirePermission(Permissions.RETENTION_MANAGE), validate(updateRetentionPolicySchema), auditLog('retention_policy', 'policy.update'), (req, res, next) => retentionController.updatePolicy(req, res, next));

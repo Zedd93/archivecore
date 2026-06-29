@@ -5,8 +5,40 @@ import { successResponse, errorResponse } from '../../utils/response';
 export class RetentionController {
   async listPolicies(req: Request, res: Response, next: NextFunction) {
     try {
-      const policies = await retentionService.listPolicies(req.tenantId || null);
+      const policies = await retentionService.listPolicies(
+        req.tenantId || null,
+        req.user!,
+        typeof req.query.tenantId === 'string' ? req.query.tenantId : undefined
+      );
       return successResponse(res, policies);
+    } catch (err) { next(err); }
+  }
+
+  async previewJrwa(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) return errorResponse(res, 'Nie załączono pliku JRWA', 400);
+      if (!req.body.tenantId) return errorResponse(res, 'Wybierz tenanta', 400);
+      const result = await retentionService.previewJrwa(
+        req.file.buffer,
+        req.file.originalname,
+        req.body.tenantId,
+        req.user!
+      );
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async importJrwa(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) return errorResponse(res, 'Nie załączono pliku JRWA', 400);
+      if (!req.body.tenantId) return errorResponse(res, 'Wybierz tenanta', 400);
+      const result = await retentionService.importJrwa(
+        req.file.buffer,
+        req.file.originalname,
+        req.body.tenantId,
+        req.user!
+      );
+      return successResponse(res, result, 201);
     } catch (err) { next(err); }
   }
 

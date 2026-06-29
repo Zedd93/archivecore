@@ -7,9 +7,13 @@ export interface IRetentionPolicy {
   scope?: 'global' | 'tenant';
   name: string;
   docType: string | null;
-  retentionYears: number;
+  retentionYears: number | null;
   retentionTrigger: RetentionTrigger;
   description: string | null;
+  jrwaCode: string | null;
+  archivalCategory: string | null;
+  isPermanent: boolean;
+  sourceFileName: string | null;
   isActive: boolean;
   createdAt: string;
 }
