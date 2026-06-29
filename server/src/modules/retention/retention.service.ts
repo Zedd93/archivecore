@@ -6,7 +6,10 @@ import { parseJrwaDocx } from './jrwa-import.parser';
 
 export class RetentionService {
   private isSuperAdmin(actor?: IJwtPayload) {
-    return Boolean(actor?.roles.includes(RoleCode.SUPER_ADMIN));
+    return Boolean(
+      actor?.roles.includes(RoleCode.SUPER_ADMIN)
+      || actor?.permissions.includes(Permissions.SYSTEM_CONFIG)
+    );
   }
 
   private assertCanManageGlobalPolicy(actor: IJwtPayload) {

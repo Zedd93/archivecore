@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useCreate } from '@/hooks/useApi';
-import { DOC_TYPES, RoleCode } from '@archivecore/shared';
+import { DOC_TYPES, Permissions } from '@archivecore/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
 import DataTable, { Column } from '@/components/ui/DataTable';
@@ -16,7 +16,7 @@ const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
 
 export default function RetentionPage() {
   const { t } = useTranslation();
-  const { hasRole } = useAuth();
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
   const [showJrwaImport, setShowJrwaImport] = useState(false);
@@ -27,7 +27,7 @@ export default function RetentionPage() {
   const [jrwaPreview, setJrwaPreview] = useState<any>(null);
   const [jrwaLoading, setJrwaLoading] = useState(false);
   const [jrwaImporting, setJrwaImporting] = useState(false);
-  const canManageGlobalPolicies = hasRole(RoleCode.SUPER_ADMIN);
+  const canManageGlobalPolicies = hasPermission(Permissions.SYSTEM_CONFIG);
 
   const { data: policies, isLoading: polLoading } = useQuery({
     queryKey: ['retention-policies', policyTenantId],
