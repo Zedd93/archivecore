@@ -156,7 +156,9 @@ export default function RetentionPage() {
     }
     setJrwaLoading(true);
     try {
-      const { data } = await api.post('/retention/policies/jrwa/preview', formData);
+      const { data } = await api.post('/retention/policies/jrwa/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       setJrwaPreview(data.data);
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('admin.retention.jrwaImport.previewError')));
@@ -170,7 +172,9 @@ export default function RetentionPage() {
     if (!formData) return;
     setJrwaImporting(true);
     try {
-      const { data } = await api.post('/retention/policies/jrwa/import', formData);
+      const { data } = await api.post('/retention/policies/jrwa/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       toast.success(t('admin.retention.jrwaImport.success', {
         created: data.data.created,
         updated: data.data.updated,
