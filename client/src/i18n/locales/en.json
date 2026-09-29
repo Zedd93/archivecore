@@ -154,7 +154,12 @@
       "moveTitle": "Move boxes",
       "locationId": "Target location",
       "locationPlaceholder": "Click and choose a location from the list",
-      "exportSelected": "Export selected"
+      "exportSelected": "Export selected",
+      "deleteSelected": "Delete selected",
+      "confirmDelete": "Delete selected boxes?",
+      "confirmDeleteMsg": "Are you sure you want to delete {{count}} selected boxes? Boxes with contents or issue history cannot be deleted.",
+      "deleteSuccess": "Deleted {{count}} boxes",
+      "deleteError": "Failed to delete selected boxes"
     }
   },
 
@@ -989,6 +994,7 @@
       "box.status": "Box status changed",
       "box.bulk_status": "Status changed (bulk)",
       "box.bulk_move": "Moved (bulk)",
+      "box.bulk_delete": "Boxes deleted (bulk)",
       "order.create": "Order created",
       "order.update": "Order updated",
       "order.approve": "Order approved",
@@ -1101,6 +1107,7 @@
       "box.status": "Box status changed",
       "box.bulk_status": "Status changed (bulk)",
       "box.bulk_move": "Moved (bulk)",
+      "box.bulk_delete": "Box deletion (bulk)",
       "audit.revert": "Audit event reverted",
       "attachment.upload": "Attachment uploaded",
       "attachment.delete": "Attachment deleted",

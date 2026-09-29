@@ -28,8 +28,8 @@ export default function BulkActionBar({ count, actions, onClearSelection }: Bulk
   if (count === 0) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-3 bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-3">
+    <div className="fixed bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%_-_1rem)] sm:w-auto max-w-[calc(100vw_-_1rem)]">
+      <div className="flex items-center gap-2 sm:gap-3 bg-gray-900 text-white rounded-xl shadow-2xl px-3 sm:px-5 py-3 overflow-x-auto">
         {/* Count */}
         <span className="text-sm font-medium whitespace-nowrap">
           {t('common.selected', { count })}
@@ -43,6 +43,7 @@ export default function BulkActionBar({ count, actions, onClearSelection }: Bulk
           {actions.map((action, i) => (
             <button
               key={i}
+              type="button"
               onClick={action.onClick}
               disabled={action.disabled || action.loading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
@@ -60,6 +61,7 @@ export default function BulkActionBar({ count, actions, onClearSelection }: Bulk
 
         {/* Clear */}
         <button
+          type="button"
           onClick={onClearSelection}
           className="p-1.5 rounded-lg hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
           title={t('common.clearSelection')}

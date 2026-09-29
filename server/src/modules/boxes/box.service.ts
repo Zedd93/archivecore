@@ -416,6 +416,68 @@ export class BoxService {
     return { updated: boxes.length, moved: movedBoxes.length };
   }
 
+  async bulkDelete(ids: string[], tenantId: string, department?: string) {
+    const uniqueIds = [...new Set(ids)];
+    const boxes = await prisma.box.findMany({
+      where: {
+        id: { in: uniqueIds },
+        tenantId,
+        ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+      },
+      select: {
+        id: true,
+        boxNumber: true,
+        locationId: true,
+        _count: {
+          select: {
+            folders: true,
+            documents: true,
+            attachments: true,
+            hrFolders: true,
+            orderItems: true,
+            custodyEvents: true,
+            transferListItems: true,
+          },
+        },
+      },
+    });
+
+    if (boxes.length !== uniqueIds.length) {
+      throw Object.assign(new Error('Nie znaleziono części wybranych kartonów lub nie masz do nich dostępu'), { statusCode: 404 });
+    }
+
+    const blocked = boxes.filter(({ _count }) =>
+      _count.folders
+        + _count.documents
+        + _count.attachments
+        + _count.hrFolders
+        + _count.orderItems
+        + _count.custodyEvents
+        + _count.transferListItems > 0
+    );
+    if (blocked.length > 0) {
+      const examples = blocked.slice(0, 5).map(box => box.boxNumber).join(', ');
+      const suffix = blocked.length > 5 ? ` i ${blocked.length - 5} więcej` : '';
+      throw Object.assign(new Error(
+        `Nie można usunąć wybranych kartonów. Powiązane teczki, dokumenty, załączniki lub historię wydań mają: ${examples}${suffix}. Najpierw przenieś lub usuń ich zawartość.`
+      ), { statusCode: 409 });
+    }
+
+    const locationIds = [...new Set(boxes.map(box => box.locationId).filter((id): id is string => Boolean(id)))];
+
+    await prisma.$transaction(async (tx) => {
+      await tx.label.deleteMany({ where: { boxId: { in: uniqueIds } } });
+      await tx.box.deleteMany({ where: { id: { in: uniqueIds }, tenantId } });
+
+      for (const locationId of locationIds) {
+        const currentCount = await tx.box.count({ where: { locationId } });
+        await tx.location.update({ where: { id: locationId }, data: { currentCount } });
+      }
+    });
+
+    return { deleted: boxes.length };
+  }
+
   async getHistory(id: string, tenantId: string) {
     await this.getById(id, tenantId);
     const [auditLogs, custodyEvents] = await Promise.all([

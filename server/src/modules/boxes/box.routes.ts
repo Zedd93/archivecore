@@ -5,7 +5,16 @@ import { tenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createBoxSchema, updateBoxSchema, moveBoxSchema, changeBoxStatusSchema, bulkBoxStatusSchema, bulkBoxMoveSchema } from '@archivecore/shared';
+import {
+  Permissions,
+  createBoxSchema,
+  updateBoxSchema,
+  moveBoxSchema,
+  changeBoxStatusSchema,
+  bulkBoxStatusSchema,
+  bulkBoxMoveSchema,
+  bulkBoxDeleteSchema,
+} from '@archivecore/shared';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -18,6 +27,7 @@ router.patch('/:id/move', ...auth, requirePermission(Permissions.BOX_MOVE), vali
 router.patch('/:id/status', ...auth, requirePermission(Permissions.BOX_STATUS), validate(changeBoxStatusSchema), auditLog('box', 'box.status'), (req, res, next) => boxController.changeStatus(req, res, next));
 router.post('/bulk-status', ...auth, requirePermission(Permissions.BOX_STATUS), validate(bulkBoxStatusSchema), auditLog('box', 'box.bulk_status'), (req, res, next) => boxController.bulkChangeStatus(req, res, next));
 router.post('/bulk-move', ...auth, requirePermission(Permissions.BOX_MOVE), validate(bulkBoxMoveSchema), auditLog('box', 'box.bulk_move'), (req, res, next) => boxController.bulkMove(req, res, next));
+router.post('/bulk-delete', ...auth, requirePermission(Permissions.BOX_DELETE), validate(bulkBoxDeleteSchema), auditLog('box', 'box.bulk_delete'), (req, res, next) => boxController.bulkDelete(req, res, next));
 router.get('/:id/history', ...auth, requirePermission(Permissions.BOX_READ), (req, res, next) => boxController.getHistory(req, res, next));
 
 export default router;

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createBoxSchema, DOC_TYPES } from '@archivecore/shared';
+import { createBoxSchema, DOC_TYPES, Permissions } from '@archivecore/shared';
 import { z } from 'zod';
 import { useList, useCreate } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
@@ -19,7 +19,8 @@ import FormField from '@/components/ui/FormField';
 import LocationPicker from '@/components/ui/LocationPicker';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { Plus, Download, Loader2, RefreshCw, MapPin } from 'lucide-react';
+import { Plus, Download, Loader2, RefreshCw, MapPin, Trash2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 type CreateBoxForm = z.infer<typeof createBoxSchema>;
 
@@ -30,6 +31,7 @@ export default function BoxListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(searchParams.get('action') === 'create');
   const [page, setPage] = useState(1);
@@ -211,6 +213,30 @@ export default function BoxListPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const count = selectedIds.size;
+    const ok = await confirm({
+      title: t('boxes.bulk.confirmDelete'),
+      message: t('boxes.bulk.confirmDeleteMsg', { count }),
+      confirmLabel: t('boxes.bulk.deleteSelected'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    setBulkLoading(true);
+    try {
+      const { data: response } = await api.post('/boxes/bulk-delete', { ids: Array.from(selectedIds) });
+      toast.success(t('boxes.bulk.deleteSuccess', { count: response.data.deleted }));
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['locations-tree'] });
+      await refetch();
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err, t('boxes.bulk.deleteError')));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -334,6 +360,13 @@ export default function BoxListPage() {
             onClick: () => exportData({ format: 'xlsx', ...filters }),
             variant: 'secondary',
           },
+          ...(hasPermission(Permissions.BOX_DELETE) ? [{
+            label: t('boxes.bulk.deleteSelected'),
+            icon: <Trash2 size={14} />,
+            onClick: handleBulkDelete,
+            variant: 'danger' as const,
+            disabled: bulkLoading,
+          }] : []),
         ]}
       />
 

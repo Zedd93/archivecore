@@ -154,7 +154,12 @@
       "moveTitle": "Przenieś kartony",
       "locationId": "Lokalizacja docelowa",
       "locationPlaceholder": "Kliknij i wybierz lokalizację z listy",
-      "exportSelected": "Eksportuj wybrane"
+      "exportSelected": "Eksportuj wybrane",
+      "deleteSelected": "Usuń wybrane",
+      "confirmDelete": "Usunąć wybrane kartony?",
+      "confirmDeleteMsg": "Czy na pewno usunąć {{count}} zaznaczonych kartonów? Kartony z zawartością lub historią wydań nie mogą zostać usunięte.",
+      "deleteSuccess": "Usunięto {{count}} kartonów",
+      "deleteError": "Nie udało się usunąć wybranych kartonów"
     }
   },
 
@@ -989,6 +994,7 @@
       "box.status": "Zmieniono status kartonu",
       "box.bulk_status": "Zmieniono status (masowo)",
       "box.bulk_move": "Przeniesiono (masowo)",
+      "box.bulk_delete": "Usunięto kartony (masowo)",
       "order.create": "Utworzono zlecenie",
       "order.update": "Zaktualizowano zlecenie",
       "order.approve": "Zatwierdzono zlecenie",
@@ -1101,6 +1107,7 @@
       "box.status": "Zmiana statusu kartonu",
       "box.bulk_status": "Zmiana statusu (masowo)",
       "box.bulk_move": "Przeniesienie (masowo)",
+      "box.bulk_delete": "Usunięcie kartonów (masowo)",
       "audit.revert": "Cofnięcie zdarzenia audytu",
       "attachment.upload": "Dodanie załącznika",
       "attachment.delete": "Usunięcie załącznika",
