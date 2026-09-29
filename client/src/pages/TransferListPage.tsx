@@ -185,9 +185,15 @@ export default function TransferListPage() {
   const handleBulkDelete = async () => {
     const selectedLists = lists.filter((l: any) => selectedIds.has(l.id));
     const nonDraft = selectedLists.filter((l: any) => l.status !== 'draft');
+    const nonEmpty = selectedLists.filter((l: any) => (l._count?.items ?? 0) > 0);
 
     if (nonDraft.length > 0) {
       toast.error(t('transferLists.cannotDelete', { count: nonDraft.length }));
+      return;
+    }
+
+    if (nonEmpty.length > 0) {
+      toast.error(t('transferLists.cannotDeleteWithItems', { count: nonEmpty.length }));
       return;
     }
 

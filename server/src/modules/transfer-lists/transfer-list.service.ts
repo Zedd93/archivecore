@@ -160,6 +160,14 @@ export class TransferListService {
     if (list.status !== 'draft') {
       throw Object.assign(new Error('Można usunąć tylko spis w statusie roboczym'), { statusCode: 400 });
     }
+
+    if (list.items.length > 0) {
+      throw Object.assign(
+        new Error('Nie można usunąć spisu zawierającego teczki. Aby chronić dane archiwalne, można usuwać wyłącznie puste spisy robocze.'),
+        { statusCode: 409 }
+      );
+    }
+
     await prisma.transferList.delete({ where: { id } });
   }
 
