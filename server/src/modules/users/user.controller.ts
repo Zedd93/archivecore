@@ -29,7 +29,7 @@ export class UserController {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await userService.update(req.params.id, req.tenantId || null, req.body);
+      const user = await userService.update(req.params.id, req.tenantId || null, req.body, req.user!);
       return successResponse(res, user);
     } catch (err) { next(err); }
   }
@@ -50,7 +50,7 @@ export class UserController {
 
   async deactivate(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await userService.deactivate(req.params.id, req.tenantId || null);
+      const result = await userService.deactivate(req.params.id, req.tenantId || null, req.user!);
       return successResponse(res, result);
     } catch (err) { next(err); }
   }

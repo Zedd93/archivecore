@@ -526,7 +526,12 @@
       "lastLogin": "Last login",
       "empty": "No users",
       "created": "User created",
+      "updated": "User details updated",
       "accessUpdated": "User access updated",
+      "deactivated": "User account has been deactivated",
+      "deactivate": "Remove account",
+      "deactivateConfirmTitle": "Remove user account?",
+      "deactivateConfirmMessage": "The account of {{name}} will be deactivated. The user will no longer be able to sign in, but their activity history will remain in the system.",
       "editAccess": "Set access",
       "globalSA": "SA (global)",
       "globalDoxart": "Doxart (global)",
@@ -550,6 +555,12 @@
       },
       "accessModal": {
         "title": "User access"
+      },
+      "editModal": {
+        "title": "Edit user",
+        "password": "New password (optional)",
+        "passwordHint": "Leave blank to keep the current password. A new password must contain at least 8 characters, an uppercase letter, and a special character.",
+        "ownStatusHint": "You cannot deactivate your own account."
       }
     },
     "tenants": {

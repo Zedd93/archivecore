@@ -43,11 +43,39 @@ export class UserService {
   private async getManageableUser(id: string, tenantId: string | null, actor: IJwtPayload) {
     const user = await prisma.user.findFirst({
       where: this.manageableUserWhere(id, tenantId, actor),
-      select: { id: true, tenantId: true },
+      select: {
+        id: true,
+        tenantId: true,
+        isActive: true,
+        userRoles: { select: { role: { select: { code: true } } } },
+      },
     });
 
     if (!user) throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
     return user;
+  }
+
+  private async assertCanDeactivate(
+    target: { id: string; isActive: boolean; userRoles: Array<{ role: { code: string } }> },
+    actor: IJwtPayload
+  ) {
+    if (target.id === actor.userId) {
+      throw Object.assign(new Error('Nie możesz dezaktywować własnego konta'), { statusCode: 400 });
+    }
+
+    const isSuperAdmin = target.userRoles.some(({ role }) => role.code === RoleCode.SUPER_ADMIN);
+    if (!isSuperAdmin || !target.isActive) return;
+
+    const activeSuperAdmins = await prisma.user.count({
+      where: {
+        isActive: true,
+        userRoles: { some: { role: { code: RoleCode.SUPER_ADMIN } } },
+      },
+    });
+
+    if (activeSuperAdmins <= 1) {
+      throw Object.assign(new Error('Nie można dezaktywować ostatniego aktywnego Super Admina'), { statusCode: 400 });
+    }
   }
 
   private async getOrCreateSystemRole(roleCode: RoleCode) {
@@ -155,7 +183,10 @@ export class UserService {
   }
 
   async create(data: any, tenantId: string | null, creator: IJwtPayload) {
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+    });
     if (existing) throw Object.assign(new Error('Użytkownik o tym adresie email już istnieje'), { statusCode: 409 });
 
     const roleCode = data.roleCode as RoleCode;
@@ -185,7 +216,7 @@ export class UserService {
       const created = await tx.user.create({
         data: {
           tenantId: isGlobalRole ? null : targetTenantId,
-          email: data.email,
+          email: normalizedEmail,
           passwordHash,
           firstName: data.firstName,
           lastName: data.lastName,
@@ -207,18 +238,41 @@ export class UserService {
     return this.getById(user.id);
   }
 
-  async update(id: string, tenantId: string | null, data: any) {
-    await this.getById(id, tenantId);
+  async update(id: string, tenantId: string | null, data: any, actor: IJwtPayload) {
+    const target = await this.getManageableUser(id, tenantId, actor);
+
+    if (data.isActive === false) {
+      await this.assertCanDeactivate(target, actor);
+    }
 
     const updateData: any = {};
-    if (data.firstName) updateData.firstName = data.firstName;
-    if (data.lastName) updateData.lastName = data.lastName;
-    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.email !== undefined) {
+      const email = data.email.trim().toLowerCase();
+      const existing = await prisma.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' }, id: { not: id } },
+        select: { id: true },
+      });
+      if (existing) {
+        throw Object.assign(new Error('Użytkownik o tym adresie email już istnieje'), { statusCode: 409 });
+      }
+      updateData.email = email;
+    }
+    if (data.firstName) updateData.firstName = data.firstName.trim();
+    if (data.lastName) updateData.lastName = data.lastName.trim();
+    if (data.phone !== undefined) updateData.phone = data.phone.trim() || null;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.password) updateData.passwordHash = await bcrypt.hash(data.password, 12);
 
-    await prisma.user.update({ where: { id }, data: updateData });
-    return this.getById(id, tenantId);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: updateData });
+      if (data.isActive === false) {
+        await tx.refreshToken.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+    });
+    return this.getById(id);
   }
 
   async updateAccess(id: string, data: any, tenantId: string | null, actor: IJwtPayload) {
@@ -283,9 +337,16 @@ export class UserService {
     return this.getById(id);
   }
 
-  async deactivate(id: string, tenantId: string | null) {
-    await this.getById(id, tenantId);
-    await prisma.user.update({ where: { id }, data: { isActive: false } });
+  async deactivate(id: string, tenantId: string | null, actor: IJwtPayload) {
+    const target = await this.getManageableUser(id, tenantId, actor);
+    await this.assertCanDeactivate(target, actor);
+    await prisma.$transaction([
+      prisma.user.update({ where: { id }, data: { isActive: false } }),
+      prisma.refreshToken.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
     return { deactivated: true };
   }
 

@@ -526,7 +526,12 @@
       "lastLogin": "Ostatnie logowanie",
       "empty": "Brak użytkowników",
       "created": "Użytkownik utworzony",
+      "updated": "Dane użytkownika zaktualizowane",
       "accessUpdated": "Dostęp użytkownika zaktualizowany",
+      "deactivated": "Konto użytkownika zostało dezaktywowane",
+      "deactivate": "Usuń konto",
+      "deactivateConfirmTitle": "Usunąć konto użytkownika?",
+      "deactivateConfirmMessage": "Konto użytkownika {{name}} zostanie dezaktywowane. Użytkownik utraci możliwość logowania, ale jego historia operacji pozostanie w systemie.",
       "editAccess": "Ustaw dostęp",
       "globalSA": "SA (globalny)",
       "globalDoxart": "Doxart (globalny)",
@@ -550,6 +555,12 @@
       },
       "accessModal": {
         "title": "Dostęp użytkownika"
+      },
+      "editModal": {
+        "title": "Edytuj użytkownika",
+        "password": "Nowe hasło (opcjonalnie)",
+        "passwordHint": "Pozostaw puste, aby zachować dotychczasowe hasło. Nowe hasło musi mieć minimum 8 znaków, wielką literę i znak specjalny.",
+        "ownStatusHint": "Nie możesz dezaktywować własnego konta."
       }
     },
     "tenants": {

@@ -19,9 +19,11 @@ export const createUserSchema = z.object({
 });
 
 export const updateUserSchema = z.object({
+  email: z.string().email('Nieprawidłowy adres email').optional(),
   firstName: z.string().min(1).max(100).optional(),
   lastName: z.string().min(1).max(100).optional(),
   phone: z.string().max(20).optional(),
+  password: strongPasswordSchema.optional(),
   isActive: z.boolean().optional(),
 });
 

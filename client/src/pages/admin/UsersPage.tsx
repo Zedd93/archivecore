@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { useList, useCreate, usePatch } from '@/hooks/useApi';
+import { useList, useCreate, usePatch, useUpdate } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useConfirm } from '@/hooks/useConfirm';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
-import { Plus, UserCheck, UserX, Shield } from 'lucide-react';
+import { Pencil, Plus, Shield, Trash2, UserCheck, UserX } from 'lucide-react';
 import { RoleCode, ROLE_LABELS } from '@archivecore/shared';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -15,6 +16,7 @@ export default function UsersPage() {
   const { user, hasPermission } = useAuth();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [editUser, setEditUser] = useState<any | null>(null);
   const [filters, setFilters] = useState({ search: '', isActive: '' });
   const [roleCode, setRoleCode] = useState('');
   const [accessUser, setAccessUser] = useState<any | null>(null);
@@ -25,11 +27,14 @@ export default function UsersPage() {
   const debouncedSearch = useDebouncedValue(filters.search, 300);
 
   const queryClient = useQueryClient();
+  const { confirm, ConfirmDialogElement } = useConfirm();
   const { data, isLoading } = useList('users', '/users', { page, limit: 20, search: debouncedSearch, isActive: filters.isActive });
   const canSelectTenant = !user?.tenantId && (hasPermission('tenant.manage') || hasPermission('tenant.switch'));
   const { data: tenants } = useList('user-tenant-options', '/tenants', { page: 1, limit: 100 }, { enabled: canSelectTenant });
   const createUser = useCreate('/users', ['users'], t('admin.users.created'));
+  const updateUser = useUpdate('/users', ['users'], t('admin.users.updated'));
   const updateAccess = usePatch(['users'], t('admin.users.accessUpdated'));
+  const deactivateUser = usePatch(['users'], t('admin.users.deactivated'));
 
   const columns: Column<any>[] = [
     {
@@ -98,24 +103,50 @@ export default function UsersPage() {
       render: (item) => item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString('pl-PL') : '—',
     },
     {
-      key: 'access',
-      header: t('admin.users.colAccess'),
+      key: 'actions',
+      header: t('common.actions'),
       render: (item) => (
-        <button
-          type="button"
-          className="btn-secondary text-xs"
-          onClick={() => {
-            setAccessUser(item);
-            setAccessRoleCode(item.userRoles?.[0]?.role.code || '');
-            setAccessTenantId(item.tenantId || '');
-            setAccessDepartment(item.department || '');
-          }}
-        >
-          {t('admin.users.editAccess')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-secondary text-xs" onClick={() => setEditUser(item)}>
+            <Pencil size={14} /> {t('common.edit')}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={() => {
+              setAccessUser(item);
+              setAccessRoleCode(item.userRoles?.[0]?.role.code || '');
+              setAccessTenantId(item.tenantId || '');
+              setAccessDepartment(item.department || '');
+            }}
+          >
+            {t('admin.users.editAccess')}
+          </button>
+          {item.isActive && item.id !== user?.id && (
+            <button type="button" className="btn-danger text-xs" onClick={() => handleDeactivate(item)}>
+              <Trash2 size={14} /> {t('admin.users.deactivate')}
+            </button>
+          )}
+        </div>
       ),
     },
   ];
+
+  const handleDeactivate = async (item: any) => {
+    const accepted = await confirm({
+      title: t('admin.users.deactivateConfirmTitle'),
+      message: t('admin.users.deactivateConfirmMessage', { name: `${item.firstName} ${item.lastName}` }),
+      confirmLabel: t('admin.users.deactivate'),
+      variant: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      await deactivateUser.mutateAsync({ url: `/users/${item.id}/deactivate` });
+    } catch {
+      // Mutation displays the server error.
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -138,6 +169,28 @@ export default function UsersPage() {
     setPage(1);
     // Explicitly invalidate all user queries to ensure the list refreshes
     await queryClient.invalidateQueries({ queryKey: ['users'] });
+  };
+
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editUser) return;
+    const fd = new FormData(e.currentTarget);
+    const password = String(fd.get('password') || '');
+
+    try {
+      await updateUser.mutateAsync({
+        id: editUser.id,
+        firstName: fd.get('firstName'),
+        lastName: fd.get('lastName'),
+        email: fd.get('email'),
+        phone: fd.get('phone') || '',
+        isActive: editUser.id === user?.id ? editUser.isActive : fd.get('isActive') === 'true',
+        ...(password ? { password } : {}),
+      });
+      setEditUser(null);
+    } catch {
+      // Mutation displays the server error.
+    }
   };
 
   return (
@@ -210,6 +263,34 @@ export default function UsersPage() {
         </form>
       </Modal>
 
+      <Modal isOpen={!!editUser} onClose={() => setEditUser(null)} title={t('admin.users.editModal.title')} size="md">
+        <form key={editUser?.id || 'empty'} onSubmit={handleEdit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label htmlFor="user-edit-firstName" className="label-text">{t('admin.users.createModal.firstName')}</label><input id="user-edit-firstName" name="firstName" className="input-field" defaultValue={editUser?.firstName || ''} required /></div>
+            <div><label htmlFor="user-edit-lastName" className="label-text">{t('admin.users.createModal.lastName')}</label><input id="user-edit-lastName" name="lastName" className="input-field" defaultValue={editUser?.lastName || ''} required /></div>
+          </div>
+          <div><label htmlFor="user-edit-email" className="label-text">{t('admin.users.createModal.email')}</label><input id="user-edit-email" name="email" type="email" className="input-field" defaultValue={editUser?.email || ''} required /></div>
+          <div><label htmlFor="user-edit-phone" className="label-text">{t('admin.users.createModal.phone')}</label><input id="user-edit-phone" name="phone" className="input-field" defaultValue={editUser?.phone || ''} /></div>
+          <div>
+            <label htmlFor="user-edit-password" className="label-text">{t('admin.users.editModal.password')}</label>
+            <input id="user-edit-password" name="password" type="password" className="input-field" minLength={8} autoComplete="new-password" />
+            <p className="text-xs text-gray-500 mt-1">{t('admin.users.editModal.passwordHint')}</p>
+          </div>
+          <div>
+            <label htmlFor="user-edit-status" className="label-text">{t('admin.users.colStatus')}</label>
+            <select id="user-edit-status" name="isActive" className="input-field" defaultValue={String(editUser?.isActive ?? true)} disabled={editUser?.id === user?.id}>
+              <option value="true">{t('admin.users.statusActive')}</option>
+              <option value="false">{t('admin.users.statusInactive')}</option>
+            </select>
+            {editUser?.id === user?.id && <p className="text-xs text-gray-500 mt-1">{t('admin.users.editModal.ownStatusHint')}</p>}
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => setEditUser(null)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="submit" disabled={updateUser.isPending} className="btn-primary">{updateUser.isPending ? t('common.saving') : t('common.save')}</button>
+          </div>
+        </form>
+      </Modal>
+
       <Modal isOpen={!!accessUser} onClose={() => setAccessUser(null)} title={t('admin.users.accessModal.title')} size="md">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">{accessUser?.firstName} {accessUser?.lastName} ({accessUser?.email})</p>
@@ -260,6 +341,7 @@ export default function UsersPage() {
           </div>
         </div>
       </Modal>
+      {ConfirmDialogElement}
     </div>
   );
 }
