@@ -8,7 +8,7 @@ export class HRService {
   private async validateBoxAccess(boxId: string | undefined | null, tenantId: string) {
     if (!boxId) return;
     const box = await prisma.box.findFirst({
-      where: { id: boxId, tenantId },
+      where: { id: boxId, tenantId, deletedAt: null },
       select: { id: true },
     });
     if (!box) {

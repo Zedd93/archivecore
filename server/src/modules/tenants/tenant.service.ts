@@ -83,7 +83,7 @@ export class TenantService {
 
   async getStats(id: string) {
     const [boxCount, hrCount, orderCount, userCount, recentOrders, storageByDocType] = await Promise.all([
-      prisma.box.count({ where: { tenantId: id } }),
+      prisma.box.count({ where: { tenantId: id, deletedAt: null } }),
       prisma.hRFolder.count({ where: { tenantId: id } }),
       prisma.order.count({ where: { tenantId: id } }),
       prisma.user.count({ where: { tenantId: id } }),
@@ -95,7 +95,7 @@ export class TenantService {
       }),
       prisma.box.groupBy({
         by: ['docType'],
-        where: { tenantId: id },
+        where: { tenantId: id, deletedAt: null },
         _count: true,
         orderBy: { _count: { docType: 'desc' } },
         take: 10,

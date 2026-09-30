@@ -203,7 +203,7 @@ export class ExportService {
 
   // ─── BOXES ─────────────────────────────────────────────
   async exportBoxes(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx', department?: string): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
-    const where: Prisma.BoxWhereInput = { tenantId };
+    const where: Prisma.BoxWhereInput = { tenantId, deletedAt: null };
     if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
     if (filters.docType) where.docType = filters.docType;

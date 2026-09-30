@@ -214,8 +214,15 @@ export class TransferListService {
     data: any
   ): Promise<{ boxId: string | null; sourceBoxNumber: string | null }> {
     if (data.boxId) {
+      const box = await prisma.box.findFirst({
+        where: { id: data.boxId, tenantId: list.tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!box) {
+        throw Object.assign(new Error('Wybrany karton nie istnieje lub został usunięty'), { statusCode: 404 });
+      }
       return {
-        boxId: data.boxId,
+        boxId: box.id,
         sourceBoxNumber: normalizeOptionalText(data.sourceBoxNumber ?? data.boxNumber) ?? null,
       };
     }
@@ -410,8 +417,8 @@ export class TransferListService {
       boxId = resolved.boxId;
       sourceBoxNumber = resolved.sourceBoxNumber;
       if (boxId) {
-        box = await prisma.box.findUnique({
-          where: { id: boxId },
+        box = await prisma.box.findFirst({
+          where: { id: boxId, deletedAt: null },
           select: {
             id: true,
             boxNumber: true,

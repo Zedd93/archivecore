@@ -129,6 +129,7 @@ export class OrderService {
       const box = await prisma.box.findFirst({
         where: {
           tenantId,
+          deletedAt: null,
           ...(item.boxId ? { id: item.boxId } : { boxNumber: item.boxNumber }),
           ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
         },
@@ -575,7 +576,7 @@ export class OrderService {
     if (boxIds.length > 0 && boxStatus) {
       operations.push(
         prisma.box.updateMany({
-          where: { id: { in: boxIds }, tenantId },
+          where: { id: { in: boxIds }, tenantId, deletedAt: null },
           data: { status: boxStatus },
         })
       );
@@ -685,7 +686,7 @@ export class OrderService {
 
       if (stillCheckedOut === 0) {
         await prisma.box.updateMany({
-          where: { id: boxId, tenantId },
+          where: { id: boxId, tenantId, deletedAt: null },
           data: { status: 'active' },
         });
       }

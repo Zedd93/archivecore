@@ -157,7 +157,7 @@
       "exportSelected": "Eksportuj wybrane",
       "deleteSelected": "Usuń wybrane",
       "confirmDelete": "Usunąć wybrane kartony?",
-      "confirmDeleteMsg": "Czy na pewno usunąć {{count}} zaznaczonych kartonów? Kartony z zawartością lub historią wydań nie mogą zostać usunięte.",
+      "confirmDeleteMsg": "Czy na pewno usunąć {{count}} zaznaczonych kartonów? Nie można usunąć kartonu z zawartością ani będącego w aktywnym wydaniu. Zakończone zlecenia zachowają swoją historię.",
       "deleteSuccess": "Usunięto {{count}} kartonów",
       "deleteError": "Nie udało się usunąć wybranych kartonów"
     }

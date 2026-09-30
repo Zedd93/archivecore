@@ -18,7 +18,10 @@ function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxO
 }
 
 function buildBoxWhereSql(filters: any, tenantId: string, department: string | undefined, locationIds: string[] | null) {
-  const conditions: Prisma.Sql[] = [Prisma.sql`"tenantId" = ${tenantId}::uuid`];
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`"tenantId" = ${tenantId}::uuid`,
+    Prisma.sql`"deletedAt" IS NULL`,
+  ];
 
   if (department) conditions.push(Prisma.sql`"department" ILIKE ${department}`);
   if (filters.status) conditions.push(Prisma.sql`"status"::text = ${String(filters.status)}`);
@@ -91,7 +94,7 @@ export class BoxService {
   }
 
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
-    const where: Prisma.BoxWhereInput = { tenantId };
+    const where: Prisma.BoxWhereInput = { tenantId, deletedAt: null };
     const sortBy = String(filters.sortBy || 'createdAt');
     const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
     const orderBy = getBoxOrderBy(sortBy, sortOrder);
@@ -218,7 +221,7 @@ export class BoxService {
 
   async getById(id: string, tenantId: string, department?: string) {
     const box = await prisma.box.findFirst({
-      where: { id, tenantId, ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}) },
+      where: { id, tenantId, deletedAt: null, ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}) },
       include: {
         location: { select: { id: true, fullPath: true, code: true, name: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
@@ -371,7 +374,7 @@ export class BoxService {
 
   async bulkChangeStatus(ids: string[], tenantId: string, status: string) {
     const result = await prisma.box.updateMany({
-      where: { id: { in: ids }, tenantId },
+      where: { id: { in: ids }, tenantId, deletedAt: null },
       data: { status: status as any },
     });
     return { updated: result.count };
@@ -381,7 +384,7 @@ export class BoxService {
     await this.validateBoxLocation(locationId, tenantId);
 
     const boxes = await prisma.box.findMany({
-      where: { id: { in: ids }, tenantId },
+      where: { id: { in: ids }, tenantId, deletedAt: null },
       select: { id: true, locationId: true },
     });
     const movedBoxes = boxes.filter(box => box.locationId !== locationId);
@@ -394,7 +397,7 @@ export class BoxService {
 
     await prisma.$transaction([
       prisma.box.updateMany({
-        where: { id: { in: movedBoxes.map(box => box.id) }, tenantId },
+        where: { id: { in: movedBoxes.map(box => box.id) }, tenantId, deletedAt: null },
         data: { locationId },
       }),
       ...Object.entries(decrementByLocation).map(([oldLocationId, count]) =>
@@ -422,6 +425,7 @@ export class BoxService {
       where: {
         id: { in: uniqueIds },
         tenantId,
+        deletedAt: null,
         ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
       },
       select: {
@@ -434,8 +438,20 @@ export class BoxService {
             documents: true,
             attachments: true,
             hrFolders: true,
-            orderItems: true,
-            custodyEvents: true,
+            orderItems: {
+              where: {
+                OR: [
+                  {
+                    itemStatus: { in: ['pending', 'picked'] },
+                    order: { status: { notIn: ['completed', 'cancelled'] } },
+                  },
+                  {
+                    itemStatus: 'delivered',
+                    order: { orderType: 'checkout', status: { in: ['delivered', 'completed'] } },
+                  },
+                ],
+              },
+            },
             transferListItems: true,
           },
         },
@@ -452,25 +468,38 @@ export class BoxService {
         + _count.attachments
         + _count.hrFolders
         + _count.orderItems
-        + _count.custodyEvents
         + _count.transferListItems > 0
     );
     if (blocked.length > 0) {
-      const examples = blocked.slice(0, 5).map(box => box.boxNumber).join(', ');
+      const examples = blocked.slice(0, 5).map((box) => {
+        const reasons = [
+          box._count.folders + box._count.transferListItems > 0 ? 'teczki' : null,
+          box._count.documents > 0 ? 'dokumenty' : null,
+          box._count.attachments > 0 ? 'załączniki' : null,
+          box._count.hrFolders > 0 ? 'akta osobowe' : null,
+          box._count.orderItems > 0 ? 'aktywne wydania' : null,
+        ].filter(Boolean);
+        return `${box.boxNumber} (${reasons.join(', ')})`;
+      }).join('; ');
       const suffix = blocked.length > 5 ? ` i ${blocked.length - 5} więcej` : '';
       throw Object.assign(new Error(
-        `Nie można usunąć wybranych kartonów. Powiązane teczki, dokumenty, załączniki lub historię wydań mają: ${examples}${suffix}. Najpierw przenieś lub usuń ich zawartość.`
+        `Nie można usunąć wybranych kartonów: ${examples}${suffix}. Najpierw przenieś zawartość albo zakończ aktywne wydanie.`
       ), { statusCode: 409 });
     }
 
     const locationIds = [...new Set(boxes.map(box => box.locationId).filter((id): id is string => Boolean(id)))];
 
     await prisma.$transaction(async (tx) => {
-      await tx.label.deleteMany({ where: { boxId: { in: uniqueIds } } });
-      await tx.box.deleteMany({ where: { id: { in: uniqueIds }, tenantId } });
+      await tx.shareLink.deleteMany({
+        where: { entityType: 'box', entityId: { in: uniqueIds } },
+      });
+      await tx.box.updateMany({
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null },
+        data: { deletedAt: new Date(), locationId: null },
+      });
 
       for (const locationId of locationIds) {
-        const currentCount = await tx.box.count({ where: { locationId } });
+        const currentCount = await tx.box.count({ where: { locationId, deletedAt: null } });
         await tx.location.update({ where: { id: locationId }, data: { currentCount } });
       }
     });

@@ -55,11 +55,11 @@ export class ReportService {
       pendingDisposal,
       totalUsers,
     ] = await Promise.all([
-      prisma.box.count({ where: { tenantId } }),
+      prisma.box.count({ where: { tenantId, deletedAt: null } }),
       prisma.folder.count({ where: { tenantId } }),
       prisma.transferListItem.count({ where: { transferList: { tenantId } } }),
-      prisma.box.count({ where: { tenantId, status: 'active' } }),
-      prisma.box.count({ where: { tenantId, status: 'checked_out' } }),
+      prisma.box.count({ where: { tenantId, status: 'active', deletedAt: null } }),
+      prisma.box.count({ where: { tenantId, status: 'checked_out', deletedAt: null } }),
       prisma.hRFolder.count({ where: { tenantId } }),
       prisma.order.count({
         where: { tenantId, status: { notIn: ['completed', 'cancelled'] } },
@@ -71,7 +71,7 @@ export class ReportService {
         where: { tenantId, type: 'slot' },
         select: { capacity: true, currentCount: true },
       }),
-      prisma.box.count({ where: { tenantId, status: 'pending_disposal' } }),
+      prisma.box.count({ where: { tenantId, status: 'pending_disposal', deletedAt: null } }),
       prisma.user.count({ where: { tenantId, isActive: true } }),
     ]);
 
@@ -97,7 +97,7 @@ export class ReportService {
   async getBoxesByStatus(tenantId: string) {
     const data = await prisma.box.groupBy({
       by: ['status'],
-      where: { tenantId },
+      where: { tenantId, deletedAt: null },
       _count: true,
     });
     return this.addLabel(data, 'status', BOX_STATUS_LABELS);
@@ -106,7 +106,7 @@ export class ReportService {
   async getBoxesByDocType(tenantId: string) {
     const data = await prisma.box.groupBy({
       by: ['docType'],
-      where: { tenantId },
+      where: { tenantId, deletedAt: null },
       _count: true,
       orderBy: { _count: { docType: 'desc' } },
       take: 15,
@@ -162,7 +162,7 @@ export class ReportService {
       }),
       prisma.box.groupBy({
         by: ['locationId'],
-        where: { tenantId, locationId: { not: null } },
+        where: { tenantId, locationId: { not: null }, deletedAt: null },
         _count: true,
       }),
     ]);

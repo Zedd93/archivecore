@@ -171,7 +171,7 @@ export class FolderService {
     const orderInBox = lastFolder ? lastFolder.orderInBox + 1 : 1;
 
     // Generate folder number
-    const box = await prisma.box.findFirst({ where: { id: data.boxId, tenantId } });
+    const box = await prisma.box.findFirst({ where: { id: data.boxId, tenantId, deletedAt: null } });
     if (!box) throw Object.assign(new Error('Karton nie znaleziony'), { statusCode: 404 });
 
     const folderNumber = `${box.boxNumber}/T-${orderInBox.toString().padStart(3, '0')}`;

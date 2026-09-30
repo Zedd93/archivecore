@@ -208,7 +208,7 @@ export class RetentionService {
       this.assertCanManageGlobalPolicy(actor);
     }
 
-    const boxWhere: Prisma.BoxWhereInput = { retentionPolicyId: policyId };
+    const boxWhere: Prisma.BoxWhereInput = { retentionPolicyId: policyId, deletedAt: null };
     if (tenantId) boxWhere.tenantId = tenantId;
 
     const boxes = await prisma.box.findMany({
@@ -252,6 +252,7 @@ export class RetentionService {
     return prisma.box.findMany({
       where: {
         tenantId,
+        deletedAt: null,
         retentionDate: { lte: futureDate, gte: new Date() },
         status: { in: ['active', 'checked_out'] },
       },
@@ -269,6 +270,7 @@ export class RetentionService {
       where: {
         id: { in: boxIds },
         tenantId,
+        deletedAt: null,
         status: 'active',
       },
       data: {
@@ -298,6 +300,7 @@ export class RetentionService {
       where: {
         id: { in: boxIds },
         tenantId,
+        deletedAt: null,
         status: 'pending_disposal',
       },
       data: {
@@ -308,7 +311,10 @@ export class RetentionService {
 
     // Update location counters
     for (const boxId of boxIds) {
-      const box = await prisma.box.findUnique({ where: { id: boxId }, select: { locationId: true } });
+      const box = await prisma.box.findFirst({
+        where: { id: boxId, deletedAt: null },
+        select: { locationId: true },
+      });
       if (box?.locationId) {
         await prisma.location.update({
           where: { id: box.locationId },

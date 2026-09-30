@@ -41,7 +41,7 @@ export class CustodyService {
 
     // Verify box belongs to the tenant
     const box = await prisma.box.findFirst({
-      where: { id: data.boxId, tenantId },
+      where: { id: data.boxId, tenantId, deletedAt: null },
       select: { id: true },
     });
     if (!box) {
@@ -83,7 +83,7 @@ export class CustodyService {
   async getByBox(boxId: string, tenantId: string) {
     // Verify box belongs to tenant
     const box = await prisma.box.findFirst({
-      where: { id: boxId, tenantId },
+      where: { id: boxId, tenantId, deletedAt: null },
       select: { id: true },
     });
     if (!box) {

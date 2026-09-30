@@ -199,7 +199,7 @@ export class LocationService {
 
   async getBoxes(locationId: string, tenantId: string) {
     return prisma.box.findMany({
-      where: { locationId, tenantId },
+      where: { locationId, tenantId, deletedAt: null },
       orderBy: { boxNumber: 'asc' },
       select: { id: true, boxNumber: true, title: true, status: true, qrCode: true },
     });

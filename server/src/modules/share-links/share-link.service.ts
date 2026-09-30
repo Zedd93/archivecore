@@ -13,6 +13,7 @@ export class ShareLinkService {
       where: {
         id: entityId,
         tenantId,
+        deletedAt: null,
         department: { equals: department, mode: 'insensitive' },
       },
       select: { id: true },
@@ -57,7 +58,7 @@ export class ShareLinkService {
     const skip = (page - 1) * limit;
     const accessibleBoxes = department
       ? await prisma.box.findMany({
-          where: { tenantId, department: { equals: department, mode: 'insensitive' } },
+          where: { tenantId, deletedAt: null, department: { equals: department, mode: 'insensitive' } },
           select: { id: true },
         })
       : [];
@@ -114,7 +115,7 @@ export class ShareLinkService {
     switch (entityType) {
       case 'box':
         return prisma.box.findFirst({
-          where: { id: entityId, tenantId },
+          where: { id: entityId, tenantId, deletedAt: null },
           include: {
             location: true,
             tenant: { select: { name: true, shortCode: true } },

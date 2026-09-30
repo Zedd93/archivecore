@@ -157,7 +157,7 @@
       "exportSelected": "Export selected",
       "deleteSelected": "Delete selected",
       "confirmDelete": "Delete selected boxes?",
-      "confirmDeleteMsg": "Are you sure you want to delete {{count}} selected boxes? Boxes with contents or issue history cannot be deleted.",
+      "confirmDeleteMsg": "Are you sure you want to delete {{count}} selected boxes? A box with contents or an active checkout cannot be deleted. Completed orders will keep their history.",
       "deleteSuccess": "Deleted {{count}} boxes",
       "deleteError": "Failed to delete selected boxes"
     }

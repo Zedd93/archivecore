@@ -32,6 +32,7 @@ export class SearchService {
       const boxes = await prisma.box.findMany({
         where: {
           tenantId,
+          deletedAt: null,
           ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
           OR: [
             { qrCode: trimmedQuery },
@@ -97,6 +98,7 @@ export class SearchService {
     const boxes = await prisma.box.findMany({
       where: {
         tenantId,
+        deletedAt: null,
         ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
         OR: [
           { title: { contains: query, mode: 'insensitive' } },

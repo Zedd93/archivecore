@@ -33,6 +33,7 @@ export class LabelService {
     return prisma.box.findFirst({
       where: {
         tenantId,
+        deletedAt: null,
         OR: [
           ...(this.isUuid(trimmed) ? [{ id: trimmed }] : []),
           { boxNumber: { equals: trimmed, mode: 'insensitive' } },
@@ -149,6 +150,7 @@ export class LabelService {
     const boxes = await prisma.box.findMany({
       where: {
         tenantId,
+        deletedAt: null,
         OR: [
           ...identifiers.map((identifier) => ({ boxNumber: { equals: identifier, mode: 'insensitive' as const } })),
           ...(uuidIdentifiers.length > 0 ? [{ id: { in: uuidIdentifiers } }] : []),
