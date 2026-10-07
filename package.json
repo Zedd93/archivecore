@@ -17,13 +17,14 @@
     "build:shared": "npm run build --workspace=shared",
     "build:client": "npm run build --workspace=client",
     "typecheck": "npm run typecheck --workspace=shared && npm run typecheck --workspace=server && npm run typecheck --workspace=client",
-    "db:migrate": "npx prisma migrate dev",
+    "db:migrate": "npx prisma migrate deploy",
+    "db:migrate:dev": "npx prisma migrate dev",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "setup": "npm install && npm run docker:up && sleep 5 && npm run db:migrate && npm run db:seed"
+    "setup": "npm install && npm run docker:up && sleep 5 && npm run db:migrate:dev && npm run db:seed"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

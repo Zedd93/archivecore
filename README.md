@@ -75,7 +75,8 @@ After seeding, use these credentials:
 npm run build          # Build all (shared + server + client)
 npm run typecheck      # TypeScript check all workspaces
 npm run db:studio      # Open Prisma Studio (DB browser)
-npm run db:migrate     # Run pending migrations
+npm run db:migrate     # Apply pending migrations safely (production)
+npm run db:migrate:dev # Create/apply migrations during local development
 npm run db:seed        # Seed demo data
 npm run docker:up      # Start PostgreSQL, Redis, MinIO
 npm run docker:down    # Stop infrastructure
