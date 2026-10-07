@@ -5,7 +5,7 @@ const optionalDocTypeSchema = z.enum(DOC_TYPES).optional();
 
 export const createFolderSchema = z.object({
   boxId: z.string().uuid('Nieprawidłowe ID kartonu'),
-  title: z.string().min(1, 'Tytuł jest wymagany').max(500),
+  title: z.string().min(1, 'Tytuł jest wymagany').max(1000),
   docType: optionalDocTypeSchema,
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

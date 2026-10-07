@@ -77,6 +77,7 @@ npm run typecheck      # TypeScript check all workspaces
 npm run db:studio      # Open Prisma Studio (DB browser)
 npm run db:migrate     # Apply pending migrations safely (production)
 npm run db:migrate:dev # Create/apply migrations during local development
+npm run db:check-integrity # Read-only check of transfer-list/folder consistency
 npm run db:seed        # Seed demo data
 npm run docker:up      # Start PostgreSQL, Redis, MinIO
 npm run docker:down    # Stop infrastructure

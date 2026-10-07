@@ -108,6 +108,12 @@ export class FolderService {
       where: { id, tenantId, ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}) },
       include: {
         box: { select: { id: true, boxNumber: true, title: true } },
+        transferListItem: {
+          select: {
+            id: true,
+            transferList: { select: { id: true, listNumber: true, title: true, status: true } },
+          },
+        },
         documents: {
           orderBy: { orderInFolder: 'asc' },
           include: {
@@ -155,17 +161,70 @@ export class FolderService {
   }
 
   async update(id: string, tenantId: string, data: any) {
-    await this.getById(id, tenantId);
-    return prisma.folder.update({
-      where: { id },
-      data: {
-        title: data.title,
-        docType: data.docType,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-        description: data.description,
-        customFields: data.customFields,
+    const folder = await prisma.folder.findFirst({
+      where: { id, tenantId },
+      include: {
+        transferListItem: {
+          select: {
+            id: true,
+            transferList: { select: { status: true } },
+          },
+        },
       },
+    });
+    if (!folder) throw Object.assign(new Error('Teczka nie znaleziona'), { statusCode: 404 });
+
+    const mirroredFieldsChanged = ['title', 'dateFrom', 'dateTo', 'description']
+      .some((field) => data[field] !== undefined);
+    if (
+      mirroredFieldsChanged
+      && folder.transferListItem
+      && folder.transferListItem.transferList.status !== 'draft'
+    ) {
+      throw Object.assign(
+        new Error('Dane teczki należącej do zatwierdzonego spisu można zmienić dopiero po cofnięciu spisu do statusu Roboczy.'),
+        { statusCode: 409 }
+      );
+    }
+
+    const dateFrom = data.dateFrom === undefined ? undefined : data.dateFrom ? new Date(data.dateFrom) : null;
+    const dateTo = data.dateTo === undefined ? undefined : data.dateTo ? new Date(data.dateTo) : null;
+
+    return prisma.$transaction(async (tx) => {
+      const updatedFolder = await tx.folder.update({
+        where: { id },
+        data: {
+          title: data.title,
+          docType: data.docType,
+          dateFrom,
+          dateTo,
+          description: data.description,
+          customFields: data.customFields,
+        },
+        include: {
+          box: { select: { id: true, boxNumber: true, title: true } },
+          transferListItem: {
+            select: {
+              id: true,
+              transferList: { select: { id: true, listNumber: true, title: true, status: true } },
+            },
+          },
+        },
+      });
+
+      if (folder.transferListItem) {
+        await tx.transferListItem.update({
+          where: { id: folder.transferListItem.id },
+          data: {
+            folderTitle: data.title,
+            dateFrom,
+            dateTo,
+            notes: data.description,
+          },
+        });
+      }
+
+      return updatedFolder;
     });
   }
 
@@ -178,6 +237,21 @@ export class FolderService {
   }
 
   async reorder(boxId: string, tenantId: string, folderIds: string[]) {
+    const uniqueFolderIds = [...new Set(folderIds)];
+    if (uniqueFolderIds.length !== folderIds.length) {
+      throw Object.assign(new Error('Lista teczek zawiera powtórzone pozycje'), { statusCode: 400 });
+    }
+
+    const matchingFolders = await prisma.folder.count({
+      where: { id: { in: uniqueFolderIds }, boxId, tenantId },
+    });
+    if (matchingFolders !== uniqueFolderIds.length) {
+      throw Object.assign(
+        new Error('Niektóre teczki nie należą do wybranego kartonu lub tenanta'),
+        { statusCode: 400 }
+      );
+    }
+
     const updates = folderIds.map((id, index) =>
       prisma.folder.update({
         where: { id },

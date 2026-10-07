@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck --workspace=shared && npm run typecheck --workspace=server && npm run typecheck --workspace=client",
     "db:migrate": "npx prisma migrate deploy",
     "db:migrate:dev": "npx prisma migrate dev",
+    "db:check-integrity": "node server/scripts/check-data-integrity.cjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",
