@@ -101,11 +101,7 @@ export default function LoansPage() {
     e.preventDefault();
     const items = [
       ...selectedBoxes.map((box) => ({ boxId: box.id })),
-      ...selectedFolders.map((folder) => (
-        folder.source === 'transfer_list'
-          ? { transferListItemId: folder.id }
-          : { folderId: folder.id }
-      )),
+      ...selectedFolders.map((folder) => ({ folderId: folder.id })),
       ...selectedDocuments.map((doc) => (
         doc.source === 'transfer_list_item'
           ? { transferListItemId: doc.id }

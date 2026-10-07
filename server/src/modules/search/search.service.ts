@@ -71,7 +71,6 @@ export class SearchService {
     }
     if (types.includes('folder')) {
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchTransferListItems(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
@@ -130,84 +129,63 @@ export class SearchService {
     const folders = await prisma.folder.findMany({
       where: {
         tenantId,
-        ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
+        ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}),
         OR: [
           { title: { contains: query, mode: 'insensitive' } },
           { folderNumber: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
+          { transferListItem: { is: { categoryCode: { contains: query, mode: 'insensitive' } } } },
+          { transferListItem: { is: { storageLocation: { contains: query, mode: 'insensitive' } } } },
+          { transferListItem: { is: { sourceBoxNumber: { contains: query, mode: 'insensitive' } } } },
+          { transferListItem: { is: { transferList: { title: { contains: query, mode: 'insensitive' } } } } },
+          { transferListItem: { is: { transferList: { listNumber: { contains: query, mode: 'insensitive' } } } } },
         ],
       },
       include: {
         box: { select: { boxNumber: true } },
+        transferListItem: {
+          include: {
+            transferList: { select: { id: true, listNumber: true, title: true } },
+          },
+        },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
     });
 
-    return folders.map(folder => ({
-      type: 'folder' as const,
-      id: folder.id,
-      title: `${folder.folderNumber} — ${folder.title}`,
-      subtitle: `Karton: ${folder.box.boxNumber}`,
-      relevance: this.calculateRelevance(query, [folder.title, folder.folderNumber, folder.description || '', folder.docType || '']),
-      metadata: { folderNumber: folder.folderNumber, boxId: folder.boxId, boxNumber: folder.box.boxNumber, docType: folder.docType },
-    }));
-  }
-
-  private async searchTransferListItems(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
-    const items = await prisma.transferListItem.findMany({
-      where: {
-        transferList: { tenantId },
-        ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
-        OR: [
-          { folderTitle: { contains: query, mode: 'insensitive' } },
-          { folderSignature: { contains: query, mode: 'insensitive' } },
-          { categoryCode: { contains: query, mode: 'insensitive' } },
-          { storageLocation: { contains: query, mode: 'insensitive' } },
-          { sourceBoxNumber: { contains: query, mode: 'insensitive' } },
-          { notes: { contains: query, mode: 'insensitive' } },
-          { transferList: { title: { contains: query, mode: 'insensitive' } } },
-          { transferList: { listNumber: { contains: query, mode: 'insensitive' } } },
-          { box: { boxNumber: { contains: query, mode: 'insensitive' } } },
-        ],
-      },
-      include: {
-        transferList: { select: { id: true, listNumber: true, title: true } },
-        box: { select: { id: true, boxNumber: true, department: true } },
-      },
-      take: limit,
-      orderBy: { ordinalNumber: 'asc' },
+    return folders.map(folder => {
+      const sourceItem = folder.transferListItem;
+      return {
+        type: 'folder' as const,
+        id: folder.id,
+        title: `${folder.folderNumber} — ${folder.title}`,
+        subtitle: sourceItem
+          ? `Spis ZO: ${sourceItem.transferList.listNumber} | Karton: ${sourceItem.sourceBoxNumber || folder.box?.boxNumber || '—'}`
+          : `Karton: ${folder.box?.boxNumber || '—'}`,
+        relevance: this.calculateRelevance(query, [
+          folder.title,
+          folder.folderNumber,
+          folder.description || '',
+          folder.docType || '',
+          sourceItem?.categoryCode || '',
+          sourceItem?.storageLocation || '',
+          sourceItem?.sourceBoxNumber || '',
+          sourceItem?.transferList.title || '',
+          sourceItem?.transferList.listNumber || '',
+        ]),
+        metadata: {
+          folderNumber: folder.folderNumber,
+          boxId: folder.boxId,
+          boxNumber: folder.box?.boxNumber,
+          docType: folder.docType,
+          transferListId: sourceItem?.transferList.id,
+          transferListItemId: sourceItem?.id,
+          source: sourceItem ? 'transfer_list_item' : 'folder',
+          categoryCode: sourceItem?.categoryCode,
+        },
+      };
     });
-
-    return items.map(item => ({
-      type: 'folder' as const,
-      id: item.id,
-      title: `${item.folderSignature} — ${item.folderTitle}`,
-      subtitle: `Spis ZO: ${item.transferList.listNumber} | Karton: ${item.sourceBoxNumber || item.box?.boxNumber || '—'}`,
-      relevance: this.calculateRelevance(query, [
-        item.folderTitle,
-        item.folderSignature,
-        item.categoryCode,
-        item.storageLocation || '',
-        item.sourceBoxNumber || '',
-        item.notes || '',
-        item.transferList.title,
-        item.transferList.listNumber,
-        item.box?.boxNumber || '',
-      ]),
-      metadata: {
-        folderNumber: item.folderSignature,
-        boxId: item.boxId,
-        boxNumber: item.box?.boxNumber,
-        sourceBoxNumber: item.sourceBoxNumber,
-        transferListId: item.transferListId,
-        transferListNumber: item.transferList.listNumber,
-        source: 'transfer_list_item',
-        categoryCode: item.categoryCode,
-        department: item.box?.department,
-      },
-    }));
   }
 
   private async searchDocuments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {

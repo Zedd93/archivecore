@@ -366,10 +366,10 @@ model Box {
 
 model Folder {
   id           String       @id @default(uuid()) @db.Uuid
-  boxId        String       @db.Uuid
+  boxId        String?      @db.Uuid
   tenantId     String       @db.Uuid
-  folderNumber String       @db.VarChar(50)
-  title        String       @db.VarChar(500)
+  folderNumber String       @db.VarChar(100)
+  title        String       @db.VarChar(1000)
   docType      String?      @db.VarChar(100)
   dateFrom     DateTime?    @db.Date
   dateTo       DateTime?    @db.Date
@@ -380,11 +380,12 @@ model Folder {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  box         Box          @relation(fields: [boxId], references: [id])
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  documents   Document[]
-  attachments Attachment[] @relation("FolderAttachments")
-  orderItems  OrderItem[]
+  box              Box?              @relation(fields: [boxId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  documents        Document[]
+  attachments      Attachment[]      @relation("FolderAttachments")
+  orderItems       OrderItem[]
+  transferListItem TransferListItem?
 
   @@index([boxId])
   @@index([tenantId])
@@ -788,10 +789,12 @@ model TransferListItem {
   disposalOrTransferDate DateTime? @db.Date // Data zniszczenia lub przekazania do AP
   notes                  String?   @db.Text
   boxId                  String?   @db.Uuid // Powiązanie z kartonem
+  folderId               String    @unique @db.Uuid // Kanoniczna teczka reprezentowana przez pozycję spisu
   sourceBoxNumber        String?   @db.VarChar(100) // Lokalny numer kartonu ze spisu, np. "Karton 1"
 
   transferList TransferList @relation(fields: [transferListId], references: [id], onDelete: Cascade)
   box          Box?         @relation(fields: [boxId], references: [id])
+  folder       Folder       @relation(fields: [folderId], references: [id], onDelete: Restrict)
   orderItems   OrderItem[]
 
   @@index([transferListId])

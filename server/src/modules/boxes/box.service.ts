@@ -225,11 +225,14 @@ export class BoxService {
       include: {
         location: { select: { id: true, fullPath: true, code: true, name: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
-        folders: { orderBy: { orderInBox: 'asc' } },
-        transferListItems: {
-          orderBy: { ordinalNumber: 'asc' },
+        folders: {
+          orderBy: { orderInBox: 'asc' },
           include: {
-            transferList: { select: { id: true, listNumber: true, title: true } },
+            transferListItem: {
+              include: {
+                transferList: { select: { id: true, listNumber: true, title: true } },
+              },
+            },
           },
         },
         _count: { select: { folders: true, documents: true, attachments: true, transferListItems: true } },

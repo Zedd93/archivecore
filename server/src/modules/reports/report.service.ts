@@ -44,8 +44,7 @@ export class ReportService {
   async getDashboardKPIs(tenantId: string): Promise<DashboardKPIs> {
     const [
       totalBoxes,
-      manualFolders,
-      transferListFolders,
+      totalFolders,
       activeBoxes,
       checkedOutBoxes,
       totalHRFolders,
@@ -57,7 +56,6 @@ export class ReportService {
     ] = await Promise.all([
       prisma.box.count({ where: { tenantId, deletedAt: null } }),
       prisma.folder.count({ where: { tenantId } }),
-      prisma.transferListItem.count({ where: { transferList: { tenantId } } }),
       prisma.box.count({ where: { tenantId, status: 'active', deletedAt: null } }),
       prisma.box.count({ where: { tenantId, status: 'checked_out', deletedAt: null } }),
       prisma.hRFolder.count({ where: { tenantId } }),
@@ -81,7 +79,7 @@ export class ReportService {
 
     return {
       totalBoxes,
-      totalFolders: manualFolders + transferListFolders,
+      totalFolders,
       activeBoxes,
       checkedOutBoxes,
       totalHRFolders,

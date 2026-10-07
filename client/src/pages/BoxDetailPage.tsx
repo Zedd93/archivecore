@@ -148,8 +148,7 @@ export default function BoxDetailPage() {
   }
 
   const folderRecords = box.folders ?? [];
-  const transferListItems = box.transferListItems ?? [];
-  const totalFolderCount = folderRecords.length + transferListItems.length;
+  const totalFolderCount = folderRecords.length;
 
   return (
     <div className="space-y-6">
@@ -250,57 +249,52 @@ export default function BoxDetailPage() {
             </div>
             {totalFolderCount > 0 ? (
               <div className="space-y-2">
-                {folderRecords.map((folder: any) => (
-                  <div key={folder.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="min-w-0 flex items-start gap-3">
-                      <FileText size={18} className="mt-0.5 flex-shrink-0 text-gray-400" />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">{folder.folderNumber}</div>
-                        <div className="text-xs text-gray-500 whitespace-normal break-words">{folder.title}</div>
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <StatusBadge status={folder.status} type="box" />
-                    </div>
-                  </div>
-                ))}
-                {transferListItems.map((item: any) => (
-                  <div key={`transfer-${item.id}`} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="min-w-0 flex items-center gap-3">
-                      <FileText size={18} className="flex-shrink-0 text-gray-400" />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">{item.folderSignature}</div>
-                        <div className="text-xs text-gray-500 whitespace-normal break-words">{item.folderTitle}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                          <span>{t('boxes.fromTransferList')}</span>
-                          {item.transferList && (
-                            <button
-                              onClick={() => navigate(`/transfer-lists/${item.transferList.id}`)}
-                              className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-800"
-                            >
-                              <FileSpreadsheet size={12} />
-                              {item.transferList.listNumber}
-                            </button>
+                {folderRecords.map((folder: any) => {
+                  const item = folder.transferListItem;
+                  return (
+                    <div key={folder.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                      <div className="min-w-0 flex items-start gap-3">
+                        <FileText size={18} className="mt-0.5 flex-shrink-0 text-gray-400" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium">{folder.folderNumber}</div>
+                          <div className="text-xs text-gray-500 whitespace-normal break-words">{folder.title}</div>
+                          {item?.transferList && (
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                              <span>{t('boxes.fromTransferList')}</span>
+                              <button
+                                onClick={() => navigate(`/transfer-lists/${item.transferList.id}`)}
+                                className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-800"
+                              >
+                                <FileSpreadsheet size={12} />
+                                {item.transferList.listNumber}
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                    <div className="flex-shrink-0 text-right">
-                      <div className={`inline-flex px-1.5 py-0.5 rounded text-xs font-bold ${
-                        item.categoryCode === 'A' ? 'bg-red-100 text-red-700' :
-                        item.categoryCode?.startsWith('BE') ? 'bg-orange-100 text-orange-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {item.categoryCode}
+                      <div className="flex-shrink-0 text-right">
+                        {item ? (
+                          <>
+                            <div className={`inline-flex px-1.5 py-0.5 rounded text-xs font-bold ${
+                              item.categoryCode === 'A' ? 'bg-red-100 text-red-700' :
+                              item.categoryCode?.startsWith('BE') ? 'bg-orange-100 text-orange-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {item.categoryCode}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500 whitespace-nowrap">
+                              {folder.dateFrom ? new Date(folder.dateFrom).getFullYear() : '—'}
+                              {' – '}
+                              {folder.dateTo ? new Date(folder.dateTo).getFullYear() : '—'}
+                            </div>
+                          </>
+                        ) : (
+                          <StatusBadge status={folder.status} type="box" />
+                        )}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500 whitespace-nowrap">
-                        {item.dateFrom ? new Date(item.dateFrom).getFullYear() : '—'}
-                        {' – '}
-                        {item.dateTo ? new Date(item.dateTo).getFullYear() : '—'}
-                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-gray-400">{t('boxes.noFolders')}</p>

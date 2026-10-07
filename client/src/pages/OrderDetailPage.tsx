@@ -81,11 +81,7 @@ export default function OrderDetailPage() {
     e.preventDefault();
     const items = [
       ...selectedBoxes.map((box) => ({ boxId: box.id })),
-      ...selectedFolders.map((folder) => (
-        folder.source === 'transfer_list'
-          ? { transferListItemId: folder.id }
-          : { folderId: folder.id }
-      )),
+      ...selectedFolders.map((folder) => ({ folderId: folder.id })),
       ...selectedDocuments.map((doc) => (
         doc.source === 'transfer_list_item'
           ? { transferListItemId: doc.id }
@@ -249,7 +245,7 @@ export default function OrderDetailPage() {
                         )}
                       </div>
                     )}
-                    {item.transferListItem && (
+                    {item.transferListItem && !item.folder && (
                       <div className="text-sm">
                         <span className="font-mono font-medium text-green-700">{item.transferListItem.folderSignature}</span>
                         <span className="text-gray-500 ml-2">{item.transferListItem.folderTitle}</span>

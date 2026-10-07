@@ -202,7 +202,7 @@ export class OrderService {
             },
           } : {}),
         },
-        select: { id: true },
+        select: { id: true, folderId: true },
       });
 
       if (!transferListItem) {
@@ -211,6 +211,7 @@ export class OrderService {
 
       return {
         transferListItemId: transferListItem.id,
+        folderId: transferListItem.folderId,
         itemStatus: OrderItemStatus.pending,
       };
     }

@@ -33,6 +33,82 @@ export class TransferListService {
     }
   }
 
+  private parseOptionalDate(value: unknown): Date | null {
+    if (!value) return null;
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private getCanonicalFolderData(
+    list: { id: string; tenantId: string },
+    data: any,
+    boxId: string | null,
+    orderInBox: number
+  ) {
+    return {
+      tenantId: list.tenantId,
+      boxId,
+      folderNumber: String(data.folderSignature || '').trim().substring(0, 100),
+      title: String(data.folderTitle || '').trim().substring(0, 1000),
+      dateFrom: this.parseOptionalDate(data.dateFrom),
+      dateTo: this.parseOptionalDate(data.dateTo),
+      description: normalizeOptionalText(data.notes),
+      orderInBox,
+      status: 'active' as const,
+      customFields: {
+        source: 'transfer_list',
+        transferListId: list.id,
+      },
+    };
+  }
+
+  private getTransferListItemData(
+    data: any,
+    boxId: string | null,
+    sourceBoxNumber: string | null,
+    ordinalNumber: number
+  ) {
+    return {
+      ordinalNumber,
+      folderSignature: String(data.folderSignature || '').trim().substring(0, 100),
+      folderTitle: String(data.folderTitle || '').trim().substring(0, 1000),
+      dateFrom: this.parseOptionalDate(data.dateFrom),
+      dateTo: this.parseOptionalDate(data.dateTo),
+      categoryCode: String(data.categoryCode || 'B10').trim().substring(0, 20),
+      folderCount: Math.max(1, Number.parseInt(String(data.folderCount), 10) || 1),
+      storageLocation: normalizeOptionalText(data.storageLocation)?.substring(0, 500) ?? null,
+      disposalOrTransferDate: this.parseOptionalDate(data.disposalOrTransferDate),
+      notes: normalizeOptionalText(data.notes),
+      boxId,
+      sourceBoxNumber,
+    };
+  }
+
+  private async createItemWithCanonicalFolder(
+    tx: Prisma.TransactionClient,
+    list: { id: string; tenantId: string },
+    data: any,
+    boxId: string | null,
+    sourceBoxNumber: string | null,
+    ordinalNumber: number
+  ) {
+    const folder = await tx.folder.create({
+      data: this.getCanonicalFolderData(list, data, boxId, ordinalNumber),
+    });
+
+    return tx.transferListItem.create({
+      data: {
+        transferListId: list.id,
+        folderId: folder.id,
+        ...this.getTransferListItemData(data, boxId, sourceBoxNumber, ordinalNumber),
+      },
+      include: {
+        box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
+        folder: true,
+      },
+    });
+  }
+
   // ─── List all transfer lists for a tenant ─────────────
   async list(tenantId: string, filters: any, skip: number, take: number) {
     const where: Prisma.TransferListWhereInput = { tenantId };
@@ -259,26 +335,14 @@ export class TransferListService {
     });
     const ordinalNumber = (lastItem?.ordinalNumber ?? 0) + 1;
 
-    return prisma.transferListItem.create({
-      data: {
-        transferListId: listId,
-        ordinalNumber,
-        folderSignature: data.folderSignature,
-        folderTitle: data.folderTitle,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : null,
-        dateTo: data.dateTo ? new Date(data.dateTo) : null,
-        categoryCode: data.categoryCode,
-        folderCount: data.folderCount ?? 1,
-        storageLocation: data.storageLocation,
-        disposalOrTransferDate: data.disposalOrTransferDate ? new Date(data.disposalOrTransferDate) : null,
-        notes: data.notes,
-        boxId,
-        sourceBoxNumber,
-      },
-      include: {
-        box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
-      },
-    });
+    return prisma.$transaction((tx) => this.createItemWithCanonicalFolder(
+      tx,
+      list,
+      data,
+      boxId,
+      sourceBoxNumber,
+      ordinalNumber
+    ));
   }
 
   // ─── Update item ───────────────────────────────────────
@@ -289,27 +353,35 @@ export class TransferListService {
 
     const item = await prisma.transferListItem.findFirst({
       where: { id: itemId, transferListId: listId },
+      select: { id: true, folderId: true, ordinalNumber: true },
     });
     if (!item) throw Object.assign(new Error('Pozycja spisu nie znaleziona'), { statusCode: 404 });
 
-    return prisma.transferListItem.update({
-      where: { id: itemId },
-      data: {
-        folderSignature: data.folderSignature,
-        folderTitle: data.folderTitle,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : null,
-        dateTo: data.dateTo ? new Date(data.dateTo) : null,
-        categoryCode: data.categoryCode,
-        folderCount: data.folderCount,
-        storageLocation: data.storageLocation,
-        disposalOrTransferDate: data.disposalOrTransferDate ? new Date(data.disposalOrTransferDate) : null,
-        notes: data.notes,
-        boxId,
-        sourceBoxNumber,
-      },
-      include: {
-        box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
-      },
+    return prisma.$transaction(async (tx) => {
+      let folderId = item.folderId;
+      if (folderId) {
+        await tx.folder.update({
+          where: { id: folderId },
+          data: this.getCanonicalFolderData(list, data, boxId, item.ordinalNumber),
+        });
+      } else {
+        const folder = await tx.folder.create({
+          data: this.getCanonicalFolderData(list, data, boxId, item.ordinalNumber),
+        });
+        folderId = folder.id;
+      }
+
+      return tx.transferListItem.update({
+        where: { id: itemId },
+        data: {
+          folderId,
+          ...this.getTransferListItemData(data, boxId, sourceBoxNumber, item.ordinalNumber),
+        },
+        include: {
+          box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
+          folder: true,
+        },
+      });
     });
   }
 
@@ -346,33 +418,14 @@ export class TransferListService {
       try {
         const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, item);
 
-        // Safely parse dates
-        const safeDate = (val: any): Date | null => {
-          if (!val) return null;
-          const d = new Date(val);
-          return isNaN(d.getTime()) ? null : d;
-        };
-
-        const record = await prisma.transferListItem.create({
-          data: {
-            transferListId: listId,
-            ordinalNumber,
-            folderSignature: String(item.folderSignature || '').trim().substring(0, 100),
-            folderTitle: String(item.folderTitle || '').trim().substring(0, 1000),
-            dateFrom: safeDate(item.dateFrom),
-            dateTo: safeDate(item.dateTo),
-            categoryCode: String(item.categoryCode || 'B10').trim().substring(0, 20),
-            folderCount: Math.max(1, parseInt(String(item.folderCount)) || 1),
-            storageLocation: item.storageLocation ? String(item.storageLocation).trim().substring(0, 500) : null,
-            disposalOrTransferDate: safeDate(item.disposalOrTransferDate),
-            notes: item.notes ? String(item.notes).trim() : null,
-            boxId,
-            sourceBoxNumber,
-          },
-          include: {
-            box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
-          },
-        });
+        const record = await prisma.$transaction((tx) => this.createItemWithCanonicalFolder(
+          tx,
+          list,
+          item,
+          boxId,
+          sourceBoxNumber,
+          ordinalNumber
+        ));
         created.push(record);
       } catch (err: any) {
         errors.push(`Wiersz ${i + 1}: ${err.message}`);
@@ -429,13 +482,27 @@ export class TransferListService {
       }
     }
 
-    const result = await prisma.transferListItem.updateMany({
-      where: {
-        id: { in: itemIds },
-        transferListId: listId,
-      },
-      data: { boxId, sourceBoxNumber },
+    const linkedItems = await prisma.transferListItem.findMany({
+      where: { id: { in: itemIds }, transferListId: listId },
+      select: { folderId: true },
     });
+    const folderIds = linkedItems
+      .map((item) => item.folderId)
+      .filter((id): id is string => Boolean(id));
+
+    const [result] = await prisma.$transaction([
+      prisma.transferListItem.updateMany({
+        where: {
+          id: { in: itemIds },
+          transferListId: listId,
+        },
+        data: { boxId, sourceBoxNumber },
+      }),
+      prisma.folder.updateMany({
+        where: { id: { in: folderIds }, tenantId },
+        data: { boxId },
+      }),
+    ]);
 
     return { updated: result.count, box, sourceBoxNumber };
   }
