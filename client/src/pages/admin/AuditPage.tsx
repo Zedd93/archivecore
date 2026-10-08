@@ -70,6 +70,7 @@ const AUDIT_ACTION_OPTIONS = [
   'billing.storage.generate',
   'billing.period.close',
   'billing.period.export',
+  'billing.period.invoice',
   'billing_event.exclude',
   'billing_event.restore',
   'policy.create',

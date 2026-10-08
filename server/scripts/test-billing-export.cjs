@@ -28,8 +28,8 @@ function event(id, serviceCode, serviceName, net, vatRate, quantity = 1) {
   };
 }
 
-function readSheets(events) {
-  const buffer = buildBillingWorkbook(tenant, '2026-09', new Date('2026-10-01T00:00:00Z'), events);
+function readSheets(events, invoiceNumber = null) {
+  const buffer = buildBillingWorkbook(tenant, '2026-09', new Date('2026-10-01T00:00:00Z'), events, invoiceNumber);
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   return {
     names: workbook.SheetNames,
@@ -77,4 +77,10 @@ test('rejects a billing event without a price', () => {
   const missingPrice = event('1', 'storage_box_month', 'Przechowywanie', '10.00', '23');
   missingPrice.unitPrice = null;
   assert.throws(() => readSheets([missingPrice]), /nie ma ceny/);
+});
+
+test('shows an external invoice reference without changing settlement totals', () => {
+  const sheets = readSheets([event('1', 'storage_box_month', 'Przechowywanie', '10.00', '23')], 'FV/10/2026');
+  assert.deepEqual(sheets.summary.find((row) => row[0] === 'Numer faktury'), ['Numer faktury', 'FV/10/2026']);
+  assert.deepEqual(sheets.summary.find((row) => row[0] === 'RAZEM').slice(6, 9), [10, 2.3, 12.3]);
 });

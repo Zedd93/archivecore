@@ -4,6 +4,7 @@ import { pricingService } from './pricing.service';
 import { billingService } from './billing.service';
 import { parsePagination } from '../../utils/pagination';
 import { billingExportService } from './billing-export.service';
+import { billingInvoiceService } from './billing-invoice.service';
 import { prisma } from '../../config/database';
 
 export class PricingController {
@@ -79,6 +80,15 @@ export class PricingController {
       return successResponse(
         res,
         await billingService.closePeriod(req.params.tenantId, req.body.month, req.user!.userId)
+      );
+    } catch (err) { next(err); }
+  }
+
+  async confirmBillingInvoice(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(
+        res,
+        await billingInvoiceService.confirmInvoice(req.params.tenantId, req.body.month, req.body.invoiceNumber, req.user!.userId)
       );
     } catch (err) { next(err); }
   }

@@ -55,6 +55,11 @@ export const billingMonthActionSchema = z.object({
 
 export const billingExportQuerySchema = billingMonthActionSchema;
 
+export const confirmBillingInvoiceSchema = billingMonthActionSchema.extend({
+  invoiceNumber: z.string().trim().min(1, 'Podaj numer faktury').max(100, 'Numer faktury jest zbyt długi')
+    .regex(/^[^\x00-\x1f\x7f]+$/, 'Numer faktury zawiera niedozwolone znaki'),
+});
+
 export const billingEventsQuerySchema = paginationSchema.extend({
   month: billingMonthSchema.optional(),
   status: z.enum(['unpriced', 'pending', 'excluded', 'invoiced']).optional(),

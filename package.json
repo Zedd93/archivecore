@@ -21,6 +21,7 @@
     "db:migrate:dev": "npx prisma migrate dev",
     "db:check-integrity": "node server/scripts/check-data-integrity.cjs",
     "test:billing-export": "node --test server/scripts/test-billing-export.cjs",
+    "test:billing-invoice": "node --test server/scripts/test-billing-invoice.cjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",

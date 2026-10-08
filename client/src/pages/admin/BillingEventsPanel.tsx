@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Calculator, Download, Loader2, Lock, RotateCcw } from 'lucide-react';
+import { Ban, Calculator, Download, FileCheck2, Loader2, Lock, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
@@ -36,6 +36,8 @@ interface BillingResponse {
     status: 'open' | 'closed';
     generatedAt: string | null;
     closedAt: string | null;
+    invoiceNumber: string | null;
+    invoicedAt: string | null;
   } | null;
 }
 
@@ -60,6 +62,8 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
   const [limit, setLimit] = useState(25);
   const [excludeTarget, setExcludeTarget] = useState<BillingEvent | null>(null);
   const [excludeReason, setExcludeReason] = useState('');
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const { exportData, isExporting } = useExport({
     endpoint: `/pricing/tenants/${tenantId}/periods/export`,
     defaultFilename: `rozliczenie_${month}.xlsx`,
@@ -67,6 +71,8 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     setPage(1);
+    setInvoiceModalOpen(false);
+    setInvoiceNumber('');
   }, [tenantId, month, status, limit]);
 
   const queryKey = ['billing-events', tenantId, month, status, page, limit];
@@ -121,6 +127,17 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
     onError: (error: any) => toast.error(getApiErrorMessage(error, t('common.genericError'))),
   });
 
+  const confirmInvoiceMutation = useMutation({
+    mutationFn: async () => api.post(`/pricing/tenants/${tenantId}/periods/invoice`, { month, invoiceNumber: invoiceNumber.trim() }),
+    onSuccess: async () => {
+      toast.success(t('admin.pricing.invoiceConfirmed'));
+      setInvoiceModalOpen(false);
+      setInvoiceNumber('');
+      await refresh();
+    },
+    onError: (error: any) => toast.error(getApiErrorMessage(error, t('common.genericError'))),
+  });
+
   const money = (value: string | number | null) => value == null
     ? '—'
     : new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'PLN' }).format(Number(value));
@@ -168,8 +185,14 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
             </span>
           </div>
           <p className="mt-1 text-xs text-gray-500">{t('admin.pricing.generateStorageHint')}</p>
+          {data?.period?.invoiceNumber && (
+            <p className="mt-1 text-sm font-medium text-gray-700">
+              {t('admin.pricing.invoiceNumber')}: {data.period.invoiceNumber}
+              {data.period.invoicedAt && ` · ${t('admin.pricing.invoiceConfirmedOn')}: ${new Date(data.period.invoicedAt).toLocaleDateString(i18n.language)}`}
+            </p>
+          )}
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             className="btn-secondary"
@@ -179,6 +202,18 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             {t('admin.pricing.exportSettlement')}
           </button>
+          {isClosed && !data?.period?.invoiceNumber && (
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={summary.pending === 0}
+              title={summary.pending === 0 ? t('admin.pricing.noPendingToInvoice') : undefined}
+              onClick={() => setInvoiceModalOpen(true)}
+            >
+              <FileCheck2 size={16} />
+              {t('admin.pricing.confirmInvoice')}
+            </button>
+          )}
           <button
             type="button"
             className="btn-secondary"
@@ -311,6 +346,36 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
           <div className="flex justify-end gap-3 border-t pt-4">
             <button type="button" onClick={() => setExcludeTarget(null)} className="btn-secondary">{t('common.cancel')}</button>
             <button type="submit" disabled={excludeMutation.isPending} className="btn-primary">{t('admin.pricing.exclude')}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={invoiceModalOpen} onClose={() => setInvoiceModalOpen(false)} title={t('admin.pricing.confirmInvoice')} size="md">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            confirmInvoiceMutation.mutate();
+          }}
+          className="space-y-4"
+        >
+          <p className="text-sm text-gray-600">{t('admin.pricing.confirmInvoiceHint', { count: summary.pending })}</p>
+          <div>
+            <label htmlFor="billing-invoice-number" className="label-text">{t('admin.pricing.invoiceNumber')}</label>
+            <input
+              id="billing-invoice-number"
+              value={invoiceNumber}
+              onChange={(event) => setInvoiceNumber(event.target.value)}
+              className="input-field"
+              maxLength={100}
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-3 border-t pt-4">
+            <button type="button" onClick={() => setInvoiceModalOpen(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="submit" disabled={confirmInvoiceMutation.isPending || !invoiceNumber.trim()} className="btn-primary">
+              {confirmInvoiceMutation.isPending && <Loader2 size={16} className="animate-spin" />}
+              {t('admin.pricing.confirmInvoice')}
+            </button>
           </div>
         </form>
       </Modal>

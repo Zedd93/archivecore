@@ -49,7 +49,8 @@ export function buildBillingWorkbook(
   tenant: { name: string; shortCode: string; nip: string | null; address: string | null },
   month: string,
   closedAt: Date,
-  events: ExportEvent[]
+  events: ExportEvent[],
+  invoiceNumber: string | null = null
 ) {
   const groups = new Map<string, SummaryLine>();
   const detailRows: (string | number)[][] = [[
@@ -115,7 +116,8 @@ export function buildBillingWorkbook(
     ['Adres', tenant.address || ''],
     ['Miesiąc', month],
     ['Zamknięto', closedAt.toISOString().slice(0, 10)],
-    ['Liczba pozycji do rozliczenia', events.length],
+    ['Liczba pozycji rozliczenia', events.length],
+    ['Numer faktury', invoiceNumber || ''],
     ['VAT liczony od każdej pozycji, następnie sumowany'],
     [],
     ['Kod usługi', 'Usługa', 'Jednostka', 'Cena jednostkowa netto', 'Ilość', 'VAT %', 'Netto', 'VAT', 'Brutto', 'Waluta'],
@@ -141,7 +143,7 @@ export function buildBillingWorkbook(
   const workbook = XLSX.utils.book_new();
   appendSheet(workbook, 'Podsumowanie', summaryRows);
   appendSheet(workbook, 'Pozycje', detailRows);
-  formatNumbers(workbook.Sheets.Podsumowanie, 11, [3, 4, 5, 6, 7, 8]);
+  formatNumbers(workbook.Sheets.Podsumowanie, 12, [3, 4, 5, 6, 7, 8]);
   formatNumbers(workbook.Sheets.Pozycje, 1, [7, 8, 9, 10, 11, 12]);
   return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
 }
@@ -161,12 +163,12 @@ export class BillingExportService {
       where: {
         tenantId,
         billingPeriod: periodStart,
-        status: BillingEventStatus.pending,
+        status: { in: [BillingEventStatus.pending, BillingEventStatus.invoiced] },
       },
       orderBy: [{ serviceCode: 'asc' }, { occurredAt: 'asc' }, { id: 'asc' }],
       include: { order: { select: { orderNumber: true } } },
     });
-    const buffer = buildBillingWorkbook(period.tenant, month, period.closedAt, events);
+    const buffer = buildBillingWorkbook(period.tenant, month, period.closedAt, events, period.invoiceNumber);
     const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '_');
     const tenantCode = period.tenant.shortCode.replace(/[^A-Za-z0-9_-]/g, '_') || tenantId;
     return {

@@ -287,7 +287,8 @@ model User {
   refreshTokens        RefreshToken[]
   createdTransferLists TransferList[]  @relation("TransferListCreator")
   notifications        Notification[]
-  closedBillingPeriods BillingPeriod[] @relation("BillingPeriodCloser")
+  closedBillingPeriods   BillingPeriod[] @relation("BillingPeriodCloser")
+  invoicedBillingPeriods BillingPeriod[] @relation("BillingPeriodInvoicer")
 
   @@index([tenantId])
   @@index([email])
@@ -717,18 +718,22 @@ model BillingEvent {
 }
 
 model BillingPeriod {
-  id          String              @id @default(uuid()) @db.Uuid
-  tenantId    String              @db.Uuid
-  periodStart DateTime            @db.Date
-  status      BillingPeriodStatus @default(open)
-  generatedAt DateTime?
-  closedAt    DateTime?
-  closedById  String?             @db.Uuid
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  id            String              @id @default(uuid()) @db.Uuid
+  tenantId      String              @db.Uuid
+  periodStart   DateTime            @db.Date
+  status        BillingPeriodStatus @default(open)
+  generatedAt   DateTime?
+  closedAt      DateTime?
+  closedById    String?             @db.Uuid
+  invoiceNumber String?             @db.VarChar(100)
+  invoicedAt    DateTime?
+  invoicedById  String?             @db.Uuid
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  closedBy User?  @relation("BillingPeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  closedBy   User?  @relation("BillingPeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  invoicedBy User? @relation("BillingPeriodInvoicer", fields: [invoicedById], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, periodStart])
   @@index([tenantId, status])
