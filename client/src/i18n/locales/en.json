@@ -596,6 +596,64 @@
         "invalidNip": "Enter a valid NIP: 10 digits"
       }
     },
+    "pricing": {
+      "title": "Client price lists",
+      "subtitle": "Versioned service rates for each tenant",
+      "new": "New price list",
+      "tenant": "Tenant",
+      "selectTenant": "Select tenant",
+      "empty": "This tenant does not have a price list yet",
+      "defaultName": "Price list from",
+      "createTitle": "New price list version",
+      "editTitle": "Edit draft price list",
+      "name": "Price list name",
+      "validFrom": "Valid from",
+      "validTo": "Valid to",
+      "minimumMonthlyFee": "Minimum monthly net fee",
+      "none": "None",
+      "rates": "Net rates",
+      "ratesHint": "Services left blank will not be added. VAT is set to 23% in the first version.",
+      "service": "Service",
+      "unit": "Unit",
+      "netPrice": "Net price",
+      "activate": "Activate",
+      "activateConfirm": "Activate this price list? The currently active version will be archived.",
+      "deleteConfirm": "Delete this draft price list?",
+      "rateRequired": "Enter at least one rate",
+      "created": "Price list created",
+      "updated": "Price list updated",
+      "activated": "Price list activated",
+      "deleted": "Draft price list deleted",
+      "status": {
+        "draft": "Draft",
+        "active": "Active",
+        "archived": "Archived"
+      },
+      "units": {
+        "box_month": "box / month",
+        "box": "box",
+        "folder": "folder",
+        "page": "page",
+        "kilometer": "kilometre",
+        "kilogram": "kilogram",
+        "hour": "hour",
+        "order": "order"
+      },
+      "services": {
+        "storage_box_month": "Box storage / month",
+        "intake_box": "Box intake",
+        "retrieval_box": "Box retrieval",
+        "return_box": "Box return to storage",
+        "retrieval_folder": "Folder retrieval",
+        "return_folder": "Folder return to storage",
+        "scan_page": "Page scanning",
+        "transport_km": "Transport",
+        "destruction_box": "Box destruction",
+        "destruction_kg": "Document destruction",
+        "archive_work_hour": "Archivist work",
+        "minimum_order": "Minimum order fee"
+      }
+    },
     "audit": {
       "title": "Audit log",
       "subtitle": "History of all system operations",
@@ -945,6 +1003,7 @@
       "reports": "Reports",
       "users": "Users",
       "tenants": "Tenants",
+      "pricing": "Price lists",
       "retention": "Retention",
       "audit": "Audit log",
       "import": "Data import"

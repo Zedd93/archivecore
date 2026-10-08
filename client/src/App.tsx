@@ -57,6 +57,7 @@ const UsersPage = lazyWithReload(() => import('@/pages/admin/UsersPage'));
 const TenantsPage = lazyWithReload(() => import('@/pages/admin/TenantsPage'));
 const AuditPage = lazyWithReload(() => import('@/pages/admin/AuditPage'));
 const RetentionPage = lazyWithReload(() => import('@/pages/admin/RetentionPage'));
+const PricingPage = lazyWithReload(() => import('@/pages/admin/PricingPage'));
 const TransferListPage = lazyWithReload(() => import('@/pages/TransferListPage'));
 const TransferListDetailPage = lazyWithReload(() => import('@/pages/TransferListDetailPage'));
 const ImportPage = lazyWithReload(() => import('@/pages/ImportPage'));
@@ -147,6 +148,7 @@ function AppRoutes() {
         <Route path="/admin/tenants" element={<Suspense fallback={suspenseFallback}><TenantsPage /></Suspense>} />
         <Route path="/admin/audit" element={<Suspense fallback={suspenseFallback}><AuditPage /></Suspense>} />
         <Route path="/admin/retention" element={<Suspense fallback={suspenseFallback}><RetentionPage /></Suspense>} />
+        <Route path="/admin/pricing" element={<Suspense fallback={suspenseFallback}><PricingPage /></Suspense>} />
         <Route path="/settings" element={<Suspense fallback={suspenseFallback}><SettingsPage /></Suspense>} />
       </Route>
 

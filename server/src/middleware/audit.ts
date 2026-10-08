@@ -12,6 +12,7 @@ const ENTITY_DELEGATES: Record<string, string> = {
   location: 'location',
   order: 'order',
   order_item: 'orderItem',
+  price_list: 'priceList',
   retention_policy: 'retentionPolicy',
   tenant: 'tenant',
   transfer_list: 'transferList',
@@ -49,6 +50,13 @@ function getEntityId(req: Request, body?: any): string | undefined {
 function getEntityDelegate(entityType: string): any | null {
   const delegateName = ENTITY_DELEGATES[entityType];
   return delegateName ? (prisma as any)[delegateName] : null;
+}
+
+function getTenantId(req: Request, oldValues?: any, body?: any): string | undefined {
+  return req.tenantId
+    || req.params.tenantId
+    || body?.data?.tenantId
+    || oldValues?.tenantId;
 }
 
 async function getOldValues(entityType: string, entityId: string | undefined) {
@@ -126,7 +134,7 @@ export function auditLog(entityType: string, action: string) {
 
         prisma.auditLog.create({
           data: {
-            tenantId: req.tenantId || undefined,
+            tenantId: getTenantId(req, oldValues, body),
             userId: req.user.userId,
             action,
             entityType,

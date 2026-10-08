@@ -5,6 +5,7 @@ export const Permissions = {
   TENANT_MANAGE: 'tenant.manage',
   TENANT_SWITCH: 'tenant.switch',
   USER_MANAGE: 'user.manage',
+  PRICING_MANAGE: 'pricing.manage',
 
   // Boxes
   BOX_READ: 'box.read',
@@ -87,6 +88,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
 
   [RoleCode.DOXART_ADMIN]: [
     Permissions.TENANT_SWITCH,
+    Permissions.PRICING_MANAGE,
     Permissions.BOX_READ, Permissions.BOX_WRITE, Permissions.BOX_DELETE, Permissions.BOX_MOVE, Permissions.BOX_STATUS,
     Permissions.FOLDER_READ, Permissions.FOLDER_WRITE,
     Permissions.DOCUMENT_READ, Permissions.DOCUMENT_WRITE,

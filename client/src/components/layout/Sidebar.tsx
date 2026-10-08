@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard, Box, MapPin, FolderOpen, ClipboardList,
   Users, QrCode, Search, BarChart3, Shield, Clock,
-  Building2, Settings, UserCircle, FileSpreadsheet, X, Upload, ArchiveRestore,
+  Building2, Settings, UserCircle, FileSpreadsheet, X, Upload, ArchiveRestore, Receipt,
 } from 'lucide-react';
 
 interface NavItem {
@@ -33,6 +33,7 @@ const navItems: NavItem[] = [
 const adminItems: NavItem[] = [
   { to: '/admin/users', labelKey: 'layout.nav.users', icon: <Users size={20} />, permission: 'user.manage' },
   { to: '/admin/tenants', labelKey: 'layout.nav.tenants', icon: <Building2 size={20} />, permission: 'tenant.manage' },
+  { to: '/admin/pricing', labelKey: 'layout.nav.pricing', icon: <Receipt size={20} />, permission: 'pricing.manage' },
   { to: '/admin/retention', labelKey: 'layout.nav.retention', icon: <Clock size={20} />, permission: 'retention.manage' },
   { to: '/admin/audit', labelKey: 'layout.nav.audit', icon: <Shield size={20} />, permission: 'audit.view' },
 ];

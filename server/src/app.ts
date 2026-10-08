@@ -26,6 +26,7 @@ import transferListRoutes from './modules/transfer-lists/transfer-list.routes';
 import importExportRoutes from './modules/import-export/import-export.routes';
 import shareLinkRoutes from './modules/share-links/share-link.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
+import pricingRoutes from './modules/pricing/pricing.routes';
 import { ShareLinkController } from './modules/share-links/share-link.controller';
 
 const app = express();
@@ -75,6 +76,7 @@ app.use('/api/transfer-lists', transferListRoutes);
 app.use('/api', importExportRoutes);
 app.use('/api/share-links', shareLinkRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/pricing', pricingRoutes);
 
 // ─── Public routes (no auth) ─────────────────────────────
 app.get('/api/public/share/:token', ShareLinkController.publicAccess);

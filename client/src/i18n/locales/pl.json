@@ -596,6 +596,64 @@
         "invalidNip": "Podaj poprawny NIP: 10 cyfr"
       }
     },
+    "pricing": {
+      "title": "Cenniki klientów",
+      "subtitle": "Wersjonowane stawki usług dla każdego tenanta",
+      "new": "Nowy cennik",
+      "tenant": "Tenant",
+      "selectTenant": "Wybierz tenanta",
+      "empty": "Ten tenant nie ma jeszcze żadnego cennika",
+      "defaultName": "Cennik od",
+      "createTitle": "Nowa wersja cennika",
+      "editTitle": "Edytuj roboczy cennik",
+      "name": "Nazwa cennika",
+      "validFrom": "Obowiązuje od",
+      "validTo": "Obowiązywał do",
+      "minimumMonthlyFee": "Minimalna opłata miesięczna netto",
+      "none": "Brak",
+      "rates": "Stawki netto",
+      "ratesHint": "Puste usługi nie zostaną dodane do cennika. VAT dla pierwszej wersji wynosi 23%.",
+      "service": "Usługa",
+      "unit": "Jednostka",
+      "netPrice": "Cena netto",
+      "activate": "Aktywuj",
+      "activateConfirm": "Aktywować ten cennik? Aktualnie aktywna wersja zostanie zarchiwizowana.",
+      "deleteConfirm": "Usunąć roboczą wersję cennika?",
+      "rateRequired": "Wpisz co najmniej jedną stawkę",
+      "created": "Cennik utworzony",
+      "updated": "Cennik zaktualizowany",
+      "activated": "Cennik aktywowany",
+      "deleted": "Roboczy cennik usunięty",
+      "status": {
+        "draft": "Roboczy",
+        "active": "Aktywny",
+        "archived": "Archiwalny"
+      },
+      "units": {
+        "box_month": "karton / miesiąc",
+        "box": "karton",
+        "folder": "teczka",
+        "page": "strona",
+        "kilometer": "kilometr",
+        "kilogram": "kilogram",
+        "hour": "godzina",
+        "order": "zlecenie"
+      },
+      "services": {
+        "storage_box_month": "Przechowywanie kartonu / miesiąc",
+        "intake_box": "Przyjęcie kartonu",
+        "retrieval_box": "Pobranie kartonu",
+        "return_box": "Zwrot kartonu do magazynu",
+        "retrieval_folder": "Pobranie teczki",
+        "return_folder": "Zwrot teczki do magazynu",
+        "scan_page": "Skanowanie strony",
+        "transport_km": "Transport",
+        "destruction_box": "Zniszczenie kartonu",
+        "destruction_kg": "Zniszczenie dokumentacji",
+        "archive_work_hour": "Praca archiwisty",
+        "minimum_order": "Minimalna opłata za zlecenie"
+      }
+    },
     "audit": {
       "title": "Dziennik audytu",
       "subtitle": "Historia wszystkich operacji w systemie",
@@ -945,6 +1003,7 @@
       "reports": "Raporty",
       "users": "Użytkownicy",
       "tenants": "Tenanci",
+      "pricing": "Cenniki",
       "retention": "Retencja",
       "audit": "Dziennik audytu",
       "import": "Import danych"
