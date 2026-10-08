@@ -62,6 +62,24 @@ export class PricingController {
       return successResponse(res, await billingService.restore(req.params.id));
     } catch (err) { next(err); }
   }
+
+  async generateMonthlyStorage(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(
+        res,
+        await billingService.generateMonthlyStorage(req.params.tenantId, req.body.month)
+      );
+    } catch (err) { next(err); }
+  }
+
+  async closeBillingPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(
+        res,
+        await billingService.closePeriod(req.params.tenantId, req.body.month, req.user!.userId)
+      );
+    } catch (err) { next(err); }
+  }
 }
 
 export const pricingController = new PricingController();

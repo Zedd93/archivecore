@@ -21,6 +21,7 @@ interface LocationNode {
   address: string | null;
   description: string | null;
   capacity: number | null;
+  isBillableStorage: boolean;
   currentCount: number;
   aggregatedCount?: number;
   children: LocationNode[];
@@ -43,6 +44,7 @@ type LocationForm = {
   tenantId: string;
   address: string;
   description: string;
+  isBillableStorage: boolean;
 };
 
 function collectLocationIds(node: LocationNode): string[] {
@@ -142,6 +144,9 @@ function LocationTreeNode({
             <span className="font-mono text-sm font-medium text-primary-700">{node.code}</span>
             <span className="text-sm text-gray-700">{node.name}</span>
             <span className="badge-gray text-xs">{t(TYPE_LABEL_KEYS[node.type])}</span>
+            {node.type === 'warehouse' && node.isBillableStorage && (
+              <span className="badge-green text-xs">{t('locations.billableBadge')}</span>
+            )}
           </div>
           {node.address && (
             <div className="mt-1 inline-flex max-w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600">
@@ -213,8 +218,8 @@ export default function LocationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationNode | null>(null);
-  const [createForm, setCreateForm] = useState<LocationForm>({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId, address: '', description: '' });
-  const [editForm, setEditForm] = useState<LocationForm>({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: '', address: '', description: '' });
+  const [createForm, setCreateForm] = useState<LocationForm>({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId, address: '', description: '', isBillableStorage: false });
+  const [editForm, setEditForm] = useState<LocationForm>({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: '', address: '', description: '', isBillableStorage: false });
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -236,7 +241,7 @@ export default function LocationsPage() {
   });
 
   const resetCreateForm = () => {
-    setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId, address: '', description: '' });
+    setCreateForm({ name: '', code: '', type: 'warehouse', parentId: '', capacity: '', tenantId: activeTenantId, address: '', description: '', isBillableStorage: false });
   };
 
   const openCopyModal = (location: LocationNode) => {
@@ -249,6 +254,7 @@ export default function LocationsPage() {
       tenantId: location.tenantId || activeTenantId,
       address: location.address || '',
       description: location.description || '',
+      isBillableStorage: location.isBillableStorage,
     });
     setShowCreateModal(true);
   };
@@ -259,6 +265,7 @@ export default function LocationsPage() {
       ...createForm,
       parentId,
       address: parent?.address || '',
+      isBillableStorage: parent?.isBillableStorage ?? createForm.isBillableStorage,
     });
   };
 
@@ -273,6 +280,7 @@ export default function LocationsPage() {
       tenantId: location.tenantId || activeTenantId,
       address: location.address || '',
       description: location.description || '',
+      isBillableStorage: location.isBillableStorage,
     });
     setShowEditModal(true);
   };
@@ -295,6 +303,7 @@ export default function LocationsPage() {
         address: createForm.address || undefined,
         description: createForm.description || undefined,
         capacity: createForm.capacity ? parseInt(createForm.capacity) : undefined,
+        isBillableStorage: createForm.isBillableStorage,
       });
       toast.success(t('common.success'));
       setShowCreateModal(false);
@@ -312,13 +321,14 @@ export default function LocationsPage() {
     if (!selectedLocation) return;
     setSaving(true);
     try {
-      const payload: Record<string, string | number | null> = {
+      const payload: Record<string, string | number | boolean | null> = {
         name: editForm.name,
         code: editForm.code,
         type: editForm.type,
         parentId: editForm.parentId || null,
         description: editForm.description || null,
         capacity: editForm.capacity ? parseInt(editForm.capacity) : null,
+        isBillableStorage: editForm.isBillableStorage,
       };
       if (editForm.address.trim() || selectedLocation.address) {
         payload.address = editForm.address.trim() || null;
@@ -449,6 +459,22 @@ export default function LocationsPage() {
               placeholder={t('common.optional')}
             />
           </div>
+          {createForm.parentId ? (
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">{t('locations.billableStorageInherited')}</p>
+          ) : (
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3">
+              <input
+                type="checkbox"
+                checked={createForm.isBillableStorage}
+                onChange={(event) => setCreateForm({ ...createForm, isBillableStorage: event.target.checked })}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900">{t('locations.billableStorage')}</span>
+                <span className="block text-xs text-gray-500">{t('locations.billableStorageHint')}</span>
+              </span>
+            </label>
+          )}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button
               type="button"
@@ -524,13 +550,36 @@ export default function LocationsPage() {
             <label className="label-text">{t('locations.parentLocation')}</label>
             <LocationPicker
               value={editForm.parentId}
-              onChange={(parentId) => setEditForm({ ...editForm, parentId })}
+              onChange={(parentId) => {
+                const parent = findLocationById(tree, parentId);
+                setEditForm({
+                  ...editForm,
+                  parentId,
+                  isBillableStorage: parent?.isBillableStorage ?? editForm.isBillableStorage,
+                });
+              }}
               tenantId={editForm.tenantId || undefined}
               excludeIds={editExcludedLocationIds}
               placeholder={t('locations.parentLocationPlaceholder')}
             />
             <p className="text-xs text-gray-500 mt-1">{t('locations.parentEditHint')}</p>
           </div>
+          {editForm.parentId ? (
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">{t('locations.billableStorageInherited')}</p>
+          ) : (
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3">
+              <input
+                type="checkbox"
+                checked={editForm.isBillableStorage}
+                onChange={(event) => setEditForm({ ...editForm, isBillableStorage: event.target.checked })}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900">{t('locations.billableStorage')}</span>
+                <span className="block text-xs text-gray-500">{t('locations.billableStorageHint')}</span>
+              </span>
+            </label>
+          )}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={closeEditModal} className="btn-secondary">
               {t('common.cancel')}

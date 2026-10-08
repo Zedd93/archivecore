@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 const ENTITY_DELEGATES: Record<string, string> = {
   attachment: 'attachment',
   billing_event: 'billingEvent',
+  billing_period: 'billingPeriod',
   box: 'box',
   document: 'document',
   folder: 'folder',

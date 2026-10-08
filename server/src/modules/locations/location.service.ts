@@ -24,15 +24,15 @@ export class LocationService {
     return ids;
   }
 
-  private async refreshChildPaths(parentId: string, parentPath: string, tx: any) {
+  private async refreshChildPaths(parentId: string, parentPath: string, isBillableStorage: boolean, tx: any) {
     const children = await tx.location.findMany({ where: { parentId } });
     for (const child of children) {
       const fullPath = `${parentPath} > ${child.name}`;
       await tx.location.update({
         where: { id: child.id },
-        data: { fullPath },
+        data: { fullPath, isBillableStorage },
       });
-      await this.refreshChildPaths(child.id, fullPath, tx);
+      await this.refreshChildPaths(child.id, fullPath, isBillableStorage, tx);
     }
   }
 
@@ -87,6 +87,7 @@ export class LocationService {
   async create(data: any, tenantId: string | null) {
     let fullPath = data.name;
     let locationTenantId = tenantId;
+    let isBillableStorage = data.isBillableStorage ?? false;
 
     if (data.parentId) {
       const parent = await prisma.location.findFirst({
@@ -104,6 +105,7 @@ export class LocationService {
       }
       fullPath = `${parent.fullPath} > ${data.name}`;
       locationTenantId = parent.tenantId ?? tenantId;
+      isBillableStorage = parent.isBillableStorage;
     }
 
     const createData = this.compactUpdateData({
@@ -115,6 +117,7 @@ export class LocationService {
       address: data.address,
       description: data.description,
       capacity: data.capacity,
+      isBillableStorage,
       fullPath,
     });
 
@@ -163,6 +166,9 @@ export class LocationService {
     const name = data.name ?? location.name;
     const fullPath = parent ? `${parent.fullPath} > ${name}` : name;
     const locationTenantId = parent?.tenantId ?? location.tenantId ?? tenantId;
+    const isBillableStorage = parent
+      ? parent.isBillableStorage
+      : (data.isBillableStorage ?? location.isBillableStorage);
     const updateData = this.compactUpdateData({
       parentId,
       tenantId: locationTenantId,
@@ -172,6 +178,7 @@ export class LocationService {
       address: data.address,
       description: data.description,
       capacity: data.capacity,
+      isBillableStorage,
       isActive: data.isActive,
       fullPath,
     });
@@ -181,7 +188,7 @@ export class LocationService {
         where: { id },
         data: updateData as any,
       });
-      await this.refreshChildPaths(updated.id, updated.fullPath, tx);
+      await this.refreshChildPaths(updated.id, updated.fullPath, updated.isBillableStorage, tx);
       return updated;
     });
   }

@@ -647,6 +647,19 @@
       "excludeReason": "Exclusion reason",
       "eventExcluded": "The item was excluded from billing",
       "eventRestored": "The item was restored to billing",
+      "periodStatus": "Month status",
+      "periodStatuses": {
+        "open": "Open",
+        "closed": "Closed"
+      },
+      "generateStorage": "Charge storage",
+      "generateStorageConfirm": "Charge box storage for the selected month? This operation can be safely repeated.",
+      "generateStorageHint": "Charging includes boxes in warehouses marked as billable. A closed month can no longer be changed.",
+      "storageGenerated": "Added {{count}} new storage items",
+      "closePeriod": "Close month",
+      "closePeriodConfirm": "Close the selected month? Its billing items cannot be changed afterwards.",
+      "periodClosedSuccess": "The billing month has been closed",
+      "currentMonthCannotClose": "The current month can only be closed after it ends",
       "eventStatuses": {
         "unpriced": "Unpriced",
         "pending": "Pending",
@@ -680,7 +693,8 @@
         "destruction_box": "Box destruction",
         "destruction_kg": "Document destruction",
         "archive_work_hour": "Archivist work",
-        "minimum_order": "Minimum order fee"
+        "minimum_order": "Minimum order fee",
+        "minimum_monthly_fee": "Minimum monthly fee adjustment"
       }
     },
     "audit": {
@@ -817,6 +831,10 @@
     "parentLocation": "Parent location",
     "parentLocationPlaceholder": "Optional — choose a warehouse, zone, or rack",
     "parentEditHint": "Changing the parent location moves the whole branch with its child locations.",
+    "billableStorage": "Charge for storage",
+    "billableStorageHint": "Boxes in this warehouse will be included in monthly billing. Child locations inherit this setting.",
+    "billableStorageInherited": "The billing setting is inherited from the parent location.",
+    "billableBadge": "Billable",
     "pickLocation": "Select location...",
     "noResults": "No locations found"
   },
@@ -1091,6 +1109,14 @@
       "order.complete": "Order completed",
       "order.cancel": "Order cancelled",
       "order.delete": "Order deleted",
+      "price_list.create": "Price list created",
+      "price_list.update": "Price list updated",
+      "price_list.activate": "Price list activated",
+      "price_list.delete": "Price list deleted",
+      "billing.storage.generate": "Monthly storage charged",
+      "billing.period.close": "Billing month closed",
+      "billing_event.exclude": "Billing item excluded",
+      "billing_event.restore": "Billing item restored",
       "order_item.return": "Loan item returned",
       "hr.create": "HR record created",
       "hr.update": "Record updated",
@@ -1275,6 +1301,9 @@
       "hr_document": "HR document",
       "order": "Order",
       "order_item": "Order item",
+      "price_list": "Price list",
+      "billing_event": "Billing item",
+      "billing_period": "Billing month",
       "hr_folder": "HR folder",
       "import": "Import",
       "label": "Label",

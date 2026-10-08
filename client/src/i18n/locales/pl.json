@@ -647,6 +647,19 @@
       "excludeReason": "Powód wyłączenia",
       "eventExcluded": "Pozycja została wyłączona z rozliczenia",
       "eventRestored": "Pozycja została przywrócona do rozliczenia",
+      "periodStatus": "Status miesiąca",
+      "periodStatuses": {
+        "open": "Otwarty",
+        "closed": "Zamknięty"
+      },
+      "generateStorage": "Nalicz przechowywanie",
+      "generateStorageConfirm": "Naliczyć przechowywanie kartonów za wybrany miesiąc? Operację można bezpiecznie ponowić.",
+      "generateStorageHint": "Naliczenie obejmuje kartony w magazynach oznaczonych jako rozliczane. Zamkniętego miesiąca nie można już zmieniać.",
+      "storageGenerated": "Dodano {{count}} nowych pozycji przechowywania",
+      "closePeriod": "Zamknij miesiąc",
+      "closePeriodConfirm": "Zamknąć wybrany miesiąc? Po zamknięciu nie będzie można zmieniać jego pozycji.",
+      "periodClosedSuccess": "Miesiąc rozliczeniowy został zamknięty",
+      "currentMonthCannotClose": "Bieżący miesiąc można zamknąć dopiero po jego zakończeniu",
       "eventStatuses": {
         "unpriced": "Bez ceny",
         "pending": "Do rozliczenia",
@@ -680,7 +693,8 @@
         "destruction_box": "Zniszczenie kartonu",
         "destruction_kg": "Zniszczenie dokumentacji",
         "archive_work_hour": "Praca archiwisty",
-        "minimum_order": "Minimalna opłata za zlecenie"
+        "minimum_order": "Minimalna opłata za zlecenie",
+        "minimum_monthly_fee": "Dopłata do minimalnej opłaty miesięcznej"
       }
     },
     "audit": {
@@ -817,6 +831,10 @@
     "parentLocation": "Lokalizacja nadrzędna",
     "parentLocationPlaceholder": "Opcjonalnie — wybierz magazyn, strefę lub regał",
     "parentEditHint": "Zmiana lokalizacji nadrzędnej przeniesie całą gałąź razem z lokalizacjami podrzędnymi.",
+    "billableStorage": "Naliczaj przechowywanie",
+    "billableStorageHint": "Kartony w tym magazynie będą uwzględniane w miesięcznych rozliczeniach. Lokalizacje podrzędne dziedziczą to ustawienie.",
+    "billableStorageInherited": "Ustawienie rozliczania jest dziedziczone z lokalizacji nadrzędnej.",
+    "billableBadge": "Rozliczany",
     "pickLocation": "Wybierz lokalizację...",
     "noResults": "Nie znaleziono lokalizacji"
   },
@@ -1223,6 +1241,14 @@
       "order.complete": "Zakończenie zlecenia",
       "order.cancel": "Anulowanie zlecenia",
       "order.delete": "Usunięcie zlecenia",
+      "price_list.create": "Utworzenie cennika",
+      "price_list.update": "Edycja cennika",
+      "price_list.activate": "Aktywacja cennika",
+      "price_list.delete": "Usunięcie cennika",
+      "billing.storage.generate": "Naliczenie miesięcznego przechowywania",
+      "billing.period.close": "Zamknięcie miesiąca rozliczeniowego",
+      "billing_event.exclude": "Wyłączenie pozycji z rozliczenia",
+      "billing_event.restore": "Przywrócenie pozycji do rozliczenia",
       "order_item.create": "Dodanie pozycji zlecenia",
       "order_item.status": "Zmiana statusu pozycji zlecenia",
       "hr.create": "Utworzenie akt osobowych",
@@ -1275,6 +1301,9 @@
       "hr_document": "Dokument HR",
       "order": "Zlecenie",
       "order_item": "Pozycja zlecenia",
+      "price_list": "Cennik",
+      "billing_event": "Pozycja rozliczeniowa",
+      "billing_period": "Miesiąc rozliczeniowy",
       "hr_folder": "Teczka HR",
       "import": "Import",
       "label": "Etykieta",

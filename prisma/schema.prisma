@@ -156,6 +156,11 @@ enum BillingEventStatus {
   invoiced
 }
 
+enum BillingPeriodStatus {
+  open
+  closed
+}
+
 enum QrErrorLevel {
   L
   M
@@ -199,6 +204,7 @@ model Tenant {
   notifications     Notification[]
   priceLists        PriceList[]
   billingEvents     BillingEvent[]
+  billingPeriods    BillingPeriod[]
 
   @@map("tenants")
 }
@@ -264,23 +270,24 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant               Tenant?        @relation(fields: [tenantId], references: [id])
+  tenant               Tenant?         @relation(fields: [tenantId], references: [id])
   userRoles            UserRole[]
-  createdBoxes         Box[]          @relation("BoxCreator")
-  requestedOrders      Order[]        @relation("OrderRequester")
-  approvedOrders       Order[]        @relation("OrderApprover")
-  assignedOrders       Order[]        @relation("OrderAssignee")
-  pickedItems          OrderItem[]    @relation("ItemPicker")
-  custodyFrom          CustodyEvent[] @relation("CustodyFrom")
-  custodyTo            CustodyEvent[] @relation("CustodyTo")
+  createdBoxes         Box[]           @relation("BoxCreator")
+  requestedOrders      Order[]         @relation("OrderRequester")
+  approvedOrders       Order[]         @relation("OrderApprover")
+  assignedOrders       Order[]         @relation("OrderAssignee")
+  pickedItems          OrderItem[]     @relation("ItemPicker")
+  custodyFrom          CustodyEvent[]  @relation("CustodyFrom")
+  custodyTo            CustodyEvent[]  @relation("CustodyTo")
   auditLogs            AuditLog[]
   labels               Label[]
-  uploadedAttachments  Attachment[]   @relation("AttachmentUploader")
-  assignedRoles        UserRole[]     @relation("RoleAssigner")
+  uploadedAttachments  Attachment[]    @relation("AttachmentUploader")
+  assignedRoles        UserRole[]      @relation("RoleAssigner")
   shareLinks           ShareLink[]
   refreshTokens        RefreshToken[]
-  createdTransferLists TransferList[] @relation("TransferListCreator")
+  createdTransferLists TransferList[]  @relation("TransferListCreator")
   notifications        Notification[]
+  closedBillingPeriods BillingPeriod[] @relation("BillingPeriodCloser")
 
   @@index([tenantId])
   @@index([email])
@@ -342,21 +349,22 @@ model UserRole {
 }
 
 model Location {
-  id           String       @id @default(uuid()) @db.Uuid
-  parentId     String?      @db.Uuid
-  tenantId     String?      @db.Uuid
-  type         LocationType
-  code         String       @db.VarChar(50)
-  name         String       @db.VarChar(255)
-  address      String?      @db.Text
-  description  String?      @db.Text
-  capacity     Int?
-  currentCount Int          @default(0)
-  isActive     Boolean      @default(true)
-  fullPath     String       @db.VarChar(500)
-  sortOrder    Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                String       @id @default(uuid()) @db.Uuid
+  parentId          String?      @db.Uuid
+  tenantId          String?      @db.Uuid
+  type              LocationType
+  code              String       @db.VarChar(50)
+  name              String       @db.VarChar(255)
+  address           String?      @db.Text
+  description       String?      @db.Text
+  capacity          Int?
+  currentCount      Int          @default(0)
+  isActive          Boolean      @default(true)
+  fullPath          String       @db.VarChar(500)
+  sortOrder         Int          @default(0)
+  isBillableStorage Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   parent      Location?      @relation("LocationHierarchy", fields: [parentId], references: [id])
   children    Location[]     @relation("LocationHierarchy")
@@ -706,6 +714,25 @@ model BillingEvent {
   @@index([tenantId, occurredAt])
   @@index([orderId])
   @@map("billing_events")
+}
+
+model BillingPeriod {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @db.Uuid
+  periodStart DateTime            @db.Date
+  status      BillingPeriodStatus @default(open)
+  generatedAt DateTime?
+  closedAt    DateTime?
+  closedById  String?             @db.Uuid
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  closedBy User?  @relation("BillingPeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, periodStart])
+  @@index([tenantId, status])
+  @@map("billing_periods")
 }
 
 model AuditLog {

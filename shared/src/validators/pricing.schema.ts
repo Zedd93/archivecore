@@ -49,6 +49,10 @@ export const updatePriceListSchema = createPriceListSchema;
 const billingMonthSchema = z.string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Nieprawidłowy miesiąc rozliczeniowy');
 
+export const billingMonthActionSchema = z.object({
+  month: billingMonthSchema,
+});
+
 export const billingEventsQuerySchema = paginationSchema.extend({
   month: billingMonthSchema.optional(),
   status: z.enum(['unpriced', 'pending', 'excluded', 'invoiced']).optional(),

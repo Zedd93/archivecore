@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Loader2, RotateCcw } from 'lucide-react';
+import { Ban, Calculator, Loader2, Lock, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
@@ -30,9 +30,18 @@ interface BillingResponse {
   total: number;
   summary: Record<BillingStatus, number> & { pendingNetAmount: string };
   pagination: { page: number; limit: number; total: number; totalPages: number };
+  period: {
+    id: string;
+    status: 'open' | 'closed';
+    generatedAt: string | null;
+    closedAt: string | null;
+  } | null;
 }
 
-const currentMonth = () => new Date().toISOString().slice(0, 7);
+const currentMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
 
 const statusClasses: Record<BillingStatus, string> = {
   unpriced: 'badge-yellow',
@@ -89,6 +98,24 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
     onError: (error: any) => toast.error(getApiErrorMessage(error, t('common.genericError'))),
   });
 
+  const generateStorageMutation = useMutation({
+    mutationFn: async () => api.post(`/pricing/tenants/${tenantId}/events/storage`, { month }),
+    onSuccess: async (response) => {
+      toast.success(t('admin.pricing.storageGenerated', { count: response.data.data.createdEvents }));
+      await refresh();
+    },
+    onError: (error: any) => toast.error(getApiErrorMessage(error, t('common.genericError'))),
+  });
+
+  const closePeriodMutation = useMutation({
+    mutationFn: async () => api.post(`/pricing/tenants/${tenantId}/periods/close`, { month }),
+    onSuccess: async () => {
+      toast.success(t('admin.pricing.periodClosedSuccess'));
+      await refresh();
+    },
+    onError: (error: any) => toast.error(getApiErrorMessage(error, t('common.genericError'))),
+  });
+
   const money = (value: string | number | null) => value == null
     ? '—'
     : new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'PLN' }).format(Number(value));
@@ -100,6 +127,8 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
     invoiced: 0,
     pendingNetAmount: '0',
   };
+  const isClosed = data?.period?.status === 'closed';
+  const canClose = Boolean(data?.period?.generatedAt) && !isClosed && month < currentMonth();
 
   return (
     <div className="space-y-4">
@@ -122,6 +151,47 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
               ))}
             </select>
           </div>
+        </div>
+      </div>
+
+      <div className="card flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-900">{t('admin.pricing.periodStatus')}</span>
+            <span className={isClosed ? 'badge-green' : 'badge-blue'}>
+              {t(`admin.pricing.periodStatuses.${isClosed ? 'closed' : 'open'}`)}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">{t('admin.pricing.generateStorageHint')}</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={isClosed || generateStorageMutation.isPending}
+            onClick={() => {
+              if (window.confirm(t('admin.pricing.generateStorageConfirm'))) {
+                generateStorageMutation.mutate();
+              }
+            }}
+          >
+            {generateStorageMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
+            {t('admin.pricing.generateStorage')}
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!canClose || closePeriodMutation.isPending}
+            title={month >= currentMonth() ? t('admin.pricing.currentMonthCannotClose') : undefined}
+            onClick={() => {
+              if (window.confirm(t('admin.pricing.closePeriodConfirm'))) {
+                closePeriodMutation.mutate();
+              }
+            }}
+          >
+            {closePeriodMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+            {t('admin.pricing.closePeriod')}
+          </button>
         </div>
       </div>
 
@@ -182,11 +252,11 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
                         {event.excludedReason && <div className="mt-1 max-w-xs text-xs text-gray-500" title={event.excludedReason}>{event.excludedReason}</div>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {event.status === 'excluded' ? (
+                        {!isClosed && event.status === 'excluded' ? (
                           <button type="button" onClick={() => restoreMutation.mutate(event.id)} disabled={restoreMutation.isPending} className="btn-secondary px-2 py-1 text-xs">
                             <RotateCcw size={13} /> {t('admin.pricing.restore')}
                           </button>
-                        ) : event.status !== 'invoiced' ? (
+                        ) : !isClosed && event.status !== 'invoiced' ? (
                           <button type="button" onClick={() => setExcludeTarget(event)} className="btn-secondary px-2 py-1 text-xs text-red-600">
                             <Ban size={13} /> {t('admin.pricing.exclude')}
                           </button>

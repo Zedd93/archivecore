@@ -9,6 +9,7 @@ export const createLocationSchema = z.object({
   address: z.string().max(1000).optional(),
   description: z.string().max(500).optional(),
   capacity: z.number().int().min(0).optional(),
+  isBillableStorage: z.boolean().optional(),
 });
 
 export const updateLocationSchema = z.object({
@@ -19,5 +20,6 @@ export const updateLocationSchema = z.object({
   address: z.string().max(1000).nullable().optional(),
   description: z.string().max(500).nullable().optional(),
   capacity: z.number().int().min(0).nullable().optional(),
+  isBillableStorage: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
