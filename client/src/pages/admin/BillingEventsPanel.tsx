@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Calculator, Loader2, Lock, RotateCcw } from 'lucide-react';
+import { Ban, Calculator, Download, Loader2, Lock, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import Modal from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { useExport } from '@/hooks/useExport';
 
 type BillingStatus = 'unpriced' | 'pending' | 'excluded' | 'invoiced';
 
@@ -59,6 +60,10 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
   const [limit, setLimit] = useState(25);
   const [excludeTarget, setExcludeTarget] = useState<BillingEvent | null>(null);
   const [excludeReason, setExcludeReason] = useState('');
+  const { exportData, isExporting } = useExport({
+    endpoint: `/pricing/tenants/${tenantId}/periods/export`,
+    defaultFilename: `rozliczenie_${month}.xlsx`,
+  });
 
   useEffect(() => {
     setPage(1);
@@ -165,6 +170,15 @@ export default function BillingEventsPanel({ tenantId }: { tenantId: string }) {
           <p className="mt-1 text-xs text-gray-500">{t('admin.pricing.generateStorageHint')}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={!isClosed || isExporting}
+            onClick={() => exportData({ month })}
+          >
+            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            {t('admin.pricing.exportSettlement')}
+          </button>
           <button
             type="button"
             className="btn-secondary"

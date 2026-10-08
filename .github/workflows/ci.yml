@@ -33,3 +33,6 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+      - name: Verify billing export
+        run: npm run test:billing-export

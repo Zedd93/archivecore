@@ -660,6 +660,7 @@
       "closePeriodConfirm": "Zamknąć wybrany miesiąc? Po zamknięciu nie będzie można zmieniać jego pozycji.",
       "periodClosedSuccess": "Miesiąc rozliczeniowy został zamknięty",
       "currentMonthCannotClose": "Bieżący miesiąc można zamknąć dopiero po jego zakończeniu",
+      "exportSettlement": "Pobierz zestawienie",
       "eventStatuses": {
         "unpriced": "Bez ceny",
         "pending": "Do rozliczenia",
@@ -1247,6 +1248,7 @@
       "price_list.delete": "Usunięcie cennika",
       "billing.storage.generate": "Naliczenie miesięcznego przechowywania",
       "billing.period.close": "Zamknięcie miesiąca rozliczeniowego",
+      "billing.period.export": "Eksport zestawienia rozliczenia",
       "billing_event.exclude": "Wyłączenie pozycji z rozliczenia",
       "billing_event.restore": "Przywrócenie pozycji do rozliczenia",
       "order_item.create": "Dodanie pozycji zlecenia",

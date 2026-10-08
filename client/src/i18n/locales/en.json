@@ -660,6 +660,7 @@
       "closePeriodConfirm": "Close the selected month? Its billing items cannot be changed afterwards.",
       "periodClosedSuccess": "The billing month has been closed",
       "currentMonthCannotClose": "The current month can only be closed after it ends",
+      "exportSettlement": "Download settlement",
       "eventStatuses": {
         "unpriced": "Unpriced",
         "pending": "Pending",
@@ -1115,6 +1116,7 @@
       "price_list.delete": "Price list deleted",
       "billing.storage.generate": "Monthly storage charged",
       "billing.period.close": "Billing month closed",
+      "billing.period.export": "Billing settlement exported",
       "billing_event.exclude": "Billing item excluded",
       "billing_event.restore": "Billing item restored",
       "order_item.return": "Loan item returned",

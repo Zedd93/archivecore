@@ -69,6 +69,7 @@ const AUDIT_ACTION_OPTIONS = [
   'price_list.delete',
   'billing.storage.generate',
   'billing.period.close',
+  'billing.period.export',
   'billing_event.exclude',
   'billing_event.restore',
   'policy.create',

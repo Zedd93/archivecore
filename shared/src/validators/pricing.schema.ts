@@ -53,6 +53,8 @@ export const billingMonthActionSchema = z.object({
   month: billingMonthSchema,
 });
 
+export const billingExportQuerySchema = billingMonthActionSchema;
+
 export const billingEventsQuerySchema = paginationSchema.extend({
   month: billingMonthSchema.optional(),
   status: z.enum(['unpriced', 'pending', 'excluded', 'invoiced']).optional(),

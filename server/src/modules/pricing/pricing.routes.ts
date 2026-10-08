@@ -3,6 +3,7 @@ import {
   Permissions,
   billingMonthActionSchema,
   billingEventsQuerySchema,
+  billingExportQuerySchema,
   createPriceListSchema,
   excludeBillingEventSchema,
   updatePriceListSchema,
@@ -17,6 +18,7 @@ const router = Router();
 
 router.get('/tenants/:tenantId', authenticate, requirePermission(Permissions.PRICING_MANAGE), (req, res, next) => pricingController.listForTenant(req, res, next));
 router.get('/tenants/:tenantId/events', authenticate, requirePermission(Permissions.PRICING_MANAGE), validate(billingEventsQuerySchema, 'query'), (req, res, next) => pricingController.listBillingEvents(req, res, next));
+router.get('/tenants/:tenantId/periods/export', authenticate, requirePermission(Permissions.PRICING_MANAGE), validate(billingExportQuerySchema, 'query'), (req, res, next) => pricingController.exportBillingPeriod(req, res, next));
 router.post('/tenants/:tenantId/events/storage', authenticate, requirePermission(Permissions.PRICING_MANAGE), validate(billingMonthActionSchema), auditLog('billing_period', 'billing.storage.generate'), (req, res, next) => pricingController.generateMonthlyStorage(req, res, next));
 router.post('/tenants/:tenantId/periods/close', authenticate, requirePermission(Permissions.PRICING_MANAGE), validate(billingMonthActionSchema), auditLog('billing_period', 'billing.period.close'), (req, res, next) => pricingController.closeBillingPeriod(req, res, next));
 router.post('/tenants/:tenantId', authenticate, requirePermission(Permissions.PRICING_MANAGE), validate(createPriceListSchema), auditLog('price_list', 'price_list.create'), (req, res, next) => pricingController.create(req, res, next));

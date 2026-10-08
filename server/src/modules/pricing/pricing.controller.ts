@@ -3,6 +3,8 @@ import { successResponse } from '../../utils/response';
 import { pricingService } from './pricing.service';
 import { billingService } from './billing.service';
 import { parsePagination } from '../../utils/pagination';
+import { billingExportService } from './billing-export.service';
+import { prisma } from '../../config/database';
 
 export class PricingController {
   async listForTenant(req: Request, res: Response, next: NextFunction) {
@@ -78,6 +80,29 @@ export class PricingController {
         res,
         await billingService.closePeriod(req.params.tenantId, req.body.month, req.user!.userId)
       );
+    } catch (err) { next(err); }
+  }
+
+  async exportBillingPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const month = req.query.month as string;
+      const { buffer, filename, periodId, eventCount } = await billingExportService.exportClosedPeriod(req.params.tenantId, month);
+      await prisma.auditLog.create({
+        data: {
+          tenantId: req.params.tenantId,
+          userId: req.user!.userId,
+          action: 'billing.period.export',
+          entityType: 'billing_period',
+          entityId: periodId,
+          newValues: { month, eventCount },
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']?.substring(0, 500),
+        },
+      });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      return res.send(buffer);
     } catch (err) { next(err); }
   }
 }
