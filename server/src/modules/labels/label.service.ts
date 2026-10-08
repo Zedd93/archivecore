@@ -1,7 +1,7 @@
 import { prisma, Prisma } from '../../config/database';
 import { pdfService, LabelLayout, LabelData, LabelField } from './pdf.service';
 import { qrService } from './qr.service';
-import { DOC_TYPE_LABELS } from '@archivecore/shared';
+import { DOC_TYPE_LABELS, generateLocationQrData } from '@archivecore/shared';
 
 // Default label template: 70mm x 36mm (standard archive label)
 const DEFAULT_LAYOUT: LabelLayout = {
@@ -18,6 +18,19 @@ const DEFAULT_LAYOUT: LabelLayout = {
     { key: 'location', label: 'Lokalizacja', x: 40, y: 24, maxWidth: 28, fontSize: 6 },
     { key: 'dateRange', label: 'Okres', x: 2, y: 30, maxWidth: 30, fontSize: 6 },
     { key: 'docType', label: 'Typ dok.', x: 35, y: 30, maxWidth: 33, fontSize: 6 },
+  ],
+};
+
+const LOCATION_LAYOUT: LabelLayout = {
+  widthMm: 70,
+  heightMm: 36,
+  qrSizeMm: 20,
+  fontSize: 7,
+  fields: [
+    { key: 'boxNumber', label: 'Kod miejsca', x: 25, y: 2, maxWidth: 43, fontSize: 9, bold: true },
+    { key: 'title', label: 'Nazwa', x: 25, y: 12, maxWidth: 43, fontSize: 7 },
+    { key: 'location', label: 'Ścieżka', x: 2, y: 22, maxWidth: 66, fontSize: 6 },
+    { key: 'tenantName', label: 'Archiwum', x: 2, y: 30, maxWidth: 66, fontSize: 6 },
   ],
 };
 
@@ -138,6 +151,25 @@ export class LabelService {
     }
 
     return pdf;
+  }
+
+  async generateForLocation(locationId: string, tenantId: string): Promise<{ pdf: Buffer; fileName: string }> {
+    if (!this.isUuid(locationId)) throw Object.assign(new Error('Lokalizacja nie znaleziona'), { statusCode: 404 });
+    const location = await prisma.location.findFirst({
+      where: { id: locationId, isActive: true, OR: [{ tenantId }, { tenantId: null }] },
+      include: { tenant: { select: { name: true } } },
+    });
+    if (!location) throw Object.assign(new Error('Lokalizacja nie znaleziona'), { statusCode: 404 });
+
+    const pdf = await pdfService.generateLabel(LOCATION_LAYOUT, {
+      qrData: generateLocationQrData(location.id),
+      boxNumber: location.code,
+      title: location.name,
+      location: location.fullPath,
+      tenantName: location.tenant?.name || 'Doxart',
+    });
+    const safeCode = location.code.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 50) || 'location';
+    return { pdf, fileName: `location-${safeCode}-${location.id.slice(0, 8)}.pdf` };
   }
 
   async generateForBoxes(boxIdentifiers: string[], tenantId: string, templateId?: string, userId?: string): Promise<Buffer> {

@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { parseQrData } from '@archivecore/shared';
+import { parseQrData, parseLocationQrData } from '@archivecore/shared';
 import api from '@/services/api';
 import { QrCode, Printer, Camera, Loader2, ScanLine, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import BoxPicker from '@/components/ui/BoxPicker';
+import LocationPicker from '@/components/ui/LocationPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
 
@@ -30,6 +31,7 @@ export default function LabelsPage() {
   const [activeTab, setActiveTab] = useState<'generate' | 'scan'>('generate');
   const [selectedSingleBox, setSelectedSingleBox] = useState<SelectedBox[]>([]);
   const [selectedBatchBoxes, setSelectedBatchBoxes] = useState<SelectedBox[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [templateForm, setTemplateForm] = useState({
@@ -46,6 +48,7 @@ export default function LabelsPage() {
   const [manualCode, setManualCode] = useState('');
   const scanBusyRef = useRef(false);
   const canManageTemplates = hasPermission('label.template_manage');
+  const canReadLocations = hasPermission('location.read');
 
   // Templates
   const { data: templates } = useQuery({
@@ -110,6 +113,23 @@ export default function LabelsPage() {
     }
   };
 
+  const handleGenerateLocation = async () => {
+    if (!selectedLocationId) return;
+    setIsGenerating(true);
+    try {
+      const response = await api.get(`/labels/location/${encodeURIComponent(selectedLocationId)}`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(response.data);
+      window.open(url, '_blank');
+      toast.success(t('common.success'));
+    } catch (err: any) {
+      toast.error(await getApiErrorMessageAsync(err, t('boxes.labelError')));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleCreateTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreatingTemplate(true);
@@ -169,6 +189,29 @@ export default function LabelsPage() {
     setIsScanning(false);
 
     const code = rawCode.trim();
+    const locationCode = parseLocationQrData(code);
+    if (locationCode) {
+      if (!locationCode.isValid) {
+        toast.error(t('labels.invalidCode'));
+        return;
+      }
+      setIsResolvingScan(true);
+      try {
+        const { data } = await api.get(`/locations/${encodeURIComponent(locationCode.locationId)}`);
+        if (data.data?.id === locationCode.locationId && data.data?.isActive) {
+          navigate(`/boxes?locationId=${encodeURIComponent(locationCode.locationId)}`);
+        } else {
+          toast.error(t('labels.locationNotFound'));
+        }
+      } catch (err: any) {
+        toast.error(await getApiErrorMessageAsync(err, t('common.genericError')));
+      } finally {
+        setIsResolvingScan(false);
+        scanBusyRef.current = false;
+      }
+      return;
+    }
+
     const parsed = parseQrData(code);
     if (!parsed?.isValid) {
       toast.error(t('labels.invalidCode'));
@@ -301,6 +344,36 @@ export default function LabelsPage() {
               </button>
             </div>
           </div>
+
+          {canReadLocations && (
+            <div className="card">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <QrCode size={20} className="text-primary-600" />
+                {t('labels.locationLabel')}
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="label-location" className="label-text">{t('labels.location')}</label>
+                  <LocationPicker
+                    id="label-location"
+                    value={selectedLocationId}
+                    onChange={setSelectedLocationId}
+                    placeholder={t('locations.pickLocation')}
+                  />
+                </div>
+                <p className="text-xs text-gray-500">{t('labels.locationLabelHint')}</p>
+                <button
+                  type="button"
+                  onClick={handleGenerateLocation}
+                  disabled={!selectedLocationId || isGenerating}
+                  className="btn-primary w-full flex items-center justify-center gap-2"
+                >
+                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
+                  {t('labels.generatePdf')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Templates */}
           <div className="card lg:col-span-2">
@@ -466,7 +539,7 @@ export default function LabelsPage() {
                   {t('labels.findBox')}
                 </button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">{t('labels.format')}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('labels.format')}<br />{t('labels.locationFormat')}</p>
             </form>
           </div>
         </div>

@@ -32,6 +32,16 @@ export class LabelController {
     } catch (err) { next(err); }
   }
 
+  async generateForLocation(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { pdf, fileName } = await labelService.generateForLocation(req.params.locationId, req.tenantId);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      return res.send(pdf);
+    } catch (err) { next(err); }
+  }
+
   async generateForBoxes(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

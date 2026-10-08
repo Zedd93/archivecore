@@ -852,6 +852,9 @@
     "generateTab": "Generate labels",
     "scanTab": "Scan QR",
     "singleLabel": "Single label",
+    "locationLabel": "Location label",
+    "location": "Location",
+    "locationLabelHint": "The QR code opens boxes in this location. Print size is fixed at 70×36 mm.",
     "boxId": "Box",
     "generatePdf": "Generate label (PDF)",
     "bulkPrint": "Bulk print",
@@ -883,10 +886,12 @@
     "manualInput": "Or enter code manually:",
     "format": "Format: AC:TENANT_CODE:BOX_NUMBER:CRC16",
     "cameraError": "Could not start the scanner. Check camera permissions and HTTPS.",
-    "invalidCode": "This is not a valid ArchiveCore box QR code.",
+    "invalidCode": "This is not a valid ArchiveCore box or location QR code.",
     "boxNotFound": "No box matches this code in the selected tenant.",
-    "findingBox": "Finding box...",
-    "findBox": "Find box"
+    "locationNotFound": "The location does not exist or is not available in the selected tenant.",
+    "findingBox": "Finding item...",
+    "findBox": "Open",
+    "locationFormat": "Location code: ACLOC:UUID:CRC16"
   },
 
   "search": {

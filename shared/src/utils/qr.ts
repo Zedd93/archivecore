@@ -59,3 +59,19 @@ export function parseQrData(data: string): ParsedQrData | null {
 export function isArchiveCoreQr(data: string): boolean {
   return data.startsWith('AC:');
 }
+
+/** Stable location identity: renaming a shelf does not invalidate its label. */
+export function generateLocationQrData(locationId: string): string {
+  const checksum = crc16(locationId).toString(16).toUpperCase().padStart(4, '0');
+  return `ACLOC:${locationId}:${checksum}`;
+}
+
+export function parseLocationQrData(data: string): { locationId: string; isValid: boolean } | null {
+  const parts = data.split(':');
+  if (parts.length !== 3 || parts[0] !== 'ACLOC') return null;
+
+  const locationId = parts[1];
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(locationId);
+  const checksum = crc16(locationId).toString(16).toUpperCase().padStart(4, '0');
+  return { locationId, isValid: isUuid && parts[2] === checksum };
+}

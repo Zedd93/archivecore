@@ -39,3 +39,6 @@ jobs:
 
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
+
+      - name: Verify QR formats
+        run: npm run test:qr

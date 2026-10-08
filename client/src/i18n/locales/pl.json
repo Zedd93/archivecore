@@ -852,6 +852,9 @@
     "generateTab": "Generuj etykiety",
     "scanTab": "Skanuj QR",
     "singleLabel": "Pojedyncza etykieta",
+    "locationLabel": "Etykieta lokalizacji",
+    "location": "Lokalizacja",
+    "locationLabelHint": "Kod QR prowadzi do kartonów w tej lokalizacji. Wydruk ma stały format 70×36 mm.",
     "boxId": "Karton",
     "generatePdf": "Generuj etykietę (PDF)",
     "bulkPrint": "Druk zbiorczy",
@@ -883,10 +886,12 @@
     "manualInput": "Lub wpisz kod ręcznie:",
     "format": "Format: AC:KOD_TENANTA:NUMER_KARTONU:CRC16",
     "cameraError": "Nie udało się uruchomić skanera. Sprawdź uprawnienia kamery i połączenie HTTPS.",
-    "invalidCode": "To nie jest poprawny kod QR kartonu ArchiveCore.",
+    "invalidCode": "To nie jest poprawny kod QR kartonu ani lokalizacji ArchiveCore.",
     "boxNotFound": "Nie znaleziono kartonu dla tego kodu w wybranym tenancie.",
-    "findingBox": "Szukam kartonu...",
-    "findBox": "Znajdź karton"
+    "locationNotFound": "Lokalizacja nie istnieje lub nie jest dostępna w wybranym tenancie.",
+    "findingBox": "Szukam zasobu...",
+    "findBox": "Otwórz",
+    "locationFormat": "Kod lokalizacji: ACLOC:UUID:CRC16"
   },
 
   "search": {
