@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { parseQrData } from '@archivecore/shared';
 import api from '@/services/api';
 import { QrCode, Printer, Camera, Loader2, ScanLine, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -21,6 +24,7 @@ function isSystemDefaultTemplate(template: any) {
 
 export default function LabelsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'generate' | 'scan'>('generate');
@@ -37,9 +41,10 @@ export default function LabelsPage() {
     isDefault: false,
   });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [scanResult, setScanResult] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isResolvingScan, setIsResolvingScan] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const scanBusyRef = useRef(false);
   const canManageTemplates = hasPermission('label.template_manage');
 
   // Templates
@@ -154,29 +159,69 @@ export default function LabelsPage() {
     </div>
   );
 
-  const startScanner = async () => {
-    try {
-      setIsScanning(true);
-      setScanResult(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-    } catch {
-      toast.error(t('labels.cameraError'));
-      setIsScanning(false);
-    }
-  };
-
   const stopScanner = () => {
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
     setIsScanning(false);
   };
+
+  const handleScan = useCallback(async (rawCode: string) => {
+    if (scanBusyRef.current) return;
+    scanBusyRef.current = true;
+    setIsScanning(false);
+
+    const code = rawCode.trim();
+    const parsed = parseQrData(code);
+    if (!parsed?.isValid) {
+      toast.error(t('labels.invalidCode'));
+      return;
+    }
+
+    setIsResolvingScan(true);
+    try {
+      const { data } = await api.get('/search', { params: { q: code, types: 'box', limit: 1 } });
+      const box = data.data?.results?.find((result: any) =>
+        result.type === 'box' && result.metadata?.qrCode === code
+      );
+      if (box) {
+        navigate(`/boxes/${box.id}`);
+      } else {
+        toast.error(t('labels.boxNotFound'));
+      }
+    } catch (err: any) {
+      toast.error(await getApiErrorMessageAsync(err, t('common.genericError')));
+    } finally {
+      setIsResolvingScan(false);
+      scanBusyRef.current = false;
+    }
+  }, [navigate, t]);
+
+  useEffect(() => {
+    if (!isScanning || activeTab !== 'scan') return;
+
+    let disposed = false;
+    const scanner = new Html5Qrcode('archivecore-qr-scanner', {
+      verbose: false,
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+    });
+    const started = scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10 },
+      (code) => { void handleScan(code); },
+      () => {},
+    ).catch(() => {
+      if (!disposed) {
+        toast.error(t('labels.cameraError'));
+        setIsScanning(false);
+      }
+    });
+
+    return () => {
+      disposed = true;
+      void started.then(async () => {
+        if (scanner.isScanning) await scanner.stop();
+        scanner.clear();
+      }).catch(() => {});
+    };
+  }, [isScanning, activeTab, handleScan, t]);
 
   return (
     <div className="space-y-4">
@@ -385,38 +430,44 @@ export default function LabelsPage() {
           </h2>
           <div className="space-y-4">
             {!isScanning ? (
-              <button onClick={startScanner} className="btn-primary w-full flex items-center justify-center gap-2">
-                <Camera size={16} /> {t('labels.startCamera')}
+              <button
+                onClick={() => { scanBusyRef.current = false; setIsScanning(true); }}
+                disabled={isResolvingScan}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                {isResolvingScan ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                {isResolvingScan ? t('labels.findingBox') : t('labels.startCamera')}
               </button>
             ) : (
               <>
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                  <div className="absolute inset-0 border-2 border-primary-500/50 rounded-xl" />
-                </div>
+                <div id="archivecore-qr-scanner" className="rounded-xl overflow-hidden bg-black min-h-48" />
                 <button onClick={stopScanner} className="btn-secondary w-full">
                   {t('labels.stopCamera')}
                 </button>
               </>
             )}
-            <div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (isResolvingScan) return;
+              scanBusyRef.current = false;
+              void handleScan(manualCode);
+            }}>
               <label htmlFor="label-scan-manualCode" className="label-text">{t('labels.manualInput')}</label>
-              <input
-                id="label-scan-manualCode"
-                type="text"
-                className="input-field font-mono"
-                placeholder="AC:DEMO:K-2024-00001:A1B2"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = (e.target as HTMLInputElement).value;
-                    if (val.startsWith('AC:')) {
-                      window.location.href = `/search?q=${encodeURIComponent(val)}`;
-                    }
-                  }
-                }}
-              />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  id="label-scan-manualCode"
+                  type="text"
+                  className="input-field font-mono"
+                  placeholder="AC:DEMO:K-2024-00001:A1B2"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                />
+                <button type="submit" disabled={!manualCode.trim() || isResolvingScan} className="btn-secondary whitespace-nowrap">
+                  {t('labels.findBox')}
+                </button>
+              </div>
               <p className="text-xs text-gray-400 mt-1">{t('labels.format')}</p>
-            </div>
+            </form>
           </div>
         </div>
       )}

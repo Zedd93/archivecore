@@ -882,7 +882,11 @@
     "stopCamera": "Zatrzymaj kamerę",
     "manualInput": "Lub wpisz kod ręcznie:",
     "format": "Format: AC:KOD_TENANTA:NUMER_KARTONU:CRC16",
-    "cameraError": "Nie udało się uzyskać dostępu do kamery"
+    "cameraError": "Nie udało się uruchomić skanera. Sprawdź uprawnienia kamery i połączenie HTTPS.",
+    "invalidCode": "To nie jest poprawny kod QR kartonu ArchiveCore.",
+    "boxNotFound": "Nie znaleziono kartonu dla tego kodu w wybranym tenancie.",
+    "findingBox": "Szukam kartonu...",
+    "findBox": "Znajdź karton"
   },
 
   "search": {

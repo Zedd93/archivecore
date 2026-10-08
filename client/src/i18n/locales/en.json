@@ -882,7 +882,11 @@
     "stopCamera": "Stop camera",
     "manualInput": "Or enter code manually:",
     "format": "Format: AC:TENANT_CODE:BOX_NUMBER:CRC16",
-    "cameraError": "Could not access camera"
+    "cameraError": "Could not start the scanner. Check camera permissions and HTTPS.",
+    "invalidCode": "This is not a valid ArchiveCore box QR code.",
+    "boxNotFound": "No box matches this code in the selected tenant.",
+    "findingBox": "Finding box...",
+    "findBox": "Find box"
   },
 
   "search": {
