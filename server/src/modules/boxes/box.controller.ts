@@ -72,7 +72,7 @@ export class BoxController {
       const { ids, locationId } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) return errorResponse(res, 'Brak ID', 400);
       if (!locationId) return errorResponse(res, 'Brak lokalizacji', 400);
-      const result = await boxService.bulkMove(ids, req.tenantId, locationId);
+      const result = await boxService.bulkMove(ids, req.tenantId, locationId, req.accessDepartment || undefined);
       return successResponse(res, result);
     } catch (err) { next(err); }
   }

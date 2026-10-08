@@ -383,43 +383,49 @@ export class BoxService {
     return { updated: result.count };
   }
 
-  async bulkMove(ids: string[], tenantId: string, locationId: string) {
+  async bulkMove(ids: string[], tenantId: string, locationId: string, department?: string) {
     await this.validateBoxLocation(locationId, tenantId);
 
-    const boxes = await prisma.box.findMany({
-      where: { id: { in: ids }, tenantId, deletedAt: null },
-      select: { id: true, locationId: true },
-    });
-    const movedBoxes = boxes.filter(box => box.locationId !== locationId);
+    const uniqueIds = [...new Set(ids)];
+    const where = {
+      id: { in: uniqueIds }, tenantId, deletedAt: null,
+      ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+    };
 
-    const decrementByLocation = movedBoxes.reduce<Record<string, number>>((acc, box) => {
-      if (!box.locationId) return acc;
-      acc[box.locationId] = (acc[box.locationId] || 0) + 1;
-      return acc;
-    }, {});
+    return prisma.$transaction(async (tx) => {
+      const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
+      if (boxes.length !== uniqueIds.length) {
+        throw Object.assign(new Error('Nie znaleziono wszystkich wybranych kartonów'), { statusCode: 404 });
+      }
+      const movedBoxes = boxes.filter(box => box.locationId !== locationId);
+      if (movedBoxes.length === 0) return { updated: boxes.length, moved: 0 };
 
-    await prisma.$transaction([
-      prisma.box.updateMany({
-        where: { id: { in: movedBoxes.map(box => box.id) }, tenantId, deletedAt: null },
+      const decrementByLocation = movedBoxes.reduce<Record<string, number>>((acc, box) => {
+        if (!box.locationId) return acc;
+        acc[box.locationId] = (acc[box.locationId] || 0) + 1;
+        return acc;
+      }, {});
+
+      const updated = await tx.box.updateMany({
+        where: { ...where, id: { in: movedBoxes.map(box => box.id) } },
         data: { locationId },
-      }),
-      ...Object.entries(decrementByLocation).map(([oldLocationId, count]) =>
-        prisma.location.update({
+      });
+      if (updated.count !== movedBoxes.length) {
+        throw Object.assign(new Error('Nie przeniesiono wszystkich kartonów. Spróbuj ponownie.'), { statusCode: 409 });
+      }
+      for (const [oldLocationId, count] of Object.entries(decrementByLocation)) {
+        await tx.location.update({
           where: { id: oldLocationId },
           data: { currentCount: { decrement: count } },
-        })
-      ),
-      ...(movedBoxes.length > 0
-        ? [
-            prisma.location.update({
-              where: { id: locationId },
-              data: { currentCount: { increment: movedBoxes.length } },
-            }),
-          ]
-        : []),
-    ]);
+        });
+      }
+      await tx.location.update({
+        where: { id: locationId },
+        data: { currentCount: { increment: movedBoxes.length } },
+      });
 
-    return { updated: boxes.length, moved: movedBoxes.length };
+      return { updated: boxes.length, moved: movedBoxes.length };
+    });
   }
 
   async bulkDelete(ids: string[], tenantId: string, department?: string) {

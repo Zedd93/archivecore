@@ -19,6 +19,7 @@ interface BoxPickerProps {
   maxSelected?: number;
   tenantId?: string;
   showLocation?: boolean;
+  showSelectedChips?: boolean;
 }
 
 export default function BoxPicker({
@@ -29,6 +30,7 @@ export default function BoxPicker({
   maxSelected,
   tenantId,
   showLocation = false,
+  showSelectedChips = true,
 }: BoxPickerProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
@@ -107,7 +109,7 @@ export default function BoxPicker({
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       {/* Selected chips */}
-      {value.length > 0 && (
+      {showSelectedChips && value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {value.map((box) => (
             <span

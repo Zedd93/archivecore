@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { parseQrData, parseLocationQrData, parseFolderQrData } from '@archivecore/shared';
 import api from '@/services/api';
 import { QrCode, Printer, Camera, Loader2, ScanLine, Plus } from 'lucide-react';
@@ -10,6 +9,7 @@ import toast from 'react-hot-toast';
 import BoxPicker from '@/components/ui/BoxPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import LocationPicker from '@/components/ui/LocationPicker';
+import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
 
@@ -212,6 +212,7 @@ export default function LabelsPage() {
     if (folderCode) {
       if (!folderCode.isValid) {
         toast.error(t('labels.invalidCode'));
+        scanBusyRef.current = false;
         return;
       }
       setIsResolvingScan(true);
@@ -235,6 +236,7 @@ export default function LabelsPage() {
     if (locationCode) {
       if (!locationCode.isValid) {
         toast.error(t('labels.invalidCode'));
+        scanBusyRef.current = false;
         return;
       }
       setIsResolvingScan(true);
@@ -257,6 +259,7 @@ export default function LabelsPage() {
     const parsed = parseQrData(code);
     if (!parsed?.isValid) {
       toast.error(t('labels.invalidCode'));
+      scanBusyRef.current = false;
       return;
     }
 
@@ -278,35 +281,6 @@ export default function LabelsPage() {
       scanBusyRef.current = false;
     }
   }, [navigate, t]);
-
-  useEffect(() => {
-    if (!isScanning || activeTab !== 'scan') return;
-
-    let disposed = false;
-    const scanner = new Html5Qrcode('archivecore-qr-scanner', {
-      verbose: false,
-      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-    });
-    const started = scanner.start(
-      { facingMode: 'environment' },
-      { fps: 10 },
-      (code) => { void handleScan(code); },
-      () => {},
-    ).catch(() => {
-      if (!disposed) {
-        toast.error(t('labels.cameraError'));
-        setIsScanning(false);
-      }
-    });
-
-    return () => {
-      disposed = true;
-      void started.then(async () => {
-        if (scanner.isScanning) await scanner.stop();
-        scanner.clear();
-      }).catch(() => {});
-    };
-  }, [isScanning, activeTab, handleScan, t]);
 
   return (
     <div className="space-y-4">
@@ -586,7 +560,11 @@ export default function LabelsPage() {
               </button>
             ) : (
               <>
-                <div id="archivecore-qr-scanner" className="rounded-xl overflow-hidden bg-black min-h-48" />
+                <QrCameraScanner
+                  id="archivecore-qr-scanner"
+                  onCode={(code) => { void handleScan(code); }}
+                  onError={() => { toast.error(t('labels.cameraError')); setIsScanning(false); }}
+                />
                 <button onClick={stopScanner} className="btn-secondary w-full">
                   {t('labels.stopCamera')}
                 </button>

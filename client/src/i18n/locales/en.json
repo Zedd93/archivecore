@@ -1068,6 +1068,7 @@
       "boxes": "Boxes",
       "folders": "Folders",
       "locations": "Locations",
+      "warehouseMove": "QR relocation",
       "loans": "Loans",
       "orders": "Orders",
       "hr": "Personnel Files",
@@ -1082,6 +1083,37 @@
       "audit": "Audit log",
       "import": "Data import"
     }
+  },
+
+  "warehouseMove": {
+    "title": "Move boxes with QR codes",
+    "subtitle": "Scan each box, then scan the destination shelf. You can also choose boxes and a location from the lists.",
+    "scanner": "QR scanner",
+    "manualCode": "Enter a label code",
+    "addCode": "Add code",
+    "boxes": "Boxes to move ({{count}})",
+    "findBox": "Find a box by number or title",
+    "noBoxes": "No boxes added yet.",
+    "boxAdded": "Added box {{number}}",
+    "alreadyAdded": "This box is already in the list",
+    "boxNotFound": "Box not found in the active company",
+    "noLocation": "No location",
+    "destination": "Destination location",
+    "findDestination": "Choose a shelf, level, or slot",
+    "noDestination": "No destination selected.",
+    "destinationAdded": "Destination selected",
+    "invalidDestination": "The code does not point to an active shelf, level, or slot",
+    "invalidCode": "Invalid ArchiveCore QR code",
+    "move": "Confirm move",
+    "moveCount": "Move boxes ({{count}})",
+    "confirmTitle": "Confirm move",
+    "confirmMessage": "Move {{count}} boxes to: {{location}}?",
+    "moveSuccess": "Moved {{count}} boxes",
+    "alreadyThere": "All boxes are already in this location",
+    "moveError": "Could not move the boxes",
+    "incompleteMove": "Not all boxes were moved. Check the data and try again.",
+    "chooseTenant": "Choose a client company from the top menu first.",
+    "noPermission": "You do not have permission to move boxes."
   },
 
   "share": {
