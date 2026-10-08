@@ -3,6 +3,7 @@ import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '
 import { isValidTransition } from './order-state-machine';
 import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
+import { billingService } from '../pricing/billing.service';
 
 function calculateSlaDeadline(priority: string): Date {
   const slaMap: Record<string, number> = {
@@ -542,6 +543,7 @@ export class OrderService {
       : order.orderType === 'return_order'
         ? 'active'
         : undefined;
+    const billingEvents = await billingService.buildOrderDeliveryEvents(order, deliveredAt);
 
     const operations: Prisma.PrismaPromise<any>[] = [
       prisma.order.update({
@@ -579,6 +581,15 @@ export class OrderService {
         prisma.box.updateMany({
           where: { id: { in: boxIds }, tenantId, deletedAt: null },
           data: { status: boxStatus },
+        })
+      );
+    }
+
+    if (billingEvents.length > 0) {
+      operations.push(
+        prisma.billingEvent.createMany({
+          data: billingEvents,
+          skipDuplicates: true,
         })
       );
     }

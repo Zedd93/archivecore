@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PRICE_UNITS } from '../constants/pricing';
+import { paginationSchema } from './common.schema';
 
 const moneySchema = z.coerce.number()
   .finite('Kwota musi być liczbą')
@@ -44,3 +45,15 @@ export const createPriceListSchema = z.object({
 });
 
 export const updatePriceListSchema = createPriceListSchema;
+
+const billingMonthSchema = z.string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Nieprawidłowy miesiąc rozliczeniowy');
+
+export const billingEventsQuerySchema = paginationSchema.extend({
+  month: billingMonthSchema.optional(),
+  status: z.enum(['unpriced', 'pending', 'excluded', 'invoiced']).optional(),
+});
+
+export const excludeBillingEventSchema = z.object({
+  reason: z.string().trim().min(1, 'Podaj powód wyłączenia pozycji').max(500),
+});

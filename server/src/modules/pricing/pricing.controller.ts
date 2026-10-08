@@ -1,6 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import { successResponse } from '../../utils/response';
 import { pricingService } from './pricing.service';
+import { billingService } from './billing.service';
+import { parsePagination } from '../../utils/pagination';
 
 export class PricingController {
   async listForTenant(req: Request, res: Response, next: NextFunction) {
@@ -30,6 +32,34 @@ export class PricingController {
   async remove(req: Request, res: Response, next: NextFunction) {
     try {
       return successResponse(res, await pricingService.remove(req.params.id));
+    } catch (err) { next(err); }
+  }
+
+  async listBillingEvents(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { skip, take, page, limit } = parsePagination(req.query as any);
+      const result = await billingService.listForTenant(req.params.tenantId, req.query, skip, take);
+      return successResponse(res, {
+        ...result,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          totalPages: Math.ceil(result.total / limit),
+        },
+      });
+    } catch (err) { next(err); }
+  }
+
+  async excludeBillingEvent(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(res, await billingService.exclude(req.params.id, req.body.reason));
+    } catch (err) { next(err); }
+  }
+
+  async restoreBillingEvent(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(res, await billingService.restore(req.params.id));
     } catch (err) { next(err); }
   }
 }

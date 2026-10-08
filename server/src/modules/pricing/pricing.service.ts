@@ -1,5 +1,6 @@
 import { Prisma, PriceListStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { billingService } from './billing.service';
 
 function toDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -127,18 +128,22 @@ export class PricingService {
     const closeDate = new Date(priceList.validFrom);
     closeDate.setUTCDate(closeDate.getUTCDate() - 1);
 
-    return prisma.$transaction(async (tx) => {
+    const activated = await prisma.$transaction(async (tx) => {
       await tx.priceList.updateMany({
         where: { tenantId: priceList.tenantId, status: PriceListStatus.active },
         data: { status: PriceListStatus.archived, validTo: closeDate },
       });
 
-      return tx.priceList.update({
+      const result = await tx.priceList.update({
         where: { id },
         data: { status: PriceListStatus.active, validTo: null },
         include: { items: { orderBy: { serviceName: 'asc' } } },
       });
+      await billingService.repriceUnpricedForPriceList(id, tx);
+      return result;
     });
+
+    return activated;
   }
 
   async remove(id: string) {

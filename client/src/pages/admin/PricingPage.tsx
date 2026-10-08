@@ -7,6 +7,7 @@ import api from '@/services/api';
 import Modal from '@/components/ui/Modal';
 import { getApiErrorMessage } from '@/utils/apiError';
 import toast from 'react-hot-toast';
+import BillingEventsPanel from './BillingEventsPanel';
 
 type RateValues = Record<string, string>;
 
@@ -277,6 +278,8 @@ export default function PricingPage() {
           ))}
         </div>
       )}
+
+      {tenantId && <BillingEventsPanel tenantId={tenantId} />}
 
       <Modal isOpen={showForm} onClose={closeForm} title={t(editing ? 'admin.pricing.editTitle' : 'admin.pricing.createTitle')} size="xl">
         <form onSubmit={submitForm} className="space-y-5">
