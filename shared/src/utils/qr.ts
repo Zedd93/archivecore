@@ -61,17 +61,35 @@ export function isArchiveCoreQr(data: string): boolean {
 }
 
 /** Stable location identity: renaming a shelf does not invalidate its label. */
+function generateEntityQrData(prefix: string, id: string): string {
+  const checksum = crc16(id).toString(16).toUpperCase().padStart(4, '0');
+  return `${prefix}:${id}:${checksum}`;
+}
+
+function parseEntityQrData(data: string, prefix: string): { id: string; isValid: boolean } | null {
+  const parts = data.split(':');
+  if (parts.length !== 3 || parts[0] !== prefix) return null;
+
+  const id = parts[1];
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  const checksum = crc16(id).toString(16).toUpperCase().padStart(4, '0');
+  return { id, isValid: isUuid && parts[2] === checksum };
+}
+
 export function generateLocationQrData(locationId: string): string {
-  const checksum = crc16(locationId).toString(16).toUpperCase().padStart(4, '0');
-  return `ACLOC:${locationId}:${checksum}`;
+  return generateEntityQrData('ACLOC', locationId);
 }
 
 export function parseLocationQrData(data: string): { locationId: string; isValid: boolean } | null {
-  const parts = data.split(':');
-  if (parts.length !== 3 || parts[0] !== 'ACLOC') return null;
+  const parsed = parseEntityQrData(data, 'ACLOC');
+  return parsed ? { locationId: parsed.id, isValid: parsed.isValid } : null;
+}
 
-  const locationId = parts[1];
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(locationId);
-  const checksum = crc16(locationId).toString(16).toUpperCase().padStart(4, '0');
-  return { locationId, isValid: isUuid && parts[2] === checksum };
+export function generateFolderQrData(folderId: string): string {
+  return generateEntityQrData('ACF', folderId);
+}
+
+export function parseFolderQrData(data: string): { folderId: string; isValid: boolean } | null {
+  const parsed = parseEntityQrData(data, 'ACF');
+  return parsed ? { folderId: parsed.id, isValid: parsed.isValid } : null;
 }

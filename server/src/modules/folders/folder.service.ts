@@ -107,10 +107,19 @@ export class FolderService {
     const folder = await prisma.folder.findFirst({
       where: { id, tenantId, ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}) },
       include: {
-        box: { select: { id: true, boxNumber: true, title: true } },
+        box: {
+          select: {
+            id: true,
+            boxNumber: true,
+            title: true,
+            location: { select: { fullPath: true } },
+          },
+        },
         transferListItem: {
           select: {
             id: true,
+            categoryCode: true,
+            sourceBoxNumber: true,
             transferList: { select: { id: true, listNumber: true, title: true, status: true } },
           },
         },

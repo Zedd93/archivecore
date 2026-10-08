@@ -42,6 +42,18 @@ export class LabelController {
     } catch (err) { next(err); }
   }
 
+  async generateForFolder(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { pdf, fileName } = await labelService.generateForFolder(
+        req.params.folderId, req.tenantId, req.accessDepartment || undefined
+      );
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      return res.send(pdf);
+    } catch (err) { next(err); }
+  }
+
   async generateForBoxes(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

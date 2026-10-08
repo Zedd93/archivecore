@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Archive, Box, FileSpreadsheet, FolderOpen, Search } from 'lucide-react';
+import { Archive, Box, FileSpreadsheet, FolderOpen, Search, ArrowUpRight } from 'lucide-react';
 import { useList } from '@/hooks/useApi';
 import Pagination from '@/components/ui/Pagination';
 import { SkeletonTable } from '@/components/ui/Skeleton';
@@ -93,12 +93,13 @@ export default function FolderListPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{t('folders.box')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{t('folders.location')}</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{t('folders.source')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{t('common.details')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {folders.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                      <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
                         <FolderOpen size={40} className="mx-auto mb-2 text-gray-300" />
                         {t('folders.empty')}
                       </td>
@@ -152,6 +153,16 @@ export default function FolderListPage() {
                             {t('folders.sourceManual')}
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/folders/${folder.id}`); }}
+                          className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900"
+                          aria-label={`${t('common.details')}: ${normalizeDisplayText(folder.title)}`}
+                        >
+                          {t('common.details')} <ArrowUpRight size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}

@@ -17,6 +17,7 @@ export interface SelectedFolder {
 }
 
 interface FolderPickerProps {
+  id?: string;
   value?: SelectedFolder[];
   onChange: (folders: SelectedFolder[]) => void;
   placeholder?: string;
@@ -25,6 +26,7 @@ interface FolderPickerProps {
 }
 
 export default function FolderPicker({
+  id,
   value = [],
   onChange,
   placeholder,
@@ -128,6 +130,7 @@ export default function FolderPicker({
         <div className="relative">
           <FolderOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
+            id={id}
             type="text"
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}

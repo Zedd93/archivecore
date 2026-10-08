@@ -16,6 +16,7 @@ router.post('/templates', ...auth, requirePermission(Permissions.LABEL_TEMPLATE_
 // Generate labels (PDF)
 router.get('/box/:boxId', ...auth, requirePermission(Permissions.LABEL_GENERATE), (req, res, next) => labelController.generateForBox(req, res, next));
 router.get('/location/:locationId', ...auth, requirePermission(Permissions.LABEL_GENERATE), requirePermission(Permissions.LOCATION_READ), (req, res, next) => labelController.generateForLocation(req, res, next));
+router.get('/folder/:folderId', ...auth, requirePermission(Permissions.LABEL_GENERATE), requirePermission(Permissions.FOLDER_READ), (req, res, next) => labelController.generateForFolder(req, res, next));
 router.post('/batch', ...auth, requirePermission(Permissions.LABEL_GENERATE), auditLog('label', 'label.batch_generate'), (req, res, next) => labelController.generateForBoxes(req, res, next));
 
 // QR code image

@@ -1,7 +1,7 @@
 import { prisma, Prisma } from '../../config/database';
 import { pdfService, LabelLayout, LabelData, LabelField } from './pdf.service';
 import { qrService } from './qr.service';
-import { DOC_TYPE_LABELS, generateLocationQrData } from '@archivecore/shared';
+import { DOC_TYPE_LABELS, generateLocationQrData, generateFolderQrData } from '@archivecore/shared';
 
 // Default label template: 70mm x 36mm (standard archive label)
 const DEFAULT_LAYOUT: LabelLayout = {
@@ -31,6 +31,20 @@ const LOCATION_LAYOUT: LabelLayout = {
     { key: 'title', label: 'Nazwa', x: 25, y: 12, maxWidth: 43, fontSize: 7 },
     { key: 'location', label: 'Ścieżka', x: 2, y: 22, maxWidth: 66, fontSize: 6 },
     { key: 'tenantName', label: 'Archiwum', x: 2, y: 30, maxWidth: 66, fontSize: 6 },
+  ],
+};
+
+const FOLDER_LAYOUT: LabelLayout = {
+  widthMm: 70,
+  heightMm: 36,
+  qrSizeMm: 20,
+  fontSize: 7,
+  fields: [
+    { key: 'boxNumber', label: 'Znak teczki', x: 25, y: 2, maxWidth: 43, fontSize: 7, bold: true },
+    { key: 'title', label: 'Tytuł', x: 25, y: 12, maxWidth: 43, fontSize: 7 },
+    { key: 'location', label: 'Karton', x: 2, y: 22, maxWidth: 30, fontSize: 6 },
+    { key: 'listNumber', label: 'Spis ZO', x: 35, y: 22, maxWidth: 33, fontSize: 6 },
+    { key: 'tenantName', label: 'Klient', x: 2, y: 30, maxWidth: 66, fontSize: 6 },
   ],
 };
 
@@ -170,6 +184,38 @@ export class LabelService {
     });
     const safeCode = location.code.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 50) || 'location';
     return { pdf, fileName: `location-${safeCode}-${location.id.slice(0, 8)}.pdf` };
+  }
+
+  async generateForFolder(folderId: string, tenantId: string, department?: string): Promise<{ pdf: Buffer; fileName: string }> {
+    if (!this.isUuid(folderId)) throw Object.assign(new Error('Teczka nie znaleziona'), { statusCode: 404 });
+    const folder = await prisma.folder.findFirst({
+      where: {
+        id: folderId,
+        tenantId,
+        ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}),
+      },
+      include: {
+        tenant: { select: { name: true } },
+        box: { select: { boxNumber: true } },
+        transferListItem: {
+          select: {
+            transferList: { select: { listNumber: true } },
+          },
+        },
+      },
+    });
+    if (!folder) throw Object.assign(new Error('Teczka nie znaleziona'), { statusCode: 404 });
+
+    const pdf = await pdfService.generateLabel(FOLDER_LAYOUT, {
+      qrData: generateFolderQrData(folder.id),
+      boxNumber: folder.folderNumber,
+      title: folder.title,
+      location: folder.box?.boxNumber || '-',
+      listNumber: folder.transferListItem?.transferList.listNumber || '-',
+      tenantName: folder.tenant.name,
+    });
+    const safeNumber = folder.folderNumber.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 50) || 'folder';
+    return { pdf, fileName: `folder-${safeNumber}-${folder.id.slice(0, 8)}.pdf` };
   }
 
   async generateForBoxes(boxIdentifiers: string[], tenantId: string, templateId?: string, userId?: string): Promise<Buffer> {

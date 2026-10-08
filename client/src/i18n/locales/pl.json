@@ -177,7 +177,13 @@
     "location": "Lokalizacja",
     "source": "Źródło",
     "empty": "Brak teczek",
-    "folderCount": "Liczba teczek: {{count}}"
+    "folderCount": "Liczba teczek: {{count}}",
+    "notFound": "Teczka nie znaleziona lub brak dostępu",
+    "printLabel": "Drukuj etykietę",
+    "documentsCount": "Liczba dokumentów",
+    "storageAndSource": "Przechowywanie i spis",
+    "noBox": "Teczka nie ma przypisanego kartonu",
+    "noLocation": "Brak lokalizacji"
   },
 
   "orders": {
@@ -853,6 +859,9 @@
     "scanTab": "Skanuj QR",
     "singleLabel": "Pojedyncza etykieta",
     "locationLabel": "Etykieta lokalizacji",
+    "folderLabel": "Etykieta teczki",
+    "folder": "Teczka",
+    "folderLabelHint": "Kod QR prowadzi do szczegółów tej teczki. Wydruk ma stały format 70×36 mm.",
     "location": "Lokalizacja",
     "locationLabelHint": "Kod QR prowadzi do kartonów w tej lokalizacji. Wydruk ma stały format 70×36 mm.",
     "boxId": "Karton",
@@ -886,12 +895,14 @@
     "manualInput": "Lub wpisz kod ręcznie:",
     "format": "Format: AC:KOD_TENANTA:NUMER_KARTONU:CRC16",
     "cameraError": "Nie udało się uruchomić skanera. Sprawdź uprawnienia kamery i połączenie HTTPS.",
-    "invalidCode": "To nie jest poprawny kod QR kartonu ani lokalizacji ArchiveCore.",
+    "invalidCode": "To nie jest poprawny kod QR ArchiveCore.",
     "boxNotFound": "Nie znaleziono kartonu dla tego kodu w wybranym tenancie.",
+    "folderNotFound": "Teczka nie istnieje lub nie jest dostępna w wybranym tenancie.",
     "locationNotFound": "Lokalizacja nie istnieje lub nie jest dostępna w wybranym tenancie.",
     "findingBox": "Szukam zasobu...",
     "findBox": "Otwórz",
-    "locationFormat": "Kod lokalizacji: ACLOC:UUID:CRC16"
+    "locationFormat": "Kod lokalizacji: ACLOC:UUID:CRC16",
+    "folderFormat": "Kod teczki: ACF:UUID:CRC16"
   },
 
   "search": {
@@ -1148,6 +1159,11 @@
   },
 
   "statuses": {
+    "folder": {
+      "active": "Aktywna",
+      "checked_out": "Wydana",
+      "disposed": "Wybrakowana"
+    },
     "box": {
       "active": "Aktywny",
       "checked_out": "Wydany",

@@ -177,7 +177,13 @@
     "location": "Location",
     "source": "Source",
     "empty": "No folders",
-    "folderCount": "Folder count: {{count}}"
+    "folderCount": "Folder count: {{count}}",
+    "notFound": "Folder not found or access denied",
+    "printLabel": "Print label",
+    "documentsCount": "Documents",
+    "storageAndSource": "Storage and transfer list",
+    "noBox": "This folder is not assigned to a box",
+    "noLocation": "No location"
   },
 
   "orders": {
@@ -853,6 +859,9 @@
     "scanTab": "Scan QR",
     "singleLabel": "Single label",
     "locationLabel": "Location label",
+    "folderLabel": "Folder label",
+    "folder": "Folder",
+    "folderLabelHint": "The QR code opens this folder's details. Print size is fixed at 70×36 mm.",
     "location": "Location",
     "locationLabelHint": "The QR code opens boxes in this location. Print size is fixed at 70×36 mm.",
     "boxId": "Box",
@@ -886,12 +895,14 @@
     "manualInput": "Or enter code manually:",
     "format": "Format: AC:TENANT_CODE:BOX_NUMBER:CRC16",
     "cameraError": "Could not start the scanner. Check camera permissions and HTTPS.",
-    "invalidCode": "This is not a valid ArchiveCore box or location QR code.",
+    "invalidCode": "This is not a valid ArchiveCore QR code.",
     "boxNotFound": "No box matches this code in the selected tenant.",
+    "folderNotFound": "The folder does not exist or is not available in the selected tenant.",
     "locationNotFound": "The location does not exist or is not available in the selected tenant.",
     "findingBox": "Finding item...",
     "findBox": "Open",
-    "locationFormat": "Location code: ACLOC:UUID:CRC16"
+    "locationFormat": "Location code: ACLOC:UUID:CRC16",
+    "folderFormat": "Folder code: ACF:UUID:CRC16"
   },
 
   "search": {
@@ -1158,6 +1169,11 @@
   },
 
   "statuses": {
+    "folder": {
+      "active": "Active",
+      "checked_out": "Checked out",
+      "disposed": "Disposed"
+    },
     "box": {
       "active": "Active",
       "checked_out": "Checked out",
