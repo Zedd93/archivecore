@@ -77,6 +77,15 @@ export class BoxController {
     } catch (err) { next(err); }
   }
 
+  async bulkReceive(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { ids, locationId, notes } = req.body;
+      const result = await boxService.bulkReceive(ids, req.tenantId, locationId, req.user!.userId, notes, req.accessDepartment || undefined);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
   async bulkDelete(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

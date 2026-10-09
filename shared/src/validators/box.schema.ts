@@ -55,6 +55,11 @@ export const bulkBoxMoveSchema = bulkBoxIdsSchema.and(z.object({
   notes: z.string().optional(),
 }));
 
+export const bulkBoxReceiveSchema = bulkBoxIdsSchema.and(z.object({
+  locationId: boxLocationIdSchema,
+  notes: z.string().trim().max(1000).optional(),
+}));
+
 export const bulkBoxDeleteSchema = bulkBoxIdsSchema;
 
 export const boxFilterSchema = z.object({

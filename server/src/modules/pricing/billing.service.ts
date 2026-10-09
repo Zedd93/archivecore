@@ -68,8 +68,8 @@ export class BillingService {
     });
   }
 
-  private async assertPeriodOpen(tenantId: string, periodStart: Date) {
-    const period = await prisma.billingPeriod.findUnique({
+  private async assertPeriodOpen(tenantId: string, periodStart: Date, db: typeof prisma | Prisma.TransactionClient = prisma) {
+    const period = await db.billingPeriod.findUnique({
       where: { tenantId_periodStart: { tenantId, periodStart } },
     });
     if (period?.status === BillingPeriodStatus.closed) {
@@ -116,6 +116,35 @@ export class BillingService {
         status: rate ? BillingEventStatus.pending : BillingEventStatus.unpriced,
       }];
     });
+  }
+
+  async buildBoxIntakeEvents(
+    boxes: Array<{ id: string; boxNumber: string }>, tenantId: string, occurredAt: Date, db: typeof prisma | Prisma.TransactionClient = prisma,
+  ): Promise<Prisma.BillingEventCreateManyInput[]> {
+    const periodStart = billingPeriodFor(occurredAt);
+    await this.assertPeriodOpen(tenantId, periodStart, db);
+    const priceList = await this.findPriceList(tenantId, startOfUtcDay(occurredAt), db);
+    const rate = priceList?.items.find((item) => item.serviceCode === 'intake_box');
+    const catalogEntry = serviceCatalog.get('intake_box')!;
+    return boxes.map((box) => ({
+      tenantId,
+      priceListId: priceList?.id,
+      priceListItemId: rate?.id,
+      serviceCode: 'intake_box',
+      serviceName: rate?.serviceName || catalogEntry.defaultName,
+      unit: rate?.unit || catalogEntry.unit,
+      quantity: new Prisma.Decimal(1),
+      unitPrice: rate?.unitPrice,
+      netAmount: rate?.unitPrice || null,
+      vatRate: rate?.vatRate || new Prisma.Decimal(23),
+      currency: priceList?.currency || 'PLN',
+      sourceType: 'box_intake',
+      sourceId: box.id,
+      description: `Przyjęcie kartonu ${box.boxNumber}`,
+      occurredAt,
+      billingPeriod: periodStart,
+      status: rate ? BillingEventStatus.pending : BillingEventStatus.unpriced,
+    }));
   }
 
   async listForTenant(tenantId: string, filters: any, skip: number, take: number) {

@@ -54,3 +54,6 @@ jobs:
 
       - name: Verify saved inventory sessions
         run: npm run test:inventory-sessions
+
+      - name: Verify QR warehouse receiving
+        run: npm run test:warehouse-receive

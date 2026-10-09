@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
+import { billingService } from '../pricing/billing.service';
 
 function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxOrderByWithRelationInput {
   switch (sortBy) {
@@ -17,7 +18,7 @@ function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxO
   }
 }
 
-function buildBoxWhereSql(filters: any, tenantId: string, department: string | undefined, locationIds: string[] | null) {
+export function buildBoxWhereSql(filters: any, tenantId: string, department: string | undefined, locationIds: string[] | null) {
   const conditions: Prisma.Sql[] = [
     Prisma.sql`"tenantId" = ${tenantId}::uuid`,
     Prisma.sql`"deletedAt" IS NULL`,
@@ -26,7 +27,8 @@ function buildBoxWhereSql(filters: any, tenantId: string, department: string | u
   if (department) conditions.push(Prisma.sql`"department" ILIKE ${department}`);
   if (filters.status) conditions.push(Prisma.sql`"status"::text = ${String(filters.status)}`);
   if (filters.docType) conditions.push(Prisma.sql`"docType" = ${String(filters.docType)}`);
-  if (locationIds) conditions.push(Prisma.sql`"locationId" IN (${Prisma.join(locationIds.map(id => Prisma.sql`${id}::uuid`))})`);
+  if (filters.unlocated === 'true') conditions.push(Prisma.sql`"locationId" IS NULL`);
+  else if (locationIds) conditions.push(Prisma.sql`"locationId" IN (${Prisma.join(locationIds.map(id => Prisma.sql`${id}::uuid`))})`);
   if (filters.search) {
     const search = `%${String(filters.search)}%`;
     conditions.push(Prisma.sql`("title" ILIKE ${search} OR "boxNumber" ILIKE ${search} OR "qrCode" ILIKE ${search})`);
@@ -103,7 +105,9 @@ export class BoxService {
     if (department) where.department = { equals: department, mode: 'insensitive' };
     if (filters.status) where.status = filters.status;
     if (filters.docType) where.docType = filters.docType;
-    if (filters.locationId) {
+    if (filters.unlocated === 'true') {
+      where.locationId = null;
+    } else if (filters.locationId) {
       locationIds = await this.getLocationAndDescendantIds(String(filters.locationId), tenantId);
       where.locationId = { in: locationIds };
     }
@@ -425,6 +429,50 @@ export class BoxService {
       });
 
       return { updated: boxes.length, moved: movedBoxes.length };
+    });
+  }
+
+  async bulkReceive(ids: string[], tenantId: string, locationId: string, userId: string, notes?: string, department?: string) {
+    await this.validateBoxLocation(locationId, tenantId);
+    const uniqueIds = [...new Set(ids)];
+    const occurredAt = new Date();
+
+    return prisma.$transaction(async (tx) => {
+      const boxes = await tx.box.findMany({
+        where: {
+          id: { in: uniqueIds }, tenantId, deletedAt: null,
+          ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+        },
+        select: { id: true, boxNumber: true, locationId: true, status: true },
+      });
+      if (boxes.length !== uniqueIds.length) {
+        throw Object.assign(new Error('Nie znaleziono wszystkich wybranych kartonów'), { statusCode: 404 });
+      }
+      if (boxes.some((box) => box.locationId !== null || box.status !== 'active')) {
+        throw Object.assign(new Error('Przyjąć można tylko aktywne kartony bez przypisanej lokalizacji'), { statusCode: 409 });
+      }
+      const previousReceipts = await tx.custodyEvent.findMany({
+        where: { boxId: { in: uniqueIds }, eventType: 'receipt' },
+        select: { boxId: true },
+      });
+      if (previousReceipts.length > 0) {
+        throw Object.assign(new Error('Co najmniej jeden karton był już przyjęty. Sprawdź jego historię.'), { statusCode: 409 });
+      }
+
+      const billingEvents = await billingService.buildBoxIntakeEvents(boxes, tenantId, occurredAt, tx);
+      const updated = await tx.box.updateMany({
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, locationId: null, status: 'active' },
+        data: { locationId },
+      });
+      if (updated.count !== boxes.length) {
+        throw Object.assign(new Error('Stan kartonów zmienił się. Odśwież listę i spróbuj ponownie.'), { statusCode: 409 });
+      }
+      await tx.location.update({ where: { id: locationId }, data: { currentCount: { increment: boxes.length } } });
+      await tx.custodyEvent.createMany({
+        data: boxes.map((box) => ({ boxId: box.id, eventType: 'receipt' as const, toUserId: userId, toLocationId: locationId, notes, eventAt: occurredAt })),
+      });
+      await tx.billingEvent.createMany({ data: billingEvents });
+      return { received: boxes.length };
     });
   }
 

@@ -1094,6 +1094,7 @@
       "folders": "Folders",
       "locations": "Locations",
       "warehouseMove": "QR relocation",
+      "warehouseReceive": "QR intake",
       "inventory": "QR shelf check",
       "loans": "Loans",
       "orders": "Orders",
@@ -1167,6 +1168,34 @@
     "resolutionStatus": { "open": "Open", "resolved": "Resolved" },
     "resolutionAction": { "resolved": "Resolved", "reopened": "Reopened" },
     "discrepancyKind": { "missing": "Not found", "wrong_location": "Different recorded location", "unexpected": "Unexpected on shelf" }
+  },
+
+  "warehouseReceive": {
+    "title": "Receive boxes by QR",
+    "subtitle": "Scan boxes without a recorded location, choose a shelf and confirm intake. The operation records custody and a billing event.",
+    "scanner": "Batch scanning",
+    "manualCode": "Box or shelf QR code",
+    "addCode": "Check code",
+    "boxes": "Boxes to receive ({{count}})",
+    "findBox": "Find an active box without a location",
+    "noBoxes": "No boxes selected yet.",
+    "boxAdded": "Added box {{number}}",
+    "boxNotFound": "No active unlocated box found for this company",
+    "duplicate": "This box is already on the list",
+    "invalidCode": "Invalid ArchiveCore QR code",
+    "invalidDestination": "The code does not identify an active shelf, level or slot",
+    "destinationAdded": "Destination shelf selected",
+    "destination": "Intake location",
+    "chooseDestination": "Choose a shelf, level or slot",
+    "notes": "Intake notes (optional)",
+    "receive": "Confirm intake",
+    "receiveCount": "Receive boxes ({{count}})",
+    "confirmTitle": "Confirm intake",
+    "confirmMessage": "Receive {{count}} boxes into {{location}}? This action will be recorded in custody history and billing.",
+    "success": "Received {{count}} boxes",
+    "error": "Could not receive boxes",
+    "incomplete": "Not all boxes were received. Refresh and try again.",
+    "noPermission": "You do not have permission to receive boxes."
   },
 
   "warehouseMove": {

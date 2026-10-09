@@ -20,6 +20,7 @@ interface BoxPickerProps {
   tenantId?: string;
   showLocation?: boolean;
   showSelectedChips?: boolean;
+  unlocatedOnly?: boolean;
 }
 
 export default function BoxPicker({
@@ -31,6 +32,7 @@ export default function BoxPicker({
   tenantId,
   showLocation = false,
   showSelectedChips = true,
+  unlocatedOnly = false,
 }: BoxPickerProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
@@ -67,14 +69,14 @@ export default function BoxPicker({
 
   // Fetch boxes from API
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['box-picker', tenantId || 'active', debouncedSearch],
+    queryKey: ['box-picker', tenantId || 'active', debouncedSearch, unlocatedOnly],
     queryFn: async () => {
       if (!debouncedSearch || debouncedSearch.length < 1) return [];
       const previousTenantId = localStorage.getItem('tenantId');
       if (tenantId) localStorage.setItem('tenantId', tenantId);
       try {
         const { data } = await api.get('/boxes', {
-          params: { search: debouncedSearch, limit: 10 },
+          params: { search: debouncedSearch, limit: 10, ...(unlocatedOnly ? { unlocated: 'true', status: 'active' } : {}) },
         });
         return (data.data || []) as Array<SelectedBox>;
       } finally {
@@ -143,6 +145,7 @@ export default function BoxPicker({
           }}
           className="input-field pl-9"
           placeholder={placeholder || t('common.search')}
+          aria-label={placeholder || t('common.search')}
           autoComplete="off"
         />
         {isFetching && (

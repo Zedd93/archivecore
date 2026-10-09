@@ -1094,6 +1094,7 @@
       "folders": "Teczki",
       "locations": "Lokalizacje",
       "warehouseMove": "Przenoszenie QR",
+      "warehouseReceive": "Przyjęcie QR",
       "inventory": "Kontrola półki QR",
       "loans": "Wypożyczenia",
       "orders": "Zlecenia",
@@ -1167,6 +1168,34 @@
     "resolutionStatus": { "open": "Do wyjaśnienia", "resolved": "Wyjaśnione" },
     "resolutionAction": { "resolved": "Wyjaśniono", "reopened": "Otwarto ponownie" },
     "discrepancyKind": { "missing": "Nieodnaleziony", "wrong_location": "Inna lokalizacja w ewidencji", "unexpected": "Niespodziewany na półce" }
+  },
+
+  "warehouseReceive": {
+    "title": "Przyjęcie kartonów przez QR",
+    "subtitle": "Zeskanuj kartony jeszcze nieprzypisane do lokalizacji, wybierz półkę i potwierdź przyjęcie. Operacja zapisuje historię oraz pozycję rozliczeniową.",
+    "scanner": "Skanowanie seryjne",
+    "manualCode": "Kod QR kartonu albo półki",
+    "addCode": "Sprawdź kod",
+    "boxes": "Kartony do przyjęcia ({{count}})",
+    "findBox": "Znajdź aktywny karton bez lokalizacji",
+    "noBoxes": "Nie wybrano jeszcze kartonów.",
+    "boxAdded": "Dodano karton {{number}}",
+    "boxNotFound": "Nie znaleziono aktywnego kartonu bez lokalizacji w tej firmie",
+    "duplicate": "Ten karton jest już na liście",
+    "invalidCode": "Nieprawidłowy kod QR ArchiveCore",
+    "invalidDestination": "Kod nie wskazuje aktywnej półki, poziomu ani pozycji",
+    "destinationAdded": "Wybrano półkę docelową",
+    "destination": "Miejsce przyjęcia",
+    "chooseDestination": "Wybierz półkę, poziom lub pozycję",
+    "notes": "Uwagi do przyjęcia (opcjonalnie)",
+    "receive": "Potwierdź przyjęcie",
+    "receiveCount": "Przyjmij kartony ({{count}})",
+    "confirmTitle": "Potwierdź przyjęcie",
+    "confirmMessage": "Przyjąć {{count}} kartonów do lokalizacji: {{location}}? Ta czynność zostanie zapisana w historii i rozliczeniach.",
+    "success": "Przyjęto {{count}} kartonów",
+    "error": "Nie udało się przyjąć kartonów",
+    "incomplete": "Nie przyjęto wszystkich kartonów. Odśwież listę i spróbuj ponownie.",
+    "noPermission": "Nie masz uprawnienia do przyjmowania kartonów."
   },
 
   "warehouseMove": {
