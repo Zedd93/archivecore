@@ -24,6 +24,7 @@
     "test:billing-invoice": "node --test server/scripts/test-billing-invoice.cjs",
     "test:qr": "node --import tsx --test server/scripts/test-qr.mjs",
     "test:order-picking": "node --import tsx --test server/scripts/test-order-picking.mjs",
+    "test:loan-return": "node --import tsx --test server/scripts/test-loan-return.mjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",

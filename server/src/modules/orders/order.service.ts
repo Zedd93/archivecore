@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '@prisma/client';
 import { canMarkReadyAfterPicking, isValidTransition } from './order-state-machine';
-import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS } from '@archivecore/shared';
+import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS, generateFolderQrData } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
 
@@ -643,16 +643,38 @@ export class OrderService {
 
     const returnedAt = new Date();
     const boxId = this.getOrderItemBoxId(item);
-    const operations: Prisma.PrismaPromise<any>[] = [
-      prisma.orderItem.update({
-        where: { id: itemId },
-        data: { itemStatus: OrderItemStatus.returned },
-      }),
-    ];
+    await prisma.$transaction(async (tx) => {
+      const lockedOrder = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+        SELECT "id" FROM "orders"
+        WHERE "id" = ${orderId}::uuid AND "tenantId" = ${tenantId}::uuid
+        FOR UPDATE
+      `);
+      if (lockedOrder.length !== 1) {
+        throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 });
+      }
+      if (boxId) {
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "id" FROM "boxes"
+          WHERE "id" = ${boxId}::uuid AND "tenantId" = ${tenantId}::uuid
+          FOR UPDATE
+        `);
+      }
 
-    if (boxId) {
-      operations.push(
-        prisma.custodyEvent.create({
+      const updated = await tx.orderItem.updateMany({
+        where: {
+          id: itemId,
+          orderId,
+          itemStatus: OrderItemStatus.delivered,
+          order: { tenantId, orderType: 'checkout', status: { in: ['delivered', 'completed'] } },
+        },
+        data: { itemStatus: OrderItemStatus.returned },
+      });
+      if (updated.count !== 1) {
+        throw Object.assign(new Error('Pozycja została już zwrócona. Odśwież listę wypożyczeń.'), { statusCode: 409 });
+      }
+
+      if (boxId) {
+        await tx.custodyEvent.create({
           data: {
             orderId,
             boxId,
@@ -662,52 +684,46 @@ export class OrderService {
             notes: `Zwrot pozycji z wypożyczenia ${order.orderNumber}`,
             eventAt: returnedAt,
           },
-        })
-      );
-    }
-
-    const remainingDeliveredItems = order.items.filter((entry: any) => (
-      entry.id !== itemId && entry.itemStatus === OrderItemStatus.delivered
-    ));
-    if (remainingDeliveredItems.length === 0 && order.status !== 'completed') {
-      operations.push(
-        prisma.order.update({
-          where: { id: orderId },
-          data: { status: 'completed', completedAt: returnedAt },
-        })
-      );
-    }
-
-    await prisma.$transaction(operations);
-
-    if (boxId) {
-      const stillCheckedOut = await prisma.orderItem.count({
-        where: {
-          id: { not: itemId },
-          itemStatus: OrderItemStatus.delivered,
-          order: {
-            tenantId,
-            orderType: 'checkout',
-            status: { in: ['delivered', 'completed'] },
-          },
-          OR: [
-            { boxId },
-            { folder: { boxId } },
-            { document: { boxId } },
-            { document: { folder: { boxId } } },
-            { transferListItem: { boxId } },
-            { hrFolder: { boxId } },
-          ],
-        },
-      });
-
-      if (stillCheckedOut === 0) {
-        await prisma.box.updateMany({
-          where: { id: boxId, tenantId, deletedAt: null },
-          data: { status: 'active' },
         });
       }
-    }
+
+      const remainingDeliveredItems = await tx.orderItem.count({
+        where: { orderId, itemStatus: OrderItemStatus.delivered },
+      });
+      if (remainingDeliveredItems === 0) {
+        await tx.order.updateMany({
+          where: { id: orderId, tenantId, status: 'delivered' },
+          data: { status: 'completed', completedAt: returnedAt },
+        });
+      }
+      if (boxId) {
+        const stillCheckedOut = await tx.orderItem.count({
+          where: {
+            id: { not: itemId },
+            itemStatus: OrderItemStatus.delivered,
+            order: {
+              tenantId,
+              orderType: 'checkout',
+              status: { in: ['delivered', 'completed'] },
+            },
+            OR: [
+              { boxId },
+              { folder: { boxId } },
+              { document: { boxId } },
+              { document: { folder: { boxId } } },
+              { transferListItem: { boxId } },
+              { hrFolder: { boxId } },
+            ],
+          },
+        });
+        if (stillCheckedOut === 0) {
+          await tx.box.updateMany({
+            where: { id: boxId, tenantId, deletedAt: null },
+            data: { status: 'active' },
+          });
+        }
+      }
+    });
 
     return this.getById(orderId, tenantId);
   }
@@ -808,7 +824,7 @@ export class OrderService {
             status: true,
           },
         },
-        box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } },
+        box: { select: { id: true, boxNumber: true, title: true, status: true, qrCode: true, location: { select: { fullPath: true } } } },
         folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, title: true, status: true, location: { select: { fullPath: true } } } } } },
         document: {
           select: {
@@ -902,6 +918,7 @@ export class OrderService {
           id: item.id,
           itemType,
           title,
+          qrCode: item.boxId ? item.box?.qrCode || null : item.folderId ? generateFolderQrData(item.folderId) : null,
           deliveredAt: item.deliveredAt,
           status: item.itemStatus,
           order: item.order,

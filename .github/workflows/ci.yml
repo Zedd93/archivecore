@@ -45,3 +45,6 @@ jobs:
 
       - name: Verify order picking
         run: npm run test:order-picking
+
+      - name: Verify loan returns
+        run: npm run test:loan-return
