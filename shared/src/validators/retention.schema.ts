@@ -31,4 +31,16 @@ export const initiateDisposalSchema = z.object({
 
 export const approveDisposalSchema = z.object({
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+export const rejectDisposalSchema = z.object({
+  boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
+  reason: z.string().trim().min(5, 'Podaj powód odrzucenia').max(1000),
+});
+
+export const completeDisposalSchema = z.object({
+  boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
+  protocolReference: z.string().trim().min(3, 'Podaj numer protokołu').max(200),
+  confirmed: z.literal(true),
 });

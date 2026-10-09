@@ -284,6 +284,7 @@ export default function BoxListPage() {
             <option value="active">{t('boxes.statusActive')}</option>
             <option value="checked_out">{t('boxes.statusIssued')}</option>
             <option value="pending_disposal">{t('boxes.statusForDestruction')}</option>
+            <option value="approved_disposal">{t('boxes.statusApprovedForDestruction')}</option>
             <option value="disposed">{t('boxes.statusDestroyed')}</option>
           </select>
           <select

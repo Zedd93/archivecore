@@ -15,6 +15,7 @@ type NotifyTenantUsersInput = NotificationPayload & {
   requiredPermissions?: PermissionString[];
   includeUserIds?: string[];
   excludeUserIds?: string[];
+  includeGlobalUsers?: boolean;
 };
 
 export class NotificationService {
@@ -56,7 +57,7 @@ export class NotificationService {
         isActive: true,
         OR: [
           ...(input.tenantId ? [{ tenantId: input.tenantId }] : []),
-          { tenantId: null },
+          ...(input.includeGlobalUsers === false ? [] : [{ tenantId: null }]),
           ...(includeUserIds.size > 0 ? [{ id: { in: [...includeUserIds] } }] : []),
         ],
       },

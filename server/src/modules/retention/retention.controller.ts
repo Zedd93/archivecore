@@ -99,10 +99,20 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
+  async getApprovedDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 25));
+      const boxes = await retentionService.getApprovedDisposal(req.tenantId, page, limit);
+      return successResponse(res, boxes);
+    } catch (err) { next(err); }
+  }
+
   async initiateDisposal(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const result = await retentionService.initiateDisposal(req.tenantId, req.body.boxIds, req.body.notes);
+      const result = await retentionService.initiateDisposal(req.tenantId, req.body.boxIds, req.user!.userId, req.body.notes);
       return successResponse(res, result);
     } catch (err) { next(err); }
   }
@@ -110,7 +120,23 @@ export class RetentionController {
   async approveDisposal(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const result = await retentionService.approveDisposal(req.tenantId, req.body.boxIds);
+      const result = await retentionService.approveDisposal(req.tenantId, req.body.boxIds, req.user!, req.body.notes);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async rejectDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const result = await retentionService.rejectDisposal(req.tenantId, req.body.boxIds, req.user!, req.body.reason);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async completeDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const result = await retentionService.completeDisposal(req.tenantId, req.body.boxIds, req.user!.userId, req.body.protocolReference);
       return successResponse(res, result);
     } catch (err) { next(err); }
   }

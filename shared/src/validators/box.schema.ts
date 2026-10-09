@@ -72,7 +72,7 @@ export const bulkBoxDeleteSchema = bulkBoxIdsSchema;
 
 export const boxFilterSchema = z.object({
   tenantId: z.string().uuid().optional(),
-  status: z.enum(['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged']).optional(),
+  status: z.enum(['active', 'checked_out', 'pending_disposal', 'approved_disposal', 'disposed', 'lost', 'damaged']).optional(),
   docType: optionalDocTypeSchema,
   locationId: z.string().uuid().optional(),
   dateFrom: z.string().optional(),

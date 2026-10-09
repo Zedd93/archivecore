@@ -301,6 +301,9 @@ export class BoxService {
 
   async update(id: string, tenantId: string, data: any) {
     const box = await this.getById(id, tenantId); // Verify access
+    if (box.status === 'disposed') {
+      throw Object.assign(new Error('Nie można edytować wybrakowanego kartonu'), { statusCode: 409 });
+    }
     await this.validateBoxLocation(data.locationId, tenantId);
 
     const updated = await prisma.box.update({
@@ -346,6 +349,9 @@ export class BoxService {
     await this.validateBoxLocation(locationId, tenantId);
 
     const box = await this.getById(id, tenantId);
+    if (box.status === 'disposed') {
+      throw Object.assign(new Error('Nie można przenieść wybrakowanego kartonu'), { statusCode: 409 });
+    }
     const oldLocationId = box.locationId;
 
     const updated = await prisma.box.update({
@@ -372,26 +378,26 @@ export class BoxService {
   }
 
   async changeStatus(id: string, tenantId: string, status: string) {
-    if (status === 'pending_disposal' || status === 'disposed') {
+    if (status === 'pending_disposal' || status === 'approved_disposal' || status === 'disposed') {
       throw Object.assign(new Error('Brakowanie jest dostępne wyłącznie w module retencji'), { statusCode: 409 });
     }
     await this.getById(id, tenantId);
     const result = await prisma.box.updateMany({
-      where: { id, tenantId, deletedAt: null, status: { not: 'disposed' } },
+      where: { id, tenantId, deletedAt: null, status: { notIn: ['pending_disposal', 'approved_disposal', 'disposed'] } },
       data: { status: status as any },
     });
-    if (result.count !== 1) throw Object.assign(new Error('Nie można zmienić statusu wybrakowanego kartonu'), { statusCode: 409 });
+    if (result.count !== 1) throw Object.assign(new Error('Nie można zmienić statusu kartonu w procesie brakowania'), { statusCode: 409 });
     return this.getById(id, tenantId);
   }
 
   async bulkChangeStatus(ids: string[], tenantId: string, status: string) {
-    if (status === 'pending_disposal' || status === 'disposed') {
+    if (status === 'pending_disposal' || status === 'approved_disposal' || status === 'disposed') {
       throw Object.assign(new Error('Brakowanie jest dostępne wyłącznie w module retencji'), { statusCode: 409 });
     }
     const uniqueIds = [...new Set(ids)];
     return prisma.$transaction(async (tx) => {
       const result = await tx.box.updateMany({
-        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, status: { not: 'disposed' } },
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, status: { notIn: ['pending_disposal', 'approved_disposal', 'disposed'] } },
         data: { status: status as any },
       });
       if (result.count !== uniqueIds.length) {
@@ -406,7 +412,7 @@ export class BoxService {
 
     const uniqueIds = [...new Set(ids)];
     const where = {
-      id: { in: uniqueIds }, tenantId, deletedAt: null,
+      id: { in: uniqueIds }, tenantId, deletedAt: null, status: { not: 'disposed' as const },
       ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
     };
 
@@ -539,7 +545,7 @@ export class BoxService {
       throw Object.assign(new Error('Nie można usunąć kartonu objętego blokadą brakowania'), { statusCode: 409 });
     }
 
-    if (boxes.some((box) => box.status === 'pending_disposal' || box.status === 'disposed')) {
+    if (boxes.some((box) => ['pending_disposal', 'approved_disposal', 'disposed'].includes(box.status))) {
       throw Object.assign(new Error('Nie można usunąć kartonu zgłoszonego do brakowania lub już wybrakowanego'), { statusCode: 409 });
     }
 
@@ -575,7 +581,7 @@ export class BoxService {
         where: { entityType: 'box', entityId: { in: uniqueIds } },
       });
       const deleted = await tx.box.updateMany({
-        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false, status: { notIn: ['pending_disposal', 'disposed'] } },
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false, status: { notIn: ['pending_disposal', 'approved_disposal', 'disposed'] } },
         data: { deletedAt: new Date(), locationId: null },
       });
       if (deleted.count !== uniqueIds.length) {
@@ -583,7 +589,7 @@ export class BoxService {
       }
 
       for (const locationId of locationIds) {
-        const currentCount = await tx.box.count({ where: { locationId, deletedAt: null } });
+        const currentCount = await tx.box.count({ where: { locationId, deletedAt: null, status: { not: 'disposed' } } });
         await tx.location.update({ where: { id: locationId }, data: { currentCount } });
       }
     });
@@ -608,7 +614,7 @@ export class BoxService {
       if (result.count !== 1) throw Object.assign(new Error('Stan kartonu zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
       if (hold) {
         await tx.box.updateMany({
-          where: { id, tenantId, status: 'pending_disposal' },
+          where: { id, tenantId, status: { in: ['pending_disposal', 'approved_disposal'] } },
           data: { status: 'active' },
         });
       }

@@ -9,11 +9,14 @@ const { RetentionService } = require('../dist/modules/retention/retention.servic
 const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
 const { boxLegalHoldSchema, changeBoxStatusSchema, bulkBoxStatusSchema } = require('../../shared/src/validators/box.schema.ts');
+const { approveDisposalSchema, rejectDisposalSchema, completeDisposalSchema } = require('../../shared/src/validators/retention.schema.ts');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
 const secondBoxId = '14a504c7-4864-4027-a02c-685201fb38f8';
 const locationId = '08675a3a-8a69-477a-82f1-b52d74b97bde';
+const proposerId = '0ab09ae1-75cb-4e65-9342-8b613196271f';
+const approver = { userId: 'c79989bc-eaeb-4a24-824b-5aef5453b90d', tenantId, roles: ['TL'], permissions: ['disposal.approve'] };
 
 test('legal hold requires a meaningful reason when enabled', () => {
   assert.equal(boxLegalHoldSchema.safeParse({ hold: true, reason: 'Spór sądowy' }).success, true);
@@ -36,7 +39,24 @@ test('holding a box cancels pending disposal in the same transaction', async () 
     assert.equal(updates[0].where.tenantId, tenantId);
     assert.equal(updates[0].data.legalHold, true);
     assert.equal(updates[0].data.legalHoldReason, 'Spór sądowy');
-    assert.equal(updates[1].where.status, 'pending_disposal');
+    assert.deepEqual(updates[1].where.status.in, ['pending_disposal', 'approved_disposal']);
+    assert.equal(updates[1].data.status, 'active');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('holding an approved box also withdraws it from disposal', async () => {
+  const service = new BoxService();
+  const updates = [];
+  const mocks = [
+    mock.method(service, 'getById', async () => ({ id: boxId, status: 'approved_disposal' })),
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: { updateMany: async (args) => { updates.push(args); return { count: 1 }; } },
+    })),
+  ];
+  try {
+    await service.setLegalHold(boxId, tenantId, true, 'Spór sądowy');
     assert.equal(updates[1].data.status, 'active');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
@@ -46,8 +66,10 @@ test('holding a box cancels pending disposal in the same transaction', async () 
 test('ordinary box status changes cannot bypass disposal workflow', async () => {
   const service = new BoxService();
   assert.equal(changeBoxStatusSchema.safeParse({ status: 'disposed' }).success, false);
+  assert.equal(changeBoxStatusSchema.safeParse({ status: 'approved_disposal' }).success, false);
   assert.equal(bulkBoxStatusSchema.safeParse({ ids: [boxId], status: 'pending_disposal' }).success, false);
   await assert.rejects(service.changeStatus(boxId, tenantId, 'disposed'), { statusCode: 409 });
+  await assert.rejects(service.changeStatus(boxId, tenantId, 'approved_disposal'), { statusCode: 409 });
   await assert.rejects(service.bulkChangeStatus([boxId], tenantId, 'pending_disposal'), { statusCode: 409 });
 });
 
@@ -55,7 +77,7 @@ test('bulk status updates cannot revive a disposed box', async () => {
   const service = new BoxService();
   const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
     box: { updateMany: async ({ where }) => {
-      assert.deepEqual(where.status, { not: 'disposed' });
+      assert.deepEqual(where.status, { notIn: ['pending_disposal', 'approved_disposal', 'disposed'] });
       return { count: 0 };
     } },
   }))];
@@ -140,28 +162,53 @@ test('pending disposal list remains tenant-scoped and paginated', async () => {
   }
 });
 
-test('approving disposal fails without changing location counts when a box is held', async () => {
+test('approved disposal list remains tenant-scoped and paginated', async () => {
+  const service = new RetentionService();
+  const originalFindMany = prisma.box.findMany;
+  const originalCount = prisma.box.count;
+  prisma.box.findMany = async ({ where, skip, take }) => {
+    assert.equal(where.tenantId, tenantId);
+    assert.equal(where.status, 'approved_disposal');
+    assert.equal(skip, 25);
+    assert.equal(take, 25);
+    return [{ id: boxId }];
+  };
+  prisma.box.count = async ({ where }) => {
+    assert.equal(where.tenantId, tenantId);
+    return 26;
+  };
+  try {
+    const result = await service.getApprovedDisposal(tenantId, 2, 25);
+    assert.equal(result.total, 26);
+  } finally {
+    prisma.box.findMany = originalFindMany;
+    prisma.box.count = originalCount;
+  }
+});
+
+test('client approval fails without changing location counts when a box is held', async () => {
   const service = new RetentionService();
   let updated = false;
   let locationChanged = false;
   const mocks = [
     mock.method(prisma, '$transaction', async (callback) => callback({
       box: {
-        findMany: async ({ where }) => {
+        updateMany: async ({ where }) => {
           assert.equal(where.legalHold, false);
           assert.deepEqual(where.hrFolders, { none: {} });
           assert.ok(where.retentionDate.lte instanceof Date);
-          return [{ id: boxId, locationId }];
+          updated = true;
+          return { count: 1 };
         },
-        updateMany: async () => { updated = true; return { count: 2 }; },
       },
+      auditLog: { findMany: async () => [] },
       location: { update: async () => { locationChanged = true; } },
     })),
     mock.method(notificationService, 'notifyTenantUsers', async () => { throw new Error('Unexpected notification'); }),
   ];
   try {
-    await assert.rejects(service.approveDisposal(tenantId, [boxId, secondBoxId]), { statusCode: 409 });
-    assert.equal(updated, false);
+    await assert.rejects(service.approveDisposal(tenantId, [boxId, secondBoxId], approver), { statusCode: 409 });
+    assert.equal(updated, true);
     assert.equal(locationChanged, false);
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
@@ -184,7 +231,7 @@ test('starting disposal rejects the whole selection when one box is held', async
     mock.method(notificationService, 'notifyTenantUsers', async () => { notified = true; }),
   ];
   try {
-    await assert.rejects(service.initiateDisposal(tenantId, [boxId, secondBoxId]), { statusCode: 409 });
+    await assert.rejects(service.initiateDisposal(tenantId, [boxId, secondBoxId], proposerId), { statusCode: 409 });
     assert.equal(notified, false);
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
@@ -194,6 +241,7 @@ test('starting disposal rejects the whole selection when one box is held', async
 test('starting disposal submits only due, eligible boxes and notifies reviewers', async () => {
   const service = new RetentionService();
   let notified = false;
+  const audits = [];
   const mocks = [
     mock.method(prisma, '$transaction', async (callback) => callback({
       box: { updateMany: async ({ where, data }) => {
@@ -201,47 +249,139 @@ test('starting disposal submits only due, eligible boxes and notifies reviewers'
         assert.ok(where.retentionDate.lte instanceof Date);
         assert.equal(where.retentionPolicy.is.isPermanent, false);
         assert.equal(data.status, 'pending_disposal');
+        assert.equal(data.notes, undefined);
         return { count: 1 };
       } },
+      auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
     })),
-    mock.method(notificationService, 'notifyTenantUsers', async ({ tenantId: recipientTenant }) => {
+    mock.method(notificationService, 'notifyTenantUsers', async ({ tenantId: recipientTenant, includeGlobalUsers }) => {
       assert.equal(recipientTenant, tenantId);
+      assert.equal(includeGlobalUsers, false);
       notified = true;
     }),
   ];
   try {
-    const result = await service.initiateDisposal(tenantId, [boxId, boxId]);
+    const result = await service.initiateDisposal(tenantId, [boxId, boxId], proposerId);
     assert.deepEqual(result.boxIds, [boxId]);
     assert.equal(result.count, 1);
     assert.equal(notified, true);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].userId, proposerId);
+    assert.equal(audits[0].action, 'disposal.proposed');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
 });
 
-test('approving eligible boxes decrements each location only for disposed boxes', async () => {
+test('client approval is tenant-scoped and cannot approve the actor own proposal', async () => {
+  const service = new RetentionService();
+  await assert.rejects(service.approveDisposal(tenantId, [boxId], { ...approver, tenantId: secondBoxId }), { statusCode: 403 });
+  const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
+    auditLog: { findMany: async () => [{ entityId: boxId, userId: approver.userId }] },
+    box: { updateMany: async () => { throw new Error('Should not update'); } },
+  }))];
+  try {
+    await assert.rejects(service.approveDisposal(tenantId, [boxId], approver), { statusCode: 409 });
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('client approval records a decision without changing occupancy', async () => {
   const service = new RetentionService();
   const locations = [];
+  const audits = [];
   const mocks = [
     mock.method(prisma, '$transaction', async (callback) => callback({
       box: {
-        findMany: async () => [{ id: boxId, locationId }, { id: secondBoxId, locationId }],
-        updateMany: async ({ where }) => {
+        updateMany: async ({ where, data }) => {
           assert.equal(where.legalHold, false);
+          assert.equal(where.status, 'pending_disposal');
+          assert.equal(data.status, 'approved_disposal');
           return { count: 2 };
         },
+      },
+      auditLog: {
+        findMany: async () => [{ entityId: boxId, userId: proposerId }, { entityId: secondBoxId, userId: proposerId }],
+        createMany: async ({ data }) => { audits.push(...data); },
       },
       location: { update: async (args) => { locations.push(args); } },
     })),
     mock.method(notificationService, 'notifyTenantUsers', async () => {}),
   ];
   try {
-    const result = await service.approveDisposal(tenantId, [boxId, secondBoxId]);
+    const result = await service.approveDisposal(tenantId, [boxId, secondBoxId], approver);
     assert.equal(result.count, 2);
-    assert.deepEqual(locations, [{ where: { id: locationId }, data: { currentCount: { decrement: 2 } } }]);
+    assert.deepEqual(locations, []);
+    assert.equal(audits.length, 2);
+    assert.equal(audits[0].action, 'disposal.client_approved');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
+});
+
+test('rejected proposal restores active status and records reason', async () => {
+  const service = new RetentionService();
+  const audits = [];
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: { updateMany: async ({ where, data }) => {
+        assert.equal(where.tenantId, tenantId);
+        assert.equal(where.status, 'pending_disposal');
+        assert.equal(data.status, 'active');
+        return { count: 1 };
+      } },
+      auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async () => {}),
+  ];
+  try {
+    await service.rejectDisposal(tenantId, [boxId], approver, 'Błędna kategoria');
+    assert.equal(audits[0].newValues.reason, 'Błędna kategoria');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('only completed disposal changes folders and warehouse occupancy', async () => {
+  const service = new RetentionService();
+  const locations = [];
+  const folders = [];
+  const audits = [];
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: {
+        findMany: async ({ where }) => {
+          assert.equal(where.status, 'approved_disposal');
+          return [{ id: boxId, locationId }, { id: secondBoxId, locationId }];
+        },
+        updateMany: async ({ data }) => { assert.equal(data.status, 'disposed'); assert.equal(data.locationId, null); return { count: 2 }; },
+        count: async ({ where }) => { assert.equal(where.locationId, locationId); return 0; },
+      },
+      folder: { updateMany: async (args) => { folders.push(args); } },
+      location: { update: async (args) => { locations.push(args); } },
+      auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async () => {}),
+  ];
+  try {
+    const result = await service.completeDisposal(tenantId, [boxId, secondBoxId], proposerId, 'PROT-2026-1');
+    assert.equal(result.count, 2);
+    assert.deepEqual(locations, [{ where: { id: locationId }, data: { currentCount: 0 } }]);
+    assert.equal(folders[0].data.status, 'disposed');
+    assert.equal(audits[0].newValues.protocolReference, 'PROT-2026-1');
+    assert.equal(audits[0].oldValues.locationId, locationId);
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('disposal decisions require a reason, protocol and explicit confirmation', () => {
+  assert.equal(approveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
+  assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Nie' }).success, false);
+  assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: false }).success, false);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true }).success, true);
 });
 
 test('disposal orders resolve boxes through transfer list folders', async () => {

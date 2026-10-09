@@ -1,4 +1,4 @@
-export type BoxStatus = 'active' | 'checked_out' | 'pending_disposal' | 'disposed' | 'lost' | 'damaged';
+export type BoxStatus = 'active' | 'checked_out' | 'pending_disposal' | 'approved_disposal' | 'disposed' | 'lost' | 'damaged';
 
 export interface IBox {
   id: string;

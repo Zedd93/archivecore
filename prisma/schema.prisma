@@ -26,6 +26,7 @@ enum BoxStatus {
   active
   checked_out
   pending_disposal
+  approved_disposal
   disposed
   lost
   damaged

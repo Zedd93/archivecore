@@ -69,7 +69,7 @@ export class ReportService {
         where: { tenantId, type: 'slot' },
         select: { capacity: true, currentCount: true },
       }),
-      prisma.box.count({ where: { tenantId, status: 'pending_disposal', deletedAt: null } }),
+      prisma.box.count({ where: { tenantId, status: { in: ['pending_disposal', 'approved_disposal'] }, deletedAt: null } }),
       prisma.user.count({ where: { tenantId, isActive: true } }),
     ]);
 
@@ -160,7 +160,7 @@ export class ReportService {
       }),
       prisma.box.groupBy({
         by: ['locationId'],
-        where: { tenantId, locationId: { not: null }, deletedAt: null },
+        where: { tenantId, locationId: { not: null }, deletedAt: null, status: { not: 'disposed' } },
         _count: true,
       }),
     ]);

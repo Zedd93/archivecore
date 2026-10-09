@@ -90,7 +90,7 @@ export default function ReportsPage() {
   const isLoading = l1 || l2 || lDocTypes || l3 || l4 || l5 || lHrStatus || l6;
 
   const STATUS_COLORS: Record<string, string> = {
-    active: 'bg-green-500', checked_out: 'bg-yellow-500', pending_disposal: 'bg-orange-500',
+    active: 'bg-green-500', checked_out: 'bg-yellow-500', pending_disposal: 'bg-orange-500', approved_disposal: 'bg-blue-500',
     disposed: 'bg-red-500', draft: 'bg-gray-400', submitted: 'bg-blue-400',
     approved: 'bg-blue-600', in_progress: 'bg-yellow-500', ready: 'bg-indigo-500',
     delivered: 'bg-purple-500', completed: 'bg-green-500', cancelled: 'bg-red-400',

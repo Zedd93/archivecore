@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useCreate } from '@/hooks/useApi';
-import { DOC_TYPES, Permissions } from '@archivecore/shared';
+import { DOC_TYPES, Permissions, RoleCode } from '@archivecore/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
 import DataTable, { Column } from '@/components/ui/DataTable';
@@ -17,7 +17,7 @@ const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
 
 export default function RetentionPage() {
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const queryClient = useQueryClient();
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
   const [showJrwaImport, setShowJrwaImport] = useState(false);
@@ -26,7 +26,15 @@ export default function RetentionPage() {
   const [duePage, setDuePage] = useState(1);
   const [upcomingPage, setUpcomingPage] = useState(1);
   const [pendingPage, setPendingPage] = useState(1);
+  const [approvedPage, setApprovedPage] = useState(1);
   const [selectedDueIds, setSelectedDueIds] = useState<Set<string>>(new Set());
+  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
+  const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<string>>(new Set());
+  const [disposalAction, setDisposalAction] = useState<'approve' | 'reject' | 'complete' | null>(null);
+  const [decisionText, setDecisionText] = useState('');
+  const [protocolReference, setProtocolReference] = useState('');
+  const [completionConfirmed, setCompletionConfirmed] = useState(false);
+  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
   const [proposalNotes, setProposalNotes] = useState('');
   const [proposalSubmitting, setProposalSubmitting] = useState(false);
   const [policyTenantId, setPolicyTenantId] = useState(() => localStorage.getItem('tenantId') || '');
@@ -39,6 +47,10 @@ export default function RetentionPage() {
   const canManageRetention = hasPermission(Permissions.RETENTION_MANAGE);
   const canInitiateDisposal = hasPermission(Permissions.DISPOSAL_INITIATE);
   const activeTenantId = localStorage.getItem('tenantId') || '';
+  const canApproveDisposal = hasPermission(Permissions.DISPOSAL_APPROVE)
+    && user?.tenantId === activeTenantId
+    && user.roles.some((role) => role === RoleCode.TENANT_LEADERSHIP || role === RoleCode.ADMIN_TENANT);
+  const canCompleteDisposal = hasPermission(Permissions.DISPOSAL_COMPLETE);
   const reviewLimit = 25;
 
   const { data: policies, isLoading: polLoading } = useQuery({
@@ -71,6 +83,12 @@ export default function RetentionPage() {
     enabled: Boolean(activeTenantId) && canInitiateDisposal,
   });
 
+  const { data: approvedBoxes, isLoading: approvedLoading, isError: approvedError } = useQuery({
+    queryKey: ['retention-approved', activeTenantId, approvedPage],
+    queryFn: async () => { const { data } = await api.get('/retention/disposal/approved', { params: { page: approvedPage, limit: reviewLimit } }); return data.data; },
+    enabled: Boolean(activeTenantId) && (canApproveDisposal || canCompleteDisposal),
+  });
+
   const { data: upcomingBoxes, isLoading: upcomingLoading, isError: upcomingError } = useQuery({
     queryKey: ['retention-review', activeTenantId, 'upcoming', reviewDays, upcomingPage],
     queryFn: async () => { const { data } = await api.get('/retention/review', { params: { scope: 'upcoming', days: reviewDays, page: upcomingPage, limit: reviewLimit } }); return data.data; },
@@ -80,14 +98,17 @@ export default function RetentionPage() {
   const { data: pendingBoxes, isLoading: pendingLoading, isError: pendingError } = useQuery({
     queryKey: ['retention-pending', activeTenantId, pendingPage],
     queryFn: async () => { const { data } = await api.get('/retention/disposal/pending', { params: { page: pendingPage, limit: reviewLimit } }); return data.data; },
-    enabled: Boolean(activeTenantId) && canInitiateDisposal,
+    enabled: Boolean(activeTenantId) && (canInitiateDisposal || canApproveDisposal),
   });
 
   useEffect(() => {
     setSelectedDueIds(new Set());
+    setSelectedPendingIds(new Set());
+    setSelectedApprovedIds(new Set());
     setDuePage(1);
     setUpcomingPage(1);
     setPendingPage(1);
+    setApprovedPage(1);
   }, [activeTenantId]);
 
   const createPolicy = useCreate('/retention/policies', ['retention-policies'], t('admin.retention.policyCreated'));
@@ -249,6 +270,46 @@ export default function RetentionPage() {
     }
   };
 
+  const handleDisposalDecision = async () => {
+    if (!disposalAction) return;
+    const boxIds = [...(disposalAction === 'complete' ? selectedApprovedIds : selectedPendingIds)];
+    if (!boxIds.length) return;
+    if (disposalAction === 'reject' && decisionText.trim().length < 5) return;
+    if (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed)) return;
+    setDecisionSubmitting(true);
+    try {
+      await api.post(`/retention/disposal/${disposalAction}`, {
+        boxIds,
+        ...(disposalAction === 'approve' && decisionText.trim() ? { notes: decisionText.trim() } : {}),
+        ...(disposalAction === 'reject' ? { reason: decisionText.trim() } : {}),
+        ...(disposalAction === 'complete' ? { protocolReference: protocolReference.trim(), confirmed: true } : {}),
+      });
+      toast.success(t(`admin.retention.disposal.${disposalAction}Success`, { count: boxIds.length }));
+      setSelectedPendingIds(new Set());
+      setSelectedApprovedIds(new Set());
+      setDecisionText('');
+      setProtocolReference('');
+      setCompletionConfirmed(false);
+      setDisposalAction(null);
+      setPendingPage(1);
+      setApprovedPage(1);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['retention-pending'] }),
+        queryClient.invalidateQueries({ queryKey: ['retention-approved'] }),
+        queryClient.invalidateQueries({ queryKey: ['retention-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['boxes'] }),
+        queryClient.invalidateQueries({ queryKey: ['locations-tree'] }),
+        queryClient.invalidateQueries({ queryKey: ['report-boxes-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['report-occupancy'] }),
+        queryClient.invalidateQueries({ queryKey: ['report-retention'] }),
+      ]);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('admin.retention.disposal.decisionError')));
+    } finally {
+      setDecisionSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -311,12 +372,30 @@ export default function RetentionPage() {
         </div>
       )}
 
-      {activeTenantId && canInitiateDisposal && (
+      {activeTenantId && (canInitiateDisposal || canApproveDisposal) && (
         <div className="card">
-          <h2 className="text-lg font-semibold mb-1">{t('admin.retention.disposal.pendingTitle')}</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+            <h2 className="text-lg font-semibold">{t('admin.retention.disposal.pendingTitle')}</h2>
+            {canApproveDisposal && <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-primary" disabled={!selectedPendingIds.size} onClick={() => setDisposalAction('approve')}>{t('admin.retention.disposal.approve', { count: selectedPendingIds.size })}</button>
+              <button type="button" className="btn-secondary" disabled={!selectedPendingIds.size} onClick={() => setDisposalAction('reject')}>{t('admin.retention.disposal.reject', { count: selectedPendingIds.size })}</button>
+            </div>}
+          </div>
           <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.pendingHint')}</p>
-          {pendingError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={pendingBoxes?.data || []} isLoading={pendingLoading} emptyMessage={t('admin.retention.disposal.noPending')} />}
-          <Pagination page={pendingPage} limit={reviewLimit} total={pendingBoxes?.total || 0} onPageChange={setPendingPage} />
+          {pendingError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={pendingBoxes?.data || []} isLoading={pendingLoading} emptyMessage={t('admin.retention.disposal.noPending')} selectable={canApproveDisposal} selectedIds={selectedPendingIds} onSelectionChange={setSelectedPendingIds} />}
+          <Pagination page={pendingPage} limit={reviewLimit} total={pendingBoxes?.total || 0} onPageChange={(page) => { setSelectedPendingIds(new Set()); setPendingPage(page); }} />
+        </div>
+      )}
+
+      {activeTenantId && (canApproveDisposal || canCompleteDisposal) && (
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+            <h2 className="text-lg font-semibold">{t('admin.retention.disposal.approvedTitle')}</h2>
+            {canCompleteDisposal && <button type="button" className="btn-primary" disabled={!selectedApprovedIds.size} onClick={() => setDisposalAction('complete')}>{t('admin.retention.disposal.complete', { count: selectedApprovedIds.size })}</button>}
+          </div>
+          <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.approvedHint')}</p>
+          {approvedError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={approvedBoxes?.data || []} isLoading={approvedLoading} emptyMessage={t('admin.retention.disposal.noApproved')} selectable={canCompleteDisposal} selectedIds={selectedApprovedIds} onSelectionChange={setSelectedApprovedIds} />}
+          <Pagination page={approvedPage} limit={reviewLimit} total={approvedBoxes?.total || 0} onPageChange={(page) => { setSelectedApprovedIds(new Set()); setApprovedPage(page); }} />
         </div>
       )}
 
@@ -355,6 +434,31 @@ export default function RetentionPage() {
           </div>
         </div>
       </Modal>
+
+      {disposalAction && <Modal isOpen onClose={() => setDisposalAction(null)} title={t(`admin.retention.disposal.${disposalAction}Title`)} size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">{t(`admin.retention.disposal.${disposalAction}Hint`, { count: disposalAction === 'complete' ? selectedApprovedIds.size : selectedPendingIds.size })}</p>
+          {disposalAction === 'complete' ? <>
+            <div>
+              <label htmlFor="disposal-protocol" className="label-text">{t('admin.retention.disposal.protocolReference')} *</label>
+              <input id="disposal-protocol" className="input-field" value={protocolReference} onChange={(e) => setProtocolReference(e.target.value)} maxLength={200} />
+            </div>
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input type="checkbox" className="mt-1" checked={completionConfirmed} onChange={(e) => setCompletionConfirmed(e.target.checked)} />
+              <span>{t('admin.retention.disposal.completionConfirmation')}</span>
+            </label>
+          </> : <div>
+            <label htmlFor="disposal-decision-text" className="label-text">{t(disposalAction === 'reject' ? 'admin.retention.disposal.rejectReason' : 'admin.retention.disposal.approvalNotes')}{disposalAction === 'reject' ? ' *' : ''}</label>
+            <textarea id="disposal-decision-text" className="input-field" value={decisionText} onChange={(e) => setDecisionText(e.target.value)} rows={3} maxLength={1000} />
+          </div>}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setDisposalAction(null)}>{t('common.cancel')}</button>
+            <button type="button" className="btn-primary" onClick={handleDisposalDecision} disabled={decisionSubmitting || (disposalAction === 'reject' && decisionText.trim().length < 5) || (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed))}>
+              {decisionSubmitting ? t('common.processing') : t(`admin.retention.disposal.${disposalAction}Confirm`)}
+            </button>
+          </div>
+        </div>
+      </Modal>}
 
       {/* Create Policy Modal */}
       <Modal isOpen={showCreatePolicy} onClose={() => setShowCreatePolicy(false)} title={t('admin.retention.createModal.title')} size="md">

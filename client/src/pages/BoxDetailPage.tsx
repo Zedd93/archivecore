@@ -193,20 +193,20 @@ export default function BoxDetailPage() {
           <p className="text-gray-500 mt-1">{box.title}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
-          {hasPermission(Permissions.BOX_STATUS) && box.status !== 'disposed' && <button
+          {hasPermission(Permissions.BOX_STATUS) && !['pending_disposal', 'approved_disposal', 'disposed'].includes(box.status) && <button
             onClick={() => setShowStatusModal(true)}
             className="btn-secondary"
           >
             <RefreshCw size={16} />
             {t('common.status')}
           </button>}
-          <button
+          {box.status !== 'disposed' && <button
             onClick={() => setShowEditModal(true)}
             className="btn-secondary"
           >
             <Edit3 size={16} />
             {t('common.edit')}
-          </button>
+          </button>}
           {hasPermission(Permissions.RETENTION_MANAGE) && box.status !== 'disposed' && (
             <button onClick={() => setShowHoldModal(true)} className="btn-secondary flex items-center gap-2">
               <ShieldAlert size={16} />

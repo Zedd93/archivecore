@@ -1,10 +1,41 @@
 import { prisma } from '../../config/database';
-import { Prisma } from '@prisma/client';
+import { BoxStatus, Prisma } from '@prisma/client';
 import { IJwtPayload, Permissions, RoleCode } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { parseJrwaDocx } from './jrwa-import.parser';
 
 export class RetentionService {
+  private async recordDisposalAudit(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    boxIds: string[],
+    actorId: string,
+    action: string,
+    oldStatus: BoxStatus,
+    newStatus: BoxStatus,
+    details: Record<string, string> = {},
+  ) {
+    await tx.auditLog.createMany({
+      data: boxIds.map((boxId) => ({
+        tenantId,
+        userId: actorId,
+        action,
+        entityType: 'box',
+        entityId: boxId,
+        oldValues: { status: oldStatus },
+        newValues: { status: newStatus, ...details },
+      })),
+    });
+  }
+
+  private assertClientDecision(tenantId: string, actor: IJwtPayload) {
+    if (actor.tenantId !== tenantId || !actor.roles.some((role) =>
+      role === RoleCode.TENANT_LEADERSHIP || role === RoleCode.ADMIN_TENANT
+    )) {
+      throw Object.assign(new Error('Decyzję o brakowaniu musi podjąć uprawniona osoba tego tenanta'), { statusCode: 403 });
+    }
+  }
+
   private disposalEligibility(tenantId: string): Prisma.BoxWhereInput {
     const restrictedCategory: Prisma.StringFilter = {
       startsWith: 'A',
@@ -324,18 +355,37 @@ export class RetentionService {
     return { data, total, page, limit };
   }
 
+  async getApprovedDisposal(tenantId: string, page = 1, limit = 25) {
+    const where: Prisma.BoxWhereInput = { tenantId, deletedAt: null, status: 'approved_disposal' };
+    const [data, total] = await Promise.all([
+      prisma.box.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+        include: {
+          location: { select: { fullPath: true } },
+          retentionPolicy: { select: { name: true, archivalCategory: true } },
+        },
+      }),
+      prisma.box.count({ where }),
+    ]);
+    return { data, total, page, limit };
+  }
+
   // Initiate disposal process
-  async initiateDisposal(tenantId: string, boxIds: string[], notes?: string) {
+  async initiateDisposal(tenantId: string, boxIds: string[], actorId: string, notes?: string) {
     const uniqueIds = [...new Set(boxIds)];
     const updated = await prisma.$transaction(async (tx) => {
       const where: Prisma.BoxWhereInput = {
         ...this.disposalEligibility(tenantId),
         id: { in: uniqueIds }, status: 'active', retentionDate: { lte: new Date() },
       };
-      const result = await tx.box.updateMany({ where, data: { status: 'pending_disposal', notes: notes || undefined } });
+      const result = await tx.box.updateMany({ where, data: { status: 'pending_disposal' } });
       if (result.count !== uniqueIds.length) {
         throw Object.assign(new Error('Co najmniej jeden karton nie spełnia warunków brakowania: termin, polityka, kategoria lub blokada'), { statusCode: 409 });
       }
+      await this.recordDisposalAudit(tx, tenantId, uniqueIds, actorId, 'disposal.proposed', 'active', 'pending_disposal', notes ? { notes } : {});
       return result;
     });
 
@@ -343,6 +393,7 @@ export class RetentionService {
       await notificationService.notifyTenantUsers({
         tenantId,
         requiredPermissions: [Permissions.DISPOSAL_APPROVE],
+        includeGlobalUsers: false,
         type: 'disposal_pending',
         title: 'Kartony oczekują na zatwierdzenie brakowania',
         message: `Do zatwierdzenia brakowania przekazano ${updated.count} kartonów.`,
@@ -354,44 +405,129 @@ export class RetentionService {
     return { count: updated.count, boxIds: uniqueIds };
   }
 
-  // Approve disposal
-  async approveDisposal(tenantId: string, boxIds: string[]) {
+  // Client approval does not change warehouse occupancy.
+  async approveDisposal(tenantId: string, boxIds: string[], actor: IJwtPayload, notes?: string) {
+    this.assertClientDecision(tenantId, actor);
     const uniqueIds = [...new Set(boxIds)];
     const updated = await prisma.$transaction(async (tx) => {
       const where: Prisma.BoxWhereInput = {
         ...this.disposalEligibility(tenantId),
         id: { in: uniqueIds }, status: 'pending_disposal', retentionDate: { lte: new Date() },
       };
-      const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
-      if (boxes.length !== uniqueIds.length) {
-        throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub objęty blokadą brakowania'), { statusCode: 409 });
+      const proposals = await tx.auditLog.findMany({
+        where: { tenantId, entityType: 'box', entityId: { in: uniqueIds }, action: 'disposal.proposed' },
+        orderBy: { createdAt: 'desc' },
+        select: { entityId: true, userId: true },
+      });
+      const latestProposer = new Map<string, string>();
+      for (const proposal of proposals) {
+        if (proposal.entityId && !latestProposer.has(proposal.entityId)) latestProposer.set(proposal.entityId, proposal.userId);
       }
-      const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: new Date() } });
-      if (result.count !== boxes.length) {
-        throw Object.assign(new Error('Stan kartonów zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
+      if (uniqueIds.some((id) => latestProposer.get(id) === actor.userId)) {
+        throw Object.assign(new Error('Nie można zatwierdzić własnej propozycji brakowania'), { statusCode: 409 });
       }
-      const counts = new Map<string, number>();
-      for (const box of boxes) {
-        if (box.locationId) counts.set(box.locationId, (counts.get(box.locationId) || 0) + 1);
+      const result = await tx.box.updateMany({ where, data: { status: 'approved_disposal' } });
+      if (result.count !== uniqueIds.length) {
+        throw Object.assign(new Error('Co najmniej jeden karton nie spełnia warunków zatwierdzenia brakowania'), { statusCode: 409 });
       }
-      for (const [locationId, count] of counts) {
-        await tx.location.update({ where: { id: locationId }, data: { currentCount: { decrement: count } } });
-      }
+      await this.recordDisposalAudit(tx, tenantId, uniqueIds, actor.userId, 'disposal.client_approved', 'pending_disposal', 'approved_disposal', notes ? { notes } : {});
       return result;
     });
 
     if (updated.count > 0) {
       await notificationService.notifyTenantUsers({
         tenantId,
-        requiredPermissions: [Permissions.DISPOSAL_INITIATE, Permissions.REPORT_VIEW],
+        requiredPermissions: [Permissions.DISPOSAL_COMPLETE],
         type: 'disposal_approved',
-        title: 'Brakowanie zatwierdzone',
-        message: `Zatwierdzono brakowanie ${updated.count} kartonów.`,
+        title: 'Klient zaakceptował propozycję brakowania',
+        message: `Klient zaakceptował propozycję brakowania ${updated.count} kartonów. Zajętość magazynu nie została zmieniona.`,
         entityType: 'retention',
         actionUrl: '/admin/retention',
       });
     }
 
+    return { count: updated.count };
+  }
+
+  async rejectDisposal(tenantId: string, boxIds: string[], actor: IJwtPayload, reason: string) {
+    this.assertClientDecision(tenantId, actor);
+    const uniqueIds = [...new Set(boxIds)];
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.box.updateMany({
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, status: 'pending_disposal' },
+        data: { status: 'active' },
+      });
+      if (result.count !== uniqueIds.length) {
+        throw Object.assign(new Error('Stan kartonów zmienił się. Odśwież listę i spróbuj ponownie.'), { statusCode: 409 });
+      }
+      await this.recordDisposalAudit(tx, tenantId, uniqueIds, actor.userId, 'disposal.client_rejected', 'pending_disposal', 'active', { reason });
+      return result;
+    });
+
+    if (updated.count > 0) {
+      await notificationService.notifyTenantUsers({
+        tenantId,
+        requiredPermissions: [Permissions.DISPOSAL_INITIATE],
+        type: 'disposal_rejected',
+        title: 'Klient odrzucił propozycję brakowania',
+        message: `Klient odrzucił propozycję brakowania ${updated.count} kartonów.`,
+        entityType: 'retention',
+        actionUrl: '/admin/retention',
+      });
+    }
+    return { count: updated.count };
+  }
+
+  async completeDisposal(tenantId: string, boxIds: string[], actorId: string, protocolReference: string) {
+    const uniqueIds = [...new Set(boxIds)];
+    const updated = await prisma.$transaction(async (tx) => {
+      const where: Prisma.BoxWhereInput = {
+        ...this.disposalEligibility(tenantId),
+        id: { in: uniqueIds }, status: 'approved_disposal', retentionDate: { lte: new Date() },
+      };
+      const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
+      if (boxes.length !== uniqueIds.length) {
+        throw Object.assign(new Error('Co najmniej jeden karton nie ma ważnej zgody lub jest objęty blokadą'), { statusCode: 409 });
+      }
+      const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: new Date(), locationId: null } });
+      if (result.count !== boxes.length) {
+        throw Object.assign(new Error('Stan kartonów zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
+      }
+      await tx.folder.updateMany({
+        where: { tenantId, boxId: { in: uniqueIds } },
+        data: { status: 'disposed' },
+      });
+      const locationIds = new Set(boxes.map((box) => box.locationId).filter((id): id is string => Boolean(id)));
+      for (const locationId of locationIds) {
+        const currentCount = await tx.box.count({ where: { locationId, deletedAt: null, status: { not: 'disposed' } } });
+        await tx.location.update({ where: { id: locationId }, data: { currentCount } });
+      }
+      await tx.auditLog.createMany({
+        data: boxes.map((box) => ({
+          tenantId,
+          userId: actorId,
+          action: 'disposal.completed',
+          entityType: 'box',
+          entityId: box.id,
+          oldValues: { status: 'approved_disposal', locationId: box.locationId },
+          newValues: { status: 'disposed', locationId: null, protocolReference },
+        })),
+      });
+      return result;
+    });
+
+    if (updated.count > 0) {
+      await notificationService.notifyTenantUsers({
+        tenantId,
+        requiredPermissions: [Permissions.DISPOSAL_APPROVE],
+        includeGlobalUsers: false,
+        type: 'disposal_completed',
+        title: 'Brakowanie wykonane',
+        message: `Potwierdzono wykonanie brakowania ${updated.count} kartonów. Protokół: ${protocolReference}.`,
+        entityType: 'retention',
+        actionUrl: '/admin/retention',
+      });
+    }
     return { count: updated.count };
   }
 }

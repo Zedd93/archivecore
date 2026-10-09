@@ -65,6 +65,7 @@ export const Permissions = {
   RETENTION_MANAGE: 'retention.manage',
   DISPOSAL_INITIATE: 'disposal.initiate',
   DISPOSAL_APPROVE: 'disposal.approve',
+  DISPOSAL_COMPLETE: 'disposal.complete',
 
   // Import/Export
   IMPORT_DATA: 'import.data',
@@ -102,7 +103,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
     Permissions.SEARCH_ALL, Permissions.SEARCH_OWN,
     Permissions.REPORT_VIEW, Permissions.REPORT_EXPORT,
     Permissions.AUDIT_VIEW,
-    Permissions.RETENTION_MANAGE, Permissions.DISPOSAL_INITIATE,
+    Permissions.RETENTION_MANAGE, Permissions.DISPOSAL_INITIATE, Permissions.DISPOSAL_COMPLETE,
     Permissions.IMPORT_DATA, Permissions.EXPORT_DATA,
     Permissions.INVENTORY_MANAGE,
     Permissions.TRANSFER_LIST_READ, Permissions.TRANSFER_LIST_WRITE, Permissions.TRANSFER_LIST_IMPORT,
@@ -118,6 +119,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
     Permissions.SEARCH_OWN,
     Permissions.REPORT_VIEW,
     Permissions.BILLING_VIEW,
+    Permissions.DISPOSAL_APPROVE,
     Permissions.TRANSFER_LIST_READ, Permissions.TRANSFER_LIST_WRITE,
   ],
 
