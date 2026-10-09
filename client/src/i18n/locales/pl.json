@@ -243,6 +243,8 @@
       "markReady": "Oznacz jako gotowe",
       "pickingTitle": "Kompletowanie wydania",
       "pickingProgress": "Obsłużone pozycje: {{picked}} z {{total}}",
+      "pickRouteHint": "Pozycje są ułożone według lokalizacji w magazynie, a potem numeru kartonu.",
+      "pickLocationUnknown": "Bez przypisanej lokalizacji",
       "pickingRequired": "Aby oznaczyć wydanie jako gotowe, potwierdź pobranie wszystkich pozycji.",
       "manualPickCode": "Kod QR kartonu lub teczki",
       "checkCode": "Sprawdź kod",

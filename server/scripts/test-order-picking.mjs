@@ -8,6 +8,7 @@ import schemas from '../../shared/src/validators/order.schema.ts';
 const require = createRequire(import.meta.url);
 const { generateQrData, generateFolderQrData } = qr;
 const { matchOrderItemQr } = require('../../client/src/utils/orderPicking.ts');
+const { getOrderItemPickLocation, sortOrderItemsByPickRoute } = require('../../client/src/utils/orderPickRoute.ts');
 const { canMarkReadyAfterPicking } = stateMachine;
 const { updateOrderItemStatusSchema } = schemas;
 
@@ -47,4 +48,28 @@ test('item status endpoint accepts only pick and undo-pick', () => {
   assert.equal(updateOrderItemStatusSchema.safeParse({ status: 'pending' }).success, true);
   assert.equal(updateOrderItemStatusSchema.safeParse({ status: 'delivered' }).success, false);
   assert.equal(updateOrderItemStatusSchema.safeParse({ status: 'returned' }).success, false);
+});
+
+test('pick route sorts locations and box numbers naturally, leaving unlocated items last', () => {
+  const items = [
+    { id: 'unlocated', itemStatus: 'pending', folder: { box: { boxNumber: 'K-3' } } },
+    { id: 'shelf-10', itemStatus: 'pending', box: { boxNumber: 'K-1', location: { fullPath: 'Magazyn / Półka 10' } } },
+    { id: 'box-10', itemStatus: 'pending', folder: { box: { boxNumber: 'K-10', location: { fullPath: 'Magazyn / Półka 2' } } } },
+    { id: 'box-2', itemStatus: 'picked', document: { folder: { box: { boxNumber: 'K-2', location: { fullPath: 'Magazyn / Półka 2' } } } } },
+    { id: 'box-2-pending', itemStatus: 'pending', transferListItem: { box: { boxNumber: 'K-2', location: { fullPath: 'Magazyn / Półka 2' } } } },
+  ];
+  assert.deepEqual(sortOrderItemsByPickRoute(items).map((item) => item.id), [
+    'box-2-pending', 'box-2', 'box-10', 'shelf-10', 'unlocated',
+  ]);
+  assert.equal(getOrderItemPickLocation(items[0]), null);
+  assert.deepEqual(items.map((item) => item.id), ['unlocated', 'shelf-10', 'box-10', 'box-2', 'box-2-pending']);
+});
+
+test('pick route resolves a transfer-list folder or HR folder when the direct box is absent', () => {
+  assert.equal(getOrderItemPickLocation({
+    id: 'transfer', itemStatus: 'pending', transferListItem: { folder: { box: { boxNumber: 'K-1', location: { fullPath: 'Shelf A' } } } },
+  }), 'Shelf A');
+  assert.equal(getOrderItemPickLocation({
+    id: 'hr', itemStatus: 'pending', hrFolder: { box: { boxNumber: 'K-2', location: { fullPath: 'Shelf B' } } },
+  }), 'Shelf B');
 });

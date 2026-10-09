@@ -243,6 +243,8 @@
       "markReady": "Mark as ready",
       "pickingTitle": "Picking for issue",
       "pickingProgress": "Handled items: {{picked}} of {{total}}",
+      "pickRouteHint": "Items are ordered by warehouse location, then box number.",
+      "pickLocationUnknown": "No assigned location",
       "pickingRequired": "Confirm that all items have been picked before marking this issue ready.",
       "manualPickCode": "Box or folder QR code",
       "checkCode": "Check code",

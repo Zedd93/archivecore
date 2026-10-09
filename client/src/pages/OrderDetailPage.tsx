@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,6 +17,7 @@ import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { matchOrderItemQr } from '@/utils/orderPicking';
+import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
 import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw } from 'lucide-react';
 
 // Status flow steps
@@ -71,6 +72,7 @@ export default function OrderDetailPage() {
   const canPick = order.orderType === 'checkout' && order.status === 'in_progress' && hasPermission('order.process');
   const handledCount = order.items?.filter((item: any) => ['picked', 'delivered', 'returned'].includes(item.itemStatus)).length ?? 0;
   const remainingCount = (order.items?.length ?? 0) - handledCount;
+  const displayItems = canPick ? sortOrderItemsByPickRoute(order.items || []) : order.items || [];
 
   const updatePick = async (itemId: string, status: 'pending' | 'picked') => {
     if (!id || pickBusyRef.current) return;
@@ -267,6 +269,7 @@ export default function OrderDetailPage() {
           <div>
             <h2 className="text-lg font-semibold">{t('orders.detail.pickingTitle')}</h2>
             <p className="text-sm text-gray-600">{t('orders.detail.pickingProgress', { picked: handledCount, total: order.items.length })}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('orders.detail.pickRouteHint')}</p>
             {remainingCount > 0 && <p className="text-xs text-amber-700 mt-1">{t('orders.detail.pickingRequired')}</p>}
           </div>
           {!isScanning ? (
@@ -306,64 +309,76 @@ export default function OrderDetailPage() {
           </div>
           {order.items?.length > 0 ? (
             <div className="space-y-2">
-              {order.items.map((item: any) => (
-                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="min-w-0 break-words">
-                    {item.box && (
-                      <div className="text-sm">
-                        <span className="font-mono font-medium text-primary-700">{item.box.boxNumber}</span>
-                        <span className="text-gray-500 ml-2">{item.box.title}</span>
-                        {item.box.location && <span className="text-xs text-gray-400 ml-2">📍 {item.box.location.fullPath}</span>}
-                      </div>
-                    )}
-                    {item.hrFolder && (
-                      <div className="text-sm">
-                        <span className="font-medium">{item.hrFolder.employeeLastName} {item.hrFolder.employeeFirstName}</span>
-                        <span className="text-gray-500 ml-2">{t('hr.title')}</span>
-                      </div>
-                    )}
-                    {item.folder && (
-                      <div className="text-sm">
-                        <span className="font-mono font-medium text-yellow-700">{item.folder.folderNumber}</span>
-                        <span className="text-gray-500 ml-2">{item.folder.title}</span>
-                        {item.folder.box?.boxNumber && <span className="text-xs text-gray-400 ml-2">📦 {item.folder.box.boxNumber}</span>}
-                      </div>
-                    )}
-                    {item.document && (
-                      <div className="text-sm">
-                        <span className="font-medium text-green-700">{item.document.title}</span>
-                        {(item.document.box?.boxNumber || item.document.folder?.box?.boxNumber) && (
-                          <span className="text-xs text-gray-400 ml-2">📦 {item.document.box?.boxNumber || item.document.folder?.box?.boxNumber}</span>
-                        )}
-                      </div>
-                    )}
-                    {item.transferListItem && !item.folder && (
-                      <div className="text-sm">
-                        <span className="font-mono font-medium text-green-700">{item.transferListItem.folderSignature}</span>
-                        <span className="text-gray-500 ml-2">{item.transferListItem.folderTitle}</span>
-                        {item.transferListItem.box?.boxNumber && (
-                          <span className="text-xs text-gray-400 ml-2">📦 {item.transferListItem.box.boxNumber}</span>
-                        )}
-                      </div>
-                    )}
+              {displayItems.map((item: any, index: number) => {
+                const locationPath = getOrderItemPickLocation(item);
+                const previousPath = index > 0 ? getOrderItemPickLocation(displayItems[index - 1]) : null;
+                const pickBox = getOrderItemPickBox(item);
+                return <Fragment key={item.id}>
+                  {canPick && (index === 0 || locationPath !== previousPath) && (
+                    <h3 className="text-sm font-semibold text-gray-800 pt-3 break-words">
+                      {locationPath || t('orders.detail.pickLocationUnknown')}
+                    </h3>
+                  )}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="min-w-0 break-words">
+                      {item.box && (
+                        <div className="text-sm">
+                          <span className="font-mono font-medium text-primary-700">{item.box.boxNumber}</span>
+                          <span className="text-gray-500 ml-2">{item.box.title}</span>
+                          {!canPick && item.box.location && <span className="text-xs text-gray-400 ml-2">📍 {item.box.location.fullPath}</span>}
+                        </div>
+                      )}
+                      {item.hrFolder && (
+                        <div className="text-sm">
+                          <span className="font-medium">{item.hrFolder.employeeLastName} {item.hrFolder.employeeFirstName}</span>
+                          <span className="text-gray-500 ml-2">{t('hr.title')}</span>
+                          {item.hrFolder.box?.boxNumber && <span className="text-xs text-gray-400 ml-2">{item.hrFolder.box.boxNumber}</span>}
+                        </div>
+                      )}
+                      {item.folder && (
+                        <div className="text-sm">
+                          <span className="font-mono font-medium text-yellow-700">{item.folder.folderNumber}</span>
+                          <span className="text-gray-500 ml-2">{item.folder.title}</span>
+                          {item.folder.box?.boxNumber && <span className="text-xs text-gray-400 ml-2">📦 {item.folder.box.boxNumber}</span>}
+                        </div>
+                      )}
+                      {item.document && (
+                        <div className="text-sm">
+                          <span className="font-medium text-green-700">{item.document.title}</span>
+                          {(item.document.box?.boxNumber || item.document.folder?.box?.boxNumber) && (
+                            <span className="text-xs text-gray-400 ml-2">📦 {item.document.box?.boxNumber || item.document.folder?.box?.boxNumber}</span>
+                          )}
+                        </div>
+                      )}
+                      {item.transferListItem && !item.folder && (
+                        <div className="text-sm">
+                          <span className="font-mono font-medium text-green-700">{item.transferListItem.folderSignature}</span>
+                          <span className="text-gray-500 ml-2">{item.transferListItem.folderTitle}</span>
+                          {pickBox?.boxNumber && (
+                            <span className="text-xs text-gray-400 ml-2">📦 {pickBox.boxNumber}</span>
+                          )}
+                        </div>
+                      )}
+                      {!canPick && locationPath && !item.box && <p className="text-xs text-gray-500 mt-1">{locationPath}</p>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={item.itemStatus} type="orderItem" />
+                      {canPick && item.itemStatus === 'pending' && (
+                        <button type="button" className="btn-secondary text-xs" disabled={pickingItemId !== null} onClick={() => { void updatePick(item.id, 'picked'); }}>
+                          {pickingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                          {t('orders.detail.markPicked')}
+                        </button>
+                      )}
+                      {canPick && item.itemStatus === 'picked' && (
+                        <button type="button" className="btn-secondary text-xs" disabled={pickingItemId !== null} onClick={() => { void updatePick(item.id, 'pending'); }}>
+                          {pickingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                          {t('orders.detail.undoPick')}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={item.itemStatus} type="orderItem" />
-                    {canPick && item.itemStatus === 'pending' && (
-                      <button type="button" className="btn-secondary text-xs" disabled={pickingItemId !== null} onClick={() => { void updatePick(item.id, 'picked'); }}>
-                        {pickingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                        {t('orders.detail.markPicked')}
-                      </button>
-                    )}
-                    {canPick && item.itemStatus === 'picked' && (
-                      <button type="button" className="btn-secondary text-xs" disabled={pickingItemId !== null} onClick={() => { void updatePick(item.id, 'pending'); }}>
-                        {pickingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                        {t('orders.detail.undoPick')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                </Fragment>;
+              })}
             </div>
           ) : (
             <p className="text-sm text-gray-400">{t('orders.detail.noItems')}</p>

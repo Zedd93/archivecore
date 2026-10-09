@@ -369,14 +369,14 @@ export class OrderService {
         items: {
           include: {
             box: { select: { id: true, boxNumber: true, title: true, status: true, qrCode: true, locationId: true, location: { select: { fullPath: true } } } },
-            folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+            folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
             document: {
               select: {
                 id: true,
                 title: true,
                 docType: true,
-                box: { select: { id: true, boxNumber: true, title: true } },
-                folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true } } } },
+                box: { select: { id: true, boxNumber: true, title: true, location: { select: { fullPath: true } } } },
+                folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
               },
             },
             transferListItem: {
@@ -385,11 +385,12 @@ export class OrderService {
                 folderSignature: true,
                 folderTitle: true,
                 categoryCode: true,
-                box: { select: { id: true, boxNumber: true, title: true } },
+                box: { select: { id: true, boxNumber: true, title: true, location: { select: { fullPath: true } } } },
+                folder: { select: { box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
                 transferList: { select: { id: true, listNumber: true, title: true } },
               },
             },
-            hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
+            hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true, box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
             picker: { select: { id: true, firstName: true, lastName: true } },
           },
         },
