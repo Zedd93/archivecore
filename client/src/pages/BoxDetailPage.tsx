@@ -193,13 +193,13 @@ export default function BoxDetailPage() {
           <p className="text-gray-500 mt-1">{box.title}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
-          <button
+          {hasPermission(Permissions.BOX_STATUS) && box.status !== 'disposed' && <button
             onClick={() => setShowStatusModal(true)}
             className="btn-secondary"
           >
             <RefreshCw size={16} />
             {t('common.status')}
-          </button>
+          </button>}
           <button
             onClick={() => setShowEditModal(true)}
             className="btn-secondary"
@@ -438,8 +438,6 @@ export default function BoxDetailPage() {
               <option value="">---</option>
               <option value="active">{t('statuses.box.active')}</option>
               <option value="checked_out">{t('statuses.box.checked_out')}</option>
-              <option value="pending_disposal">{t('statuses.box.pending_disposal')}</option>
-              <option value="disposed">{t('statuses.box.disposed')}</option>
               <option value="lost">{t('statuses.box.lost')}</option>
               <option value="damaged">{t('statuses.box.damaged')}</option>
             </select>

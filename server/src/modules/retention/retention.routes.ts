@@ -23,6 +23,7 @@ router.post('/policies/:id/recalculate', ...auth, requirePermission(Permissions.
 
 // Review & Disposal
 router.get('/review', ...auth, requirePermission(Permissions.DISPOSAL_INITIATE), (req, res, next) => retentionController.getBoxesForReview(req, res, next));
+router.get('/disposal/pending', ...auth, requirePermission(Permissions.DISPOSAL_INITIATE), (req, res, next) => retentionController.getPendingDisposal(req, res, next));
 router.post('/disposal/initiate', ...auth, requirePermission(Permissions.DISPOSAL_INITIATE), validate(initiateDisposalSchema), auditLog('disposal', 'disposal.initiate'), (req, res, next) => retentionController.initiateDisposal(req, res, next));
 router.post('/disposal/approve', ...auth, requirePermission(Permissions.DISPOSAL_APPROVE), validate(approveDisposalSchema), auditLog('disposal', 'disposal.approve'), (req, res, next) => retentionController.approveDisposal(req, res, next));
 

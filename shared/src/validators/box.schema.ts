@@ -31,7 +31,7 @@ export const moveBoxSchema = z.object({
 });
 
 export const changeBoxStatusSchema = z.object({
-  status: z.enum(['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged']),
+  status: z.enum(['active', 'checked_out', 'lost', 'damaged']),
   notes: z.string().optional(),
 });
 
@@ -54,7 +54,7 @@ const bulkBoxIdsSchema = z.object({
 }));
 
 export const bulkBoxStatusSchema = bulkBoxIdsSchema.and(z.object({
-  status: z.enum(['active', 'checked_out', 'pending_disposal', 'disposed', 'lost', 'damaged']),
+  status: z.enum(['active', 'checked_out', 'lost', 'damaged']),
   notes: z.string().optional(),
 }));
 

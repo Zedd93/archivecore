@@ -14,6 +14,7 @@ interface NavItem {
   labelKey: string;
   icon: React.ReactNode;
   permission?: string;
+  anyPermission?: string[];
 }
 
 const navItems: NavItem[] = [
@@ -39,7 +40,7 @@ const adminItems: NavItem[] = [
   { to: '/admin/users', labelKey: 'layout.nav.users', icon: <Users size={20} />, permission: 'user.manage' },
   { to: '/admin/tenants', labelKey: 'layout.nav.tenants', icon: <Building2 size={20} />, permission: 'tenant.manage' },
   { to: '/admin/pricing', labelKey: 'layout.nav.pricing', icon: <Receipt size={20} />, permission: 'pricing.manage' },
-  { to: '/admin/retention', labelKey: 'layout.nav.retention', icon: <Clock size={20} />, permission: 'retention.manage' },
+  { to: '/admin/retention', labelKey: 'layout.nav.retention', icon: <Clock size={20} />, anyPermission: ['retention.manage', 'disposal.initiate'] },
   { to: '/admin/audit', labelKey: 'layout.nav.audit', icon: <Shield size={20} />, permission: 'audit.view' },
 ];
 
@@ -66,7 +67,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     }`;
 
   const visibleNav = navItems.filter(item => !item.permission || hasPermission(item.permission));
-  const visibleAdmin = adminItems.filter(item => !item.permission || hasPermission(item.permission));
+  const visibleAdmin = adminItems.filter(item =>
+    (!item.permission || hasPermission(item.permission))
+    && (!item.anyPermission || item.anyPermission.some(hasPermission))
+  );
 
   const sidebarContent = (
     <>

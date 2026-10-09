@@ -80,8 +80,21 @@ export class RetentionController {
   async getBoxesForReview(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const days = parseInt(req.query.days as string) || 90;
-      const boxes = await retentionService.getBoxesForReview(req.tenantId, days);
+      const days = Math.min(365, Math.max(1, parseInt(req.query.days as string, 10) || 90));
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 25));
+      const scope = req.query.scope === 'due' ? 'due' : 'upcoming';
+      const boxes = await retentionService.getBoxesForReview(req.tenantId, days, scope, page, limit);
+      return successResponse(res, boxes);
+    } catch (err) { next(err); }
+  }
+
+  async getPendingDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 25));
+      const boxes = await retentionService.getPendingDisposal(req.tenantId, page, limit);
       return successResponse(res, boxes);
     } catch (err) { next(err); }
   }

@@ -372,40 +372,33 @@ export class BoxService {
   }
 
   async changeStatus(id: string, tenantId: string, status: string) {
-    await this.getById(id, tenantId);
     if (status === 'pending_disposal' || status === 'disposed') {
-      const result = await prisma.box.updateMany({
-        where: { id, tenantId, deletedAt: null, legalHold: false, hrFolders: { none: { litigationHold: true } } },
-        data: { status: status as any },
-      });
-      if (result.count !== 1) throw Object.assign(new Error('Karton lub akta osobowe są objęte blokadą brakowania'), { statusCode: 409 });
-      return this.getById(id, tenantId);
+      throw Object.assign(new Error('Brakowanie jest dostępne wyłącznie w module retencji'), { statusCode: 409 });
     }
-    return prisma.box.update({
-      where: { id },
+    await this.getById(id, tenantId);
+    const result = await prisma.box.updateMany({
+      where: { id, tenantId, deletedAt: null, status: { not: 'disposed' } },
       data: { status: status as any },
     });
+    if (result.count !== 1) throw Object.assign(new Error('Nie można zmienić statusu wybrakowanego kartonu'), { statusCode: 409 });
+    return this.getById(id, tenantId);
   }
 
   async bulkChangeStatus(ids: string[], tenantId: string, status: string) {
     if (status === 'pending_disposal' || status === 'disposed') {
-      const uniqueIds = [...new Set(ids)];
-      return prisma.$transaction(async (tx) => {
-        const result = await tx.box.updateMany({
-          where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false, hrFolders: { none: { litigationHold: true } } },
-          data: { status: status as any },
-        });
-        if (result.count !== uniqueIds.length) {
-          throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub objęty blokadą brakowania'), { statusCode: 409 });
-        }
-        return { updated: result.count };
-      });
+      throw Object.assign(new Error('Brakowanie jest dostępne wyłącznie w module retencji'), { statusCode: 409 });
     }
-    const result = await prisma.box.updateMany({
-      where: { id: { in: ids }, tenantId, deletedAt: null },
-      data: { status: status as any },
+    const uniqueIds = [...new Set(ids)];
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.box.updateMany({
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, status: { not: 'disposed' } },
+        data: { status: status as any },
+      });
+      if (result.count !== uniqueIds.length) {
+        throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub wybrakowany'), { statusCode: 409 });
+      }
+      return { updated: result.count };
     });
-    return { updated: result.count };
   }
 
   async bulkMove(ids: string[], tenantId: string, locationId: string, department?: string) {
@@ -509,6 +502,7 @@ export class BoxService {
       select: {
         id: true,
         boxNumber: true,
+        status: true,
         legalHold: true,
         locationId: true,
         _count: {
@@ -545,6 +539,10 @@ export class BoxService {
       throw Object.assign(new Error('Nie można usunąć kartonu objętego blokadą brakowania'), { statusCode: 409 });
     }
 
+    if (boxes.some((box) => box.status === 'pending_disposal' || box.status === 'disposed')) {
+      throw Object.assign(new Error('Nie można usunąć kartonu zgłoszonego do brakowania lub już wybrakowanego'), { statusCode: 409 });
+    }
+
     const blocked = boxes.filter(({ _count }) =>
       _count.folders
         + _count.documents
@@ -577,7 +575,7 @@ export class BoxService {
         where: { entityType: 'box', entityId: { in: uniqueIds } },
       });
       const deleted = await tx.box.updateMany({
-        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false },
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false, status: { notIn: ['pending_disposal', 'disposed'] } },
         data: { deletedAt: new Date(), locationId: null },
       });
       if (deleted.count !== uniqueIds.length) {

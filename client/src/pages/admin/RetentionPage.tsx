@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
+import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import toast from 'react-hot-toast';
 import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2 } from 'lucide-react';
@@ -20,7 +21,14 @@ export default function RetentionPage() {
   const queryClient = useQueryClient();
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
   const [showJrwaImport, setShowJrwaImport] = useState(false);
+  const [showDisposalProposal, setShowDisposalProposal] = useState(false);
   const [reviewDays, setReviewDays] = useState(90);
+  const [duePage, setDuePage] = useState(1);
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [selectedDueIds, setSelectedDueIds] = useState<Set<string>>(new Set());
+  const [proposalNotes, setProposalNotes] = useState('');
+  const [proposalSubmitting, setProposalSubmitting] = useState(false);
   const [policyTenantId, setPolicyTenantId] = useState(() => localStorage.getItem('tenantId') || '');
   const [jrwaTenantId, setJrwaTenantId] = useState('');
   const [jrwaFile, setJrwaFile] = useState<File | null>(null);
@@ -28,6 +36,10 @@ export default function RetentionPage() {
   const [jrwaLoading, setJrwaLoading] = useState(false);
   const [jrwaImporting, setJrwaImporting] = useState(false);
   const canManageGlobalPolicies = hasPermission(Permissions.SYSTEM_CONFIG);
+  const canManageRetention = hasPermission(Permissions.RETENTION_MANAGE);
+  const canInitiateDisposal = hasPermission(Permissions.DISPOSAL_INITIATE);
+  const activeTenantId = localStorage.getItem('tenantId') || '';
+  const reviewLimit = 25;
 
   const { data: policies, isLoading: polLoading } = useQuery({
     queryKey: ['retention-policies', policyTenantId],
@@ -37,6 +49,7 @@ export default function RetentionPage() {
       });
       return data.data;
     },
+    enabled: canManageRetention,
   });
 
   const { data: tenants = [] } = useQuery({
@@ -52,10 +65,30 @@ export default function RetentionPage() {
     if (!jrwaTenantId && policyTenantId) setJrwaTenantId(policyTenantId);
   }, [jrwaTenantId, policyTenantId]);
 
-  const { data: reviewBoxes, isLoading: revLoading } = useQuery({
-    queryKey: ['retention-review', reviewDays],
-    queryFn: async () => { const { data } = await api.get('/retention/review', { params: { days: reviewDays } }); return data.data; },
+  const { data: dueBoxes, isLoading: dueLoading, isError: dueError } = useQuery({
+    queryKey: ['retention-review', activeTenantId, 'due', duePage],
+    queryFn: async () => { const { data } = await api.get('/retention/review', { params: { scope: 'due', page: duePage, limit: reviewLimit } }); return data.data; },
+    enabled: Boolean(activeTenantId) && canInitiateDisposal,
   });
+
+  const { data: upcomingBoxes, isLoading: upcomingLoading, isError: upcomingError } = useQuery({
+    queryKey: ['retention-review', activeTenantId, 'upcoming', reviewDays, upcomingPage],
+    queryFn: async () => { const { data } = await api.get('/retention/review', { params: { scope: 'upcoming', days: reviewDays, page: upcomingPage, limit: reviewLimit } }); return data.data; },
+    enabled: Boolean(activeTenantId) && canInitiateDisposal,
+  });
+
+  const { data: pendingBoxes, isLoading: pendingLoading, isError: pendingError } = useQuery({
+    queryKey: ['retention-pending', activeTenantId, pendingPage],
+    queryFn: async () => { const { data } = await api.get('/retention/disposal/pending', { params: { page: pendingPage, limit: reviewLimit } }); return data.data; },
+    enabled: Boolean(activeTenantId) && canInitiateDisposal,
+  });
+
+  useEffect(() => {
+    setSelectedDueIds(new Set());
+    setDuePage(1);
+    setUpcomingPage(1);
+    setPendingPage(1);
+  }, [activeTenantId]);
 
   const createPolicy = useCreate('/retention/policies', ['retention-policies'], t('admin.retention.policyCreated'));
 
@@ -105,13 +138,14 @@ export default function RetentionPage() {
       key: 'retentionDate',
       header: t('boxes.retentionDate'),
       render: (item) => {
+        if (!item.retentionDate) return '—';
         const d = new Date(item.retentionDate);
         const isExpired = d < new Date();
         return <span className={isExpired ? 'text-red-600 font-medium' : ''}>{d.toLocaleDateString('pl-PL')}</span>;
       },
     },
     { key: 'retentionPolicy', header: t('admin.retention.policies'), render: (item) => item.retentionPolicy?.name || '—' },
-    { key: 'status', header: t('common.status'), render: (item) => <StatusBadge status={item.status} type="box" /> },
+    { key: 'status', header: t('common.status'), render: (item) => <div className="flex flex-wrap gap-1"><StatusBadge status={item.status} type="box" />{item.legalHold && <span className="badge-red">{t('boxes.legalHold')}</span>}</div> },
   ];
 
   const handleCreatePolicy = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -189,6 +223,32 @@ export default function RetentionPage() {
     }
   };
 
+  const handleDisposalProposal = async () => {
+    if (!selectedDueIds.size) return;
+    setProposalSubmitting(true);
+    try {
+      await api.post('/retention/disposal/initiate', {
+        boxIds: [...selectedDueIds],
+        notes: proposalNotes.trim() || undefined,
+      });
+      toast.success(t('admin.retention.disposal.proposed', { count: selectedDueIds.size }));
+      setSelectedDueIds(new Set());
+      setDuePage(1);
+      setPendingPage(1);
+      setProposalNotes('');
+      setShowDisposalProposal(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['retention-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['retention-pending'] }),
+        queryClient.invalidateQueries({ queryKey: ['boxes'] }),
+      ]);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('admin.retention.disposal.proposalError')));
+    } finally {
+      setProposalSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -198,8 +258,14 @@ export default function RetentionPage() {
         <p className="text-sm text-gray-500">{t('admin.retention.subtitle')}</p>
       </div>
 
+      {!activeTenantId && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {t('admin.retention.disposal.selectTenant')}
+        </div>
+      )}
+
       {/* Policies */}
-      <div className="card">
+      {canManageRetention && <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold">{t('admin.retention.policies')}</h2>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -227,28 +293,68 @@ export default function RetentionPage() {
           </div>
         </div>
         <DataTable columns={policyColumns} data={policies || []} isLoading={polLoading} emptyMessage={t('admin.retention.noPolicies')} />
-      </div>
+      </div>}
 
-      {/* Review */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <AlertTriangle size={20} className="text-orange-500" />
-            {t('admin.retention.boxesReview')}
-          </h2>
-          <select value={reviewDays} onChange={(e) => setReviewDays(parseInt(e.target.value))} className="input-field w-40" aria-label={t('admin.retention.boxesReview')}>
-            <option value="30">{t('admin.retention.next30')}</option>
-            <option value="90">{t('admin.retention.next90')}</option>
-            <option value="180">{t('admin.retention.next6m')}</option>
-            <option value="365">{t('admin.retention.nextYear')}</option>
-          </select>
+      {activeTenantId && canInitiateDisposal && (
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2"><AlertTriangle size={20} className="text-orange-500" />{t('admin.retention.disposal.dueTitle')}</h2>
+              <p className="text-sm text-gray-500 mt-1">{t('admin.retention.disposal.dueHint')}</p>
+            </div>
+            <button type="button" onClick={() => setShowDisposalProposal(true)} disabled={selectedDueIds.size === 0} className="btn-primary">
+              {t('admin.retention.disposal.propose', { count: selectedDueIds.size })}
+            </button>
+          </div>
+          {dueError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={dueBoxes?.data || []} isLoading={dueLoading} emptyMessage={t('admin.retention.disposal.noDue')} selectable selectedIds={selectedDueIds} onSelectionChange={setSelectedDueIds} />}
+          <Pagination page={duePage} limit={reviewLimit} total={dueBoxes?.total || 0} onPageChange={setDuePage} />
         </div>
-        {revLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="animate-spin" size={24} /></div>
-        ) : (
-          <DataTable columns={reviewColumns} data={reviewBoxes || []} emptyMessage={t('admin.retention.noBoxesInPeriod')} />
-        )}
-      </div>
+      )}
+
+      {activeTenantId && canInitiateDisposal && (
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-1">{t('admin.retention.disposal.pendingTitle')}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.pendingHint')}</p>
+          {pendingError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={pendingBoxes?.data || []} isLoading={pendingLoading} emptyMessage={t('admin.retention.disposal.noPending')} />}
+          <Pagination page={pendingPage} limit={reviewLimit} total={pendingBoxes?.total || 0} onPageChange={setPendingPage} />
+        </div>
+      )}
+
+      {/* Upcoming retention dates */}
+      {activeTenantId && canInitiateDisposal && (
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <AlertTriangle size={20} className="text-orange-500" />
+              {t('admin.retention.boxesReview')}
+            </h2>
+            <select value={reviewDays} onChange={(e) => { setReviewDays(parseInt(e.target.value)); setUpcomingPage(1); }} className="input-field w-full sm:w-40" aria-label={t('admin.retention.boxesReview')}>
+              <option value="30">{t('admin.retention.next30')}</option>
+              <option value="90">{t('admin.retention.next90')}</option>
+              <option value="180">{t('admin.retention.next6m')}</option>
+              <option value="365">{t('admin.retention.nextYear')}</option>
+            </select>
+          </div>
+          {upcomingError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={upcomingBoxes?.data || []} isLoading={upcomingLoading} emptyMessage={t('admin.retention.noBoxesInPeriod')} />}
+          <Pagination page={upcomingPage} limit={reviewLimit} total={upcomingBoxes?.total || 0} onPageChange={setUpcomingPage} />
+        </div>
+      )}
+
+      <Modal isOpen={showDisposalProposal} onClose={() => setShowDisposalProposal(false)} title={t('admin.retention.disposal.proposalTitle')} size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">{t('admin.retention.disposal.proposalHint', { count: selectedDueIds.size })}</p>
+          <div>
+            <label htmlFor="disposal-proposal-notes" className="label-text">{t('admin.retention.disposal.notes')}</label>
+            <textarea id="disposal-proposal-notes" value={proposalNotes} onChange={(e) => setProposalNotes(e.target.value)} className="input-field" rows={3} maxLength={1000} />
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <button type="button" onClick={() => setShowDisposalProposal(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="button" onClick={handleDisposalProposal} disabled={!selectedDueIds.size || proposalSubmitting} className="btn-primary">
+              {proposalSubmitting ? t('common.processing') : t('admin.retention.disposal.confirmProposal')}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Create Policy Modal */}
       <Modal isOpen={showCreatePolicy} onClose={() => setShowCreatePolicy(false)} title={t('admin.retention.createModal.title')} size="md">

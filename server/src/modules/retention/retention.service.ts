@@ -5,6 +5,42 @@ import { notificationService } from '../notifications/notification.service';
 import { parseJrwaDocx } from './jrwa-import.parser';
 
 export class RetentionService {
+  private disposalEligibility(tenantId: string): Prisma.BoxWhereInput {
+    const restrictedCategory: Prisma.StringFilter = {
+      startsWith: 'A',
+      mode: 'insensitive',
+    };
+    return {
+      tenantId,
+      deletedAt: null,
+      legalHold: false,
+      hrFolders: { none: {} },
+      retentionPolicy: {
+        is: {
+          isActive: true,
+          isPermanent: false,
+          AND: [
+            { OR: [{ tenantId: null }, { tenantId }] },
+            { OR: [
+              { archivalCategory: null },
+              { NOT: { OR: [
+                { archivalCategory: restrictedCategory },
+                { archivalCategory: { startsWith: 'BE', mode: 'insensitive' } },
+              ] } },
+            ] },
+          ],
+        },
+      },
+      transferListItems: {
+        none: { OR: [
+          { categoryCode: restrictedCategory },
+          { categoryCode: { startsWith: 'BE', mode: 'insensitive' } },
+          { disposalOrTransferDate: { gt: new Date() } },
+        ] },
+      },
+    };
+  }
+
   private isSuperAdmin(actor?: IJwtPayload) {
     return Boolean(
       actor?.roles.includes(RoleCode.SUPER_ADMIN)
@@ -244,26 +280,48 @@ export class RetentionService {
     return { policyId, boxesUpdated: updated };
   }
 
-  // Get boxes approaching retention date
-  async getBoxesForReview(tenantId: string, daysAhead: number = 90) {
+  // Candidates are suggestions for human review, never automatic disposal.
+  async getBoxesForReview(tenantId: string, daysAhead: number = 90, scope: 'due' | 'upcoming' = 'upcoming', page = 1, limit = 25) {
+    const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + daysAhead);
+    const where: Prisma.BoxWhereInput = {
+      ...this.disposalEligibility(tenantId),
+      status: 'active',
+      retentionDate: scope === 'due' ? { lte: now } : { gt: now, lte: futureDate },
+    };
+    const [data, total] = await Promise.all([
+      prisma.box.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ retentionDate: 'asc' }, { id: 'asc' }],
+        include: {
+          location: { select: { fullPath: true } },
+          retentionPolicy: { select: { name: true, retentionYears: true, archivalCategory: true } },
+        },
+      }),
+      prisma.box.count({ where }),
+    ]);
+    return { data, total, page, limit };
+  }
 
-    return prisma.box.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        legalHold: false,
-        hrFolders: { none: { litigationHold: true } },
-        retentionDate: { lte: futureDate, gte: new Date() },
-        status: { in: ['active', 'checked_out'] },
-      },
-      orderBy: { retentionDate: 'asc' },
-      include: {
-        location: { select: { fullPath: true } },
-        retentionPolicy: { select: { name: true, retentionYears: true } },
-      },
-    });
+  async getPendingDisposal(tenantId: string, page = 1, limit = 25) {
+    const where: Prisma.BoxWhereInput = { tenantId, deletedAt: null, status: 'pending_disposal' };
+    const [data, total] = await Promise.all([
+      prisma.box.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+        include: {
+          location: { select: { fullPath: true } },
+          retentionPolicy: { select: { name: true, archivalCategory: true } },
+        },
+      }),
+      prisma.box.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 
   // Initiate disposal process
@@ -271,12 +329,12 @@ export class RetentionService {
     const uniqueIds = [...new Set(boxIds)];
     const updated = await prisma.$transaction(async (tx) => {
       const where: Prisma.BoxWhereInput = {
-        id: { in: uniqueIds }, tenantId, deletedAt: null, status: 'active',
-        legalHold: false, hrFolders: { none: { litigationHold: true } },
+        ...this.disposalEligibility(tenantId),
+        id: { in: uniqueIds }, status: 'active', retentionDate: { lte: new Date() },
       };
       const result = await tx.box.updateMany({ where, data: { status: 'pending_disposal', notes: notes || undefined } });
       if (result.count !== uniqueIds.length) {
-        throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub objęty blokadą brakowania'), { statusCode: 409 });
+        throw Object.assign(new Error('Co najmniej jeden karton nie spełnia warunków brakowania: termin, polityka, kategoria lub blokada'), { statusCode: 409 });
       }
       return result;
     });
@@ -301,8 +359,8 @@ export class RetentionService {
     const uniqueIds = [...new Set(boxIds)];
     const updated = await prisma.$transaction(async (tx) => {
       const where: Prisma.BoxWhereInput = {
-        id: { in: uniqueIds }, tenantId, deletedAt: null, status: 'pending_disposal',
-        legalHold: false, hrFolders: { none: { litigationHold: true } },
+        ...this.disposalEligibility(tenantId),
+        id: { in: uniqueIds }, status: 'pending_disposal', retentionDate: { lte: new Date() },
       };
       const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
       if (boxes.length !== uniqueIds.length) {
