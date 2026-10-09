@@ -256,6 +256,8 @@
       "markPicked": "Potwierdź pobranie",
       "undoPick": "Cofnij pobranie",
       "pickedSuccess": "Potwierdzono pobranie pozycji",
+      "scannedItem": "Potwierdzono pobranie: {{item}}",
+      "scanResult": { "success": "OK", "warning": "Uwaga", "duplicate": "Duplikat", "error": "Błąd skanu" },
       "pickUndone": "Cofnięto potwierdzenie pobrania",
       "deliver": "Wydaj / Dostarcz",
       "complete": "Zakończono",

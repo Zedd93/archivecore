@@ -256,6 +256,8 @@
       "markPicked": "Confirm pick",
       "undoPick": "Undo pick",
       "pickedSuccess": "Item picked",
+      "scannedItem": "Picked: {{item}}",
+      "scanResult": { "success": "OK", "warning": "Attention", "duplicate": "Duplicate", "error": "Scan error" },
       "pickUndone": "Pick confirmation removed",
       "deliver": "Issue / Deliver",
       "complete": "Completed",

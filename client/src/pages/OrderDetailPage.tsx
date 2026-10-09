@@ -15,10 +15,11 @@ import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
+import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { matchOrderItemQr } from '@/utils/orderPicking';
 import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
-import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw } from 'lucide-react';
+import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 // Status flow steps
 const STATUS_STEPS = ['draft', 'submitted', 'approved', 'in_progress', 'ready', 'delivered', 'completed'];
@@ -27,6 +28,18 @@ interface SelectedDocument {
   id: string;
   title: string;
   source?: 'document' | 'transfer_list_item';
+}
+
+interface OrderPickScanItem {
+  id: string;
+  itemStatus: string;
+  boxId?: string | null;
+  folderId?: string | null;
+  box?: { qrCode?: string | null; boxNumber?: string } | null;
+  folder?: { folderNumber?: string } | null;
+  transferListItem?: { folderSignature?: string } | null;
+  document?: { title?: string } | null;
+  hrFolder?: { employeeFirstName?: string; employeeLastName?: string } | null;
 }
 
 export default function OrderDetailPage() {
@@ -46,10 +59,11 @@ export default function OrderDetailPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [addingItems, setAddingItems] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const { feedback: scanFeedback, soundEnabled, startCameraSound, toggleSound, showFeedback: showScanFeedback } = useScanFeedback(isScanning);
   const [manualCode, setManualCode] = useState('');
   const [pickingItemId, setPickingItemId] = useState<string | null>(null);
   const pickBusyRef = useRef(false);
-  const lastCameraCodeRef = useRef('');
+  const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'), return_order: t('orders.typeReturn'),
@@ -74,7 +88,13 @@ export default function OrderDetailPage() {
   const remainingCount = (order.items?.length ?? 0) - handledCount;
   const displayItems = canPick ? sortOrderItemsByPickRoute(order.items || []) : order.items || [];
 
-  const updatePick = async (itemId: string, status: 'pending' | 'picked') => {
+  const allowCameraRetry = (code: string) => {
+    if (lastCameraCodeRef.current.code === code.trim()) {
+      lastCameraCodeRef.current.retryAt = Date.now() + 5000;
+    }
+  };
+
+  const updatePick = async (itemId: string, status: 'pending' | 'picked', scannedLabel?: string, scannedCode?: string) => {
     if (!id || pickBusyRef.current) return;
     pickBusyRef.current = true;
     setPickingItemId(itemId);
@@ -82,9 +102,16 @@ export default function OrderDetailPage() {
       await api.patch(`/orders/${id}/items/${itemId}/status`, { status });
       await queryClient.invalidateQueries({ queryKey: ['order', id] });
       await queryClient.invalidateQueries({ queryKey: ['orders'] });
-      toast.success(t(status === 'picked' ? 'orders.detail.pickedSuccess' : 'orders.detail.pickUndone'));
+      if (scannedLabel) showScanFeedback('success', t('orders.detail.scannedItem', { item: scannedLabel }));
+      else toast.success(t(status === 'picked' ? 'orders.detail.pickedSuccess' : 'orders.detail.pickUndone'));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      const message = getApiErrorMessage(error, t('common.genericError'));
+      if (scannedLabel) {
+        showScanFeedback('error', message);
+        if (scannedCode) allowCameraRetry(scannedCode);
+      } else {
+        toast.error(message);
+      }
       await queryClient.invalidateQueries({ queryKey: ['order', id] });
     } finally {
       pickBusyRef.current = false;
@@ -94,34 +121,42 @@ export default function OrderDetailPage() {
 
   const processPickCode = (rawCode: string) => {
     if (!canPick || pickBusyRef.current) return;
-    const match = matchOrderItemQr(order.items, rawCode);
+    const match = matchOrderItemQr<OrderPickScanItem>(order.items, rawCode);
     if (match.kind === 'invalid') {
-      toast.error(t('orders.detail.invalidPickCode'));
+      showScanFeedback('error', t('orders.detail.invalidPickCode'));
+      allowCameraRetry(rawCode);
       return;
     }
     if (match.kind === 'missing') {
-      toast.error(t('orders.detail.codeNotInOrder'));
+      showScanFeedback('warning', t('orders.detail.codeNotInOrder'));
+      allowCameraRetry(rawCode);
       return;
     }
     if (match.kind === 'ambiguous') {
-      toast.error(t('orders.detail.ambiguousPickCode'));
+      showScanFeedback('warning', t('orders.detail.ambiguousPickCode'));
+      allowCameraRetry(rawCode);
       return;
     }
     if (match.item.itemStatus === 'picked') {
-      toast(t('orders.detail.alreadyPicked'));
+      showScanFeedback('duplicate', t('orders.detail.alreadyPicked'));
       return;
     }
     if (match.item.itemStatus !== 'pending') {
-      toast.error(t('orders.detail.cannotPickItem'));
+      showScanFeedback('error', t('orders.detail.cannotPickItem'));
+      allowCameraRetry(rawCode);
       return;
     }
-    void updatePick(match.item.id, 'picked');
+    const item = match.item;
+    const label = item.box?.boxNumber || item.folder?.folderNumber || item.transferListItem?.folderSignature
+      || item.document?.title || [item.hrFolder?.employeeFirstName, item.hrFolder?.employeeLastName].filter(Boolean).join(' ')
+      || t('orders.detail.pickedSuccess');
+    void updatePick(item.id, 'picked', label, rawCode);
   };
 
   const handleCameraCode = (rawCode: string) => {
     const code = rawCode.trim();
-    if (!code || pickBusyRef.current || lastCameraCodeRef.current === code) return;
-    lastCameraCodeRef.current = code;
+    if (!code || pickBusyRef.current || (lastCameraCodeRef.current.code === code && Date.now() < lastCameraCodeRef.current.retryAt)) return;
+    lastCameraCodeRef.current = { code, retryAt: Number.POSITIVE_INFINITY };
     processPickCode(code);
   };
 
@@ -273,7 +308,7 @@ export default function OrderDetailPage() {
             {remainingCount > 0 && <p className="text-xs text-amber-700 mt-1">{t('orders.detail.pickingRequired')}</p>}
           </div>
           {!isScanning ? (
-            <button type="button" className="btn-primary w-full sm:w-auto flex items-center justify-center gap-2" onClick={() => { lastCameraCodeRef.current = ''; setIsScanning(true); }}>
+            <button type="button" className="btn-primary w-full sm:w-auto flex items-center justify-center gap-2" onClick={() => { startCameraSound(); lastCameraCodeRef.current = { code: '', retryAt: 0 }; setIsScanning(true); }}>
               <Camera size={17} />{t('labels.startCamera')}
             </button>
           ) : (
@@ -281,9 +316,17 @@ export default function OrderDetailPage() {
               <QrCameraScanner
                 id="archivecore-order-pick-scanner"
                 onCode={handleCameraCode}
-                onError={() => { toast.error(t('labels.cameraError')); setIsScanning(false); }}
+                onError={() => { showScanFeedback('error', t('labels.cameraError')); setIsScanning(false); }}
               />
               <button type="button" className="btn-secondary w-full" onClick={() => setIsScanning(false)}>{t('labels.stopCamera')}</button>
+            </div>
+          )}
+          <button type="button" className="btn-secondary w-full sm:w-auto" aria-pressed={soundEnabled} onClick={toggleSound}>
+            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{t(soundEnabled ? 'inventory.muteSound' : 'inventory.unmuteSound')}
+          </button>
+          {scanFeedback && (
+            <div role="status" aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm font-semibold break-words ${scanFeedbackStyles[scanFeedback.kind]}`}>
+              {t(`orders.detail.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
             </div>
           )}
           <form onSubmit={(event) => { event.preventDefault(); if (pickBusyRef.current) return; processPickCode(manualCode); setManualCode(''); }} className="max-w-lg">

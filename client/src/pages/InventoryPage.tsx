@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import api from '@/services/api';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { useAuth } from '@/contexts/AuthContext';
+import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { escapeInventoryCsvCell, reconcileInventory, type InventoryBox } from '@/utils/inventory';
 
@@ -60,22 +61,6 @@ interface SessionHistory {
   total: number;
 }
 
-type ScanFeedbackKind = 'success' | 'warning' | 'duplicate' | 'error';
-
-const scanFeedbackStyles: Record<ScanFeedbackKind, string> = {
-  success: 'border-green-300 bg-green-50 text-green-900',
-  warning: 'border-amber-300 bg-amber-50 text-amber-900',
-  duplicate: 'border-blue-300 bg-blue-50 text-blue-900',
-  error: 'border-red-300 bg-red-50 text-red-900',
-};
-
-const scanTones: Record<ScanFeedbackKind, number[]> = {
-  success: [880],
-  warning: [440, 440],
-  duplicate: [660, 660],
-  error: [220, 220],
-};
-
 export default function InventoryPage() {
   const { t } = useTranslation();
   const { user, hasPermission } = useAuth();
@@ -88,57 +73,12 @@ export default function InventoryPage() {
   const [historyPage, setHistoryPage] = useState(1);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState('');
   const [resolutionNote, setResolutionNote] = useState('');
-  const [scanFeedback, setScanFeedback] = useState<{ kind: ScanFeedbackKind; message: string } | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const { feedback: scanFeedback, soundEnabled, startCameraSound, toggleSound, showFeedback: showScanFeedback, clearFeedback } = useScanFeedback(isScanning);
   const busyRef = useRef(false);
   const lastCameraCodeRef = useRef('');
-  const audioContextRef = useRef<AudioContext | null>(null);
   const snapshot = session?.snapshot || null;
   const scanned = session?.scanned || [];
   const isFinished = session?.status === 'completed';
-
-  useEffect(() => () => {
-    if (audioContextRef.current) void audioContextRef.current.close();
-  }, []);
-
-  const unlockSound = () => {
-    if (!window.AudioContext) return;
-    try {
-      audioContextRef.current ??= new AudioContext();
-      void audioContextRef.current.resume();
-    } catch {
-      // The visual result remains available when audio is blocked.
-    }
-  };
-
-  const showScanFeedback = (kind: ScanFeedbackKind, message: string) => {
-    setScanFeedback({ kind, message });
-    if (!isScanning) return;
-    try {
-      if ('vibrate' in navigator) navigator.vibrate(kind === 'success' ? 60 : [100, 80, 100]);
-    } catch {
-      // Vibration support varies by device and browser.
-    }
-    const context = audioContextRef.current;
-    if (!soundEnabled || !context || context.state !== 'running') return;
-    try {
-      scanTones[kind].forEach((frequency, index) => {
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        const start = context.currentTime + index * 0.16;
-        oscillator.type = 'sine';
-        oscillator.frequency.value = frequency;
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.12, start + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.12);
-        oscillator.connect(gain).connect(context.destination);
-        oscillator.start(start);
-        oscillator.stop(start + 0.13);
-      });
-    } catch {
-      // Audio is optional; never interrupt a scan because of device support.
-    }
-  };
 
   const { data: history, isLoading: isHistoryLoading, isError: isHistoryError, refetch: refetchHistory } = useQuery<SessionHistory>({
     queryKey: ['inventory-sessions', activeTenantId, historyPage],
@@ -163,7 +103,7 @@ export default function InventoryPage() {
       setSelectedDiscrepancy('');
       setResolutionNote('');
       setManualCode('');
-      setScanFeedback(null);
+      clearFeedback();
       setHistoryPage(1);
       await queryClient.invalidateQueries({ queryKey: ['inventory-sessions', activeTenantId] });
       toast.success(t('inventory.started'));
@@ -188,7 +128,7 @@ export default function InventoryPage() {
       setSelectedDiscrepancy('');
       setResolutionNote('');
       setManualCode('');
-      setScanFeedback(null);
+      clearFeedback();
       lastCameraCodeRef.current = '';
     } catch (error) {
       toast.error(getApiErrorMessage(error, t('common.genericError')));
@@ -392,14 +332,14 @@ export default function InventoryPage() {
       <section className="card space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ScanLine size={19} />{t('inventory.scanner')}</h2>
         {!isScanning ? (
-          <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => { unlockSound(); lastCameraCodeRef.current = ''; setIsScanning(true); }}><Camera size={17} />{t('labels.startCamera')}</button>
+          <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => { startCameraSound(); lastCameraCodeRef.current = ''; setIsScanning(true); }}><Camera size={17} />{t('labels.startCamera')}</button>
         ) : (
           <>
-            <QrCameraScanner id="archivecore-inventory-scanner" onCode={handleCameraCode} onError={() => { setScanFeedback({ kind: 'error', message: t('labels.cameraError') }); setIsScanning(false); }} />
+            <QrCameraScanner id="archivecore-inventory-scanner" onCode={handleCameraCode} onError={() => { showScanFeedback('error', t('labels.cameraError')); setIsScanning(false); }} />
             <button type="button" className="btn-secondary w-full sm:w-auto" onClick={() => setIsScanning(false)}>{t('labels.stopCamera')}</button>
           </>
         )}
-        <button type="button" className="btn-secondary w-full sm:w-auto" aria-pressed={soundEnabled} onClick={() => { if (!soundEnabled) unlockSound(); setSoundEnabled((enabled) => !enabled); }}>
+        <button type="button" className="btn-secondary w-full sm:w-auto" aria-pressed={soundEnabled} onClick={toggleSound}>
           {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{t(soundEnabled ? 'inventory.muteSound' : 'inventory.unmuteSound')}
         </button>
         {scanFeedback && (
