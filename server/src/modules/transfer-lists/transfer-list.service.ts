@@ -410,6 +410,7 @@ export class TransferListService {
 
     const created = [];
     const errors: string[] = [];
+    const errorDetails: { itemIndex: number; message: string }[] = [];
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -429,12 +430,14 @@ export class TransferListService {
         created.push(record);
       } catch (err: any) {
         errors.push(`Wiersz ${i + 1}: ${err.message}`);
+        errorDetails.push({ itemIndex: i, message: err.message });
       }
     }
 
     return {
       imported: created.length,
       errors: errors.length > 0 ? errors : undefined,
+      errorDetails,
       items: created,
     };
   }

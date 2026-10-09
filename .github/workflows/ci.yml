@@ -40,6 +40,9 @@ jobs:
       - name: Verify monthly client report
         run: npm run test:monthly-report
 
+      - name: Verify transfer list column mapping
+        run: npm run test:transfer-list-mapping
+
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
 

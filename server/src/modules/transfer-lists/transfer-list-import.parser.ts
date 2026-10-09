@@ -1,5 +1,49 @@
 import * as XLSX from 'xlsx';
+import { z } from 'zod';
 import { normalizeDisplayText } from '@archivecore/shared';
+
+const MANUAL_FIELDS = [
+  'folderSignature', 'folderTitle', 'dateFrom', 'dateTo', '_dateRange',
+  'categoryCode', 'folderCount', 'storageLocation', 'disposalOrTransferDate',
+  'boxNumber', 'notes',
+] as const;
+
+const manualOptionsSchema = z.object({
+  sheetName: z.string().min(1).max(255),
+  headerRow: z.number().int().min(1).max(10000),
+  columns: z.record(z.enum(MANUAL_FIELDS)),
+}).strict().superRefine((value, ctx) => {
+  const entries = Object.entries(value.columns);
+  if (entries.length === 0 || entries.length > 50 || entries.some(([key]) => !/^(0|[1-9]\d?)$/.test(key))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nieprawidłowe indeksy kolumn' });
+  }
+  const fields = entries.map(([, field]) => field);
+  if (new Set(fields).size !== fields.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jedno pole może być przypisane tylko do jednej kolumny' });
+  }
+  for (const required of ['folderSignature', 'folderTitle', 'categoryCode']) {
+    if (!fields.includes(required as typeof MANUAL_FIELDS[number])) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Wymagane mapowanie pola ${required}` });
+    }
+  }
+  if (fields.includes('_dateRange') && (fields.includes('dateFrom') || fields.includes('dateTo'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Wybierz zakres dat albo osobne kolumny dat' });
+  }
+});
+
+export type TransferListImportOptions = z.infer<typeof manualOptionsSchema>;
+
+export function parseTransferListImportOptions(value: unknown): TransferListImportOptions | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  let parsed: unknown;
+  try { parsed = typeof value === 'string' ? JSON.parse(value) : value; }
+  catch { throw Object.assign(new Error('Nieprawidłowe mapowanie kolumn'), { statusCode: 400 }); }
+  const result = manualOptionsSchema.safeParse(parsed);
+  if (!result.success) {
+    throw Object.assign(new Error(result.error.issues[0]?.message || 'Nieprawidłowe mapowanie kolumn'), { statusCode: 400 });
+  }
+  return result.data;
+}
 
 const TRANSFER_LIST_COLUMN_MAP: Record<string, string> = {
   'lp': '_ordinal',
@@ -89,6 +133,7 @@ function normalizeHeader(value: unknown): string {
 function getWorksheetRows(sheet: XLSX.WorkSheet): any[][] {
   return XLSX.utils.sheet_to_json(sheet, {
     header: 1,
+    range: 0,
     defval: '',
     blankrows: true,
     raw: true,
@@ -127,6 +172,22 @@ function selectTransferListSheet(workbook: XLSX.WorkBook) {
   }
 
   return null;
+}
+
+export function inspectTransferListImport(buffer: Buffer) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  return workbook.SheetNames.map((sheetName) => {
+    const rows = getWorksheetRows(workbook.Sheets[sheetName]);
+    const detected = detectHeaderRow(rows);
+    return {
+      sheetName,
+      detectedHeaderRow: detected ? detected.headerIndex + 1 : null,
+      rows: rows.slice(0, 50).map((cells, index) => ({
+        rowNumber: index + 1,
+        cells: cells.slice(0, 50).map((cell) => normalizeDisplayText(cell).slice(0, 100)),
+      })),
+    };
+  });
 }
 
 function parseDate(val: any): string | null {
@@ -181,14 +242,26 @@ function isColumnNumberingRow(mapped: any): boolean {
     && /^\d+$/.test(String(mapped.categoryCode ?? '').trim());
 }
 
-export function parseTransferListImport(buffer: Buffer) {
+export function parseTransferListImport(buffer: Buffer, options?: TransferListImportOptions) {
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-  const selected = selectTransferListSheet(workbook);
+  const selected = options ? (() => {
+    const sheet = workbook.Sheets[options.sheetName];
+    if (!sheet) throw Object.assign(new Error('Nie znaleziono wybranego arkusza'), { statusCode: 400 });
+    const rows = getWorksheetRows(sheet);
+    if (options.headerRow > rows.length) throw Object.assign(new Error('Nie znaleziono wybranego wiersza nagłówka'), { statusCode: 400 });
+    return {
+      sheetName: options.sheetName,
+      rows,
+      headerIndex: options.headerRow - 1,
+      headerMap: Object.fromEntries(Object.entries(options.columns).map(([index, field]) => [Number(index), field])),
+    };
+  })() : selectTransferListSheet(workbook);
   if (!selected) {
     throw Object.assign(new Error('Nie rozpoznano arkusza ze spisem zdawczo-odbiorczym. Oczekiwane nagłówki to m.in. "Znak teczki", "Tytuł teczki lub tomu", "Kat. akt".'), { statusCode: 400 });
   }
 
-  const items = selected.rows.slice(selected.headerIndex + 1).map((row, rowIndex) => {
+  const errors: { row: number; message: string }[] = [];
+  const parsedRows = selected.rows.slice(selected.headerIndex + 1).map((row, rowIndex) => {
     const mapped: any = {};
     for (const [columnIndex, fieldName] of Object.entries(selected.headerMap)) {
       mapped[fieldName] = row[Number(columnIndex)];
@@ -204,18 +277,29 @@ export function parseTransferListImport(buffer: Buffer) {
 
     const folderSignature = normalizeDisplayText(mapped.folderSignature).trim();
     const folderTitle = normalizeDisplayText(mapped.folderTitle).trim();
+    const categoryCode = normalizeDisplayText(mapped.categoryCode).trim();
 
-    if (!folderSignature && !folderTitle) return null;
+    if (!folderSignature && !folderTitle) {
+      if (options && Object.values(mapped).some((value) => String(value ?? '').trim())) {
+        errors.push({ row: selected.headerIndex + rowIndex + 2, message: 'Brak znaku i tytułu teczki' });
+      }
+      return null;
+    }
     if (normalizeHeader(folderSignature) === 'znak teczki' || normalizeHeader(folderTitle).startsWith('tytuł teczki')) return null;
+    if (options && (!folderSignature || !folderTitle || !categoryCode)) {
+      errors.push({ row: selected.headerIndex + rowIndex + 2, message: 'Brak znaku, tytułu lub kategorii teczki' });
+      return null;
+    }
 
     const boxNumber = String(mapped.boxNumber ?? '').trim();
 
     return {
+      _sourceRow: selected.headerIndex + rowIndex + 2,
       folderSignature: folderSignature || `Poz. ${rowIndex + 1}`,
       folderTitle: folderTitle || 'Bez tytułu',
       dateFrom: parseDate(mapped.dateFrom),
       dateTo: parseDate(mapped.dateTo),
-      categoryCode: normalizeDisplayText(mapped.categoryCode).trim() || 'B10',
+      categoryCode: categoryCode || 'B10',
       folderCount: Math.max(1, parseInt(String(mapped.folderCount), 10) || 1),
       storageLocation: mapped.storageLocation ? normalizeDisplayText(mapped.storageLocation).trim() || null : null,
       disposalOrTransferDate: parseDate(mapped.disposalOrTransferDate),
@@ -224,9 +308,17 @@ export function parseTransferListImport(buffer: Buffer) {
     };
   }).filter((item: any) => item !== null);
 
+  const rowNumbers = parsedRows.map((item: any) => item._sourceRow as number);
+  const items = parsedRows.map((item: any) => {
+    const { _sourceRow, ...data } = item;
+    return data;
+  });
+
   return {
     sheetName: selected.sheetName,
     headerRow: selected.headerIndex + 1,
     items,
+    rowNumbers,
+    errors,
   };
 }

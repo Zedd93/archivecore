@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { DOC_TYPES, DOC_TYPE_LABELS, generateQrData, normalizeDisplayText, peselSchema } from '@archivecore/shared';
 import { encryptAES256, hmacSha256 } from '../../utils/crypto';
-import { parseTransferListImport } from '../transfer-lists/transfer-list-import.parser';
+import { inspectTransferListImport, parseTransferListImport, TransferListImportOptions } from '../transfer-lists/transfer-list-import.parser';
 import { transferListService } from '../transfer-lists/transfer-list.service';
 
 // ─── Row validation schemas (relaxed versions for import) ─
@@ -308,16 +308,18 @@ export class ImportService {
    * Preview transfer list import. Supports customer SZO sheets with descriptive rows
    * before the actual table header.
    */
-  async previewTransferLists(buffer: Buffer, filename: string): Promise<{ rows: any[]; errors: ImportResult['errors']; meta: any }> {
-    const parsed = parseTransferListImport(buffer);
-    const firstDataRow = parsed.headerRow + 2;
+  inspectTransferLists(buffer: Buffer) {
+    return inspectTransferListImport(buffer);
+  }
 
+  async previewTransferLists(buffer: Buffer, filename: string, options?: TransferListImportOptions): Promise<{ rows: any[]; errors: ImportResult['errors']; meta: any }> {
+    const parsed = parseTransferListImport(buffer, options);
     return {
       rows: parsed.items.map((item: any, index: number) => ({
         ...item,
-        _rowIndex: firstDataRow + index,
+        _rowIndex: parsed.rowNumbers[index],
       })),
-      errors: [],
+      errors: parsed.errors,
       meta: {
         sheetName: parsed.sheetName,
         headerRow: parsed.headerRow,
@@ -326,15 +328,15 @@ export class ImportService {
     };
   }
 
-  async importTransferLists(buffer: Buffer, filename: string, tenantId: string, userId: string): Promise<ImportResult> {
-    const parsed = parseTransferListImport(buffer);
+  async importTransferLists(buffer: Buffer, filename: string, tenantId: string, userId: string, options?: TransferListImportOptions): Promise<ImportResult> {
+    const parsed = parseTransferListImport(buffer, options);
     const title = transferListTitleFromFilename(filename);
 
     if (parsed.items.length === 0) {
       return {
-        totalRows: 0,
+        totalRows: parsed.errors.length,
         imported: 0,
-        errors: [{
+        errors: parsed.errors.length ? parsed.errors : [{
           row: parsed.headerRow,
           message: `Rozpoznano arkusz "${parsed.sheetName}", ale nie znaleziono pozycji do importu`,
         }],
@@ -349,9 +351,9 @@ export class ImportService {
     const result = await transferListService.importItems(list.id, tenantId, userId, parsed.items);
 
     return {
-      totalRows: parsed.items.length,
+      totalRows: parsed.items.length + parsed.errors.length,
       imported: result.imported,
-      errors: (result.errors ?? []).map((message, index) => ({ row: index + 1, message })),
+      errors: [...parsed.errors, ...result.errorDetails.map(({ itemIndex, message }) => ({ row: parsed.rowNumbers[itemIndex], message }))],
       listId: list.id,
       listNumber: list.listNumber,
       title: list.title,

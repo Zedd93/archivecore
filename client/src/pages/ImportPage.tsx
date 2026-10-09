@@ -28,6 +28,20 @@ interface PreviewResult {
   errors: ImportError[];
 }
 
+interface SheetStructure {
+  sheetName: string;
+  detectedHeaderRow: number | null;
+  rows: { rowNumber: number; cells: string[] }[];
+}
+
+const TRANSFER_FIELDS = [
+  'folderSignature', 'folderTitle', 'dateFrom', 'dateTo', '_dateRange',
+  'categoryCode', 'folderCount', 'storageLocation', 'disposalOrTransferDate',
+  'boxNumber', 'notes',
+] as const;
+
+type TransferField = typeof TRANSFER_FIELDS[number];
+
 interface ImportResult {
   totalRows: number;
   imported: number;
@@ -56,7 +70,20 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [mappingMode, setMappingMode] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
+  const [sheets, setSheets] = useState<SheetStructure[]>([]);
+  const [sheetName, setSheetName] = useState('');
+  const [headerRow, setHeaderRow] = useState(1);
+  const [columnMapping, setColumnMapping] = useState<Record<string, TransferField>>({});
+  const [previewMapping, setPreviewMapping] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedSheet = sheets.find((sheet) => sheet.sheetName === sheetName);
+  const selectedHeader = selectedSheet?.rows.find((row) => row.rowNumber === headerRow);
+  const mappedFields = Object.values(columnMapping);
+  const mappingReady = ['folderSignature', 'folderTitle', 'categoryCode'].every((field) => mappedFields.includes(field as TransferField))
+    && !(mappedFields.includes('_dateRange') && (mappedFields.includes('dateFrom') || mappedFields.includes('dateTo')));
 
   // ─── File handling ──────────────────────────────────────
   const handleFileSelect = useCallback((selectedFile: File) => {
@@ -73,7 +100,11 @@ export default function ImportPage() {
     setFile(selectedFile);
     setPreview(null);
     setImportResult(null);
-  }, []);
+    setPreviewMapping(null);
+    setMappingMode(false);
+    setSheets([]);
+    setColumnMapping({});
+  }, [t]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -89,6 +120,48 @@ export default function ImportPage() {
 
   const handleDragLeave = useCallback(() => setDragOver(false), []);
 
+  const inspectColumns = async () => {
+    if (!file) return;
+    setInspecting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await api.post('/import/transfer-lists/inspect', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const availableSheets = data.data as SheetStructure[];
+      const first = availableSheets.find((sheet) => sheet.detectedHeaderRow) ?? availableSheets[0];
+      if (!first) throw new Error(t('import.mappingNoSheets'));
+      setSheets(availableSheets);
+      setSheetName(first.sheetName);
+      setHeaderRow(first.detectedHeaderRow ?? 1);
+      setColumnMapping({});
+      setPreview(null);
+      setPreviewMapping(null);
+      setMappingMode(true);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
+    } finally {
+      setInspecting(false);
+    }
+  };
+
+  const updateMapping = (columnIndex: string, field: string) => {
+    setColumnMapping((previous) => {
+      const next = { ...previous };
+      delete next[columnIndex];
+      if (field) {
+        for (const [index, assigned] of Object.entries(next)) {
+          if (assigned === field) delete next[index];
+        }
+        next[columnIndex] = field as TransferField;
+      }
+      return next;
+    });
+    setPreview(null);
+    setPreviewMapping(null);
+  };
+
   // ─── Preview ────────────────────────────────────────────
   const handlePreview = async () => {
     if (!file) return;
@@ -99,11 +172,14 @@ export default function ImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const mapping = mappingMode ? JSON.stringify({ sheetName, headerRow, columns: columnMapping }) : null;
+      if (mapping) formData.append('mapping', mapping);
 
       const { data } = await api.post(`/import/${entityType}/preview`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setPreview(data.data);
+      setPreviewMapping(mapping);
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
@@ -119,6 +195,7 @@ export default function ImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (entityType === 'transfer-lists' && previewMapping) formData.append('mapping', previewMapping);
 
       const { data } = await api.post(`/import/${entityType}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -143,6 +220,10 @@ export default function ImportPage() {
     setFile(null);
     setPreview(null);
     setImportResult(null);
+    setPreviewMapping(null);
+    setMappingMode(false);
+    setSheets([]);
+    setColumnMapping({});
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -175,6 +256,7 @@ export default function ImportPage() {
           {ENTITY_OPTIONS.map(opt => (
             <button
               key={opt.value}
+              disabled={previewing || importing || inspecting}
               onClick={() => { setEntityType(opt.value); handleReset(); }}
               className={`text-left p-4 rounded-lg border-2 transition-colors ${
                 entityType === opt.value
@@ -231,10 +313,100 @@ export default function ImportPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={handleReset} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200" aria-label="Remove file">
+              <button onClick={handleReset} disabled={previewing || importing || inspecting} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200" aria-label="Remove file">
                 <X size={18} />
               </button>
             </div>
+          </div>
+        )}
+
+        {file && entityType === 'transfer-lists' && !importResult && (
+          <div className="mt-4 rounded-xl border border-gray-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">{t('import.mappingTitle')}</h3>
+                <p className="text-xs text-gray-500">{t('import.mappingHint')}</p>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary flex items-center gap-2"
+                disabled={inspecting || previewing || importing}
+                onClick={mappingMode ? () => {
+                  setMappingMode(false);
+                  setPreview(null);
+                  setPreviewMapping(null);
+                } : inspectColumns}
+              >
+                {inspecting && <Loader2 size={16} className="animate-spin" />}
+                {t(mappingMode ? 'import.mappingAutomatic' : 'import.mappingManual')}
+              </button>
+            </div>
+
+            {mappingMode && selectedSheet && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="text-sm font-medium text-gray-700">
+                    {t('import.mappingSheet')}
+                    <select
+                      className="input-field mt-1"
+                      disabled={previewing || importing}
+                      value={sheetName}
+                      onChange={(event) => {
+                        const nextSheet = sheets.find((sheet) => sheet.sheetName === event.target.value);
+                        setSheetName(event.target.value);
+                        setHeaderRow(nextSheet?.detectedHeaderRow ?? 1);
+                        setColumnMapping({});
+                        setPreview(null);
+                        setPreviewMapping(null);
+                      }}
+                    >
+                      {sheets.map((sheet) => <option key={sheet.sheetName} value={sheet.sheetName}>{sheet.sheetName}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-sm font-medium text-gray-700">
+                    {t('import.mappingHeaderRow')}
+                    <select
+                      className="input-field mt-1"
+                      disabled={previewing || importing}
+                      value={headerRow}
+                      onChange={(event) => {
+                        setHeaderRow(Number(event.target.value));
+                        setColumnMapping({});
+                        setPreview(null);
+                        setPreviewMapping(null);
+                      }}
+                    >
+                      {selectedSheet.rows.map((row) => (
+                        <option key={row.rowNumber} value={row.rowNumber}>
+                          {t('import.mappingRow', { number: row.rowNumber })}: {row.cells.filter(Boolean).slice(0, 3).join(' | ').slice(0, 90) || '—'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500">{t('import.mappingRequired')}</p>
+                <div className="max-h-80 overflow-y-auto space-y-2">
+                  {selectedHeader?.cells.map((header, index) => (
+                    <div key={index} className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center rounded-lg bg-gray-50 p-2">
+                      <span className="text-sm text-gray-700 break-words">{index + 1}. {header || t('import.mappingEmptyHeader')}</span>
+                      <select
+                        className="input-field"
+                        disabled={previewing || importing}
+                        aria-label={t('import.mappingColumnLabel', { number: index + 1 })}
+                        value={columnMapping[String(index)] || ''}
+                        onChange={(event) => updateMapping(String(index), event.target.value)}
+                      >
+                        <option value="">{t('import.mappingIgnore')}</option>
+                        {TRANSFER_FIELDS.map((field) => (
+                          <option key={field} value={field}>{t(`import.mappingFields.${field}`)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                {!mappingReady && <p className="text-sm text-amber-700">{t('import.mappingIncomplete')}</p>}
+              </div>
+            )}
           </div>
         )}
 
@@ -242,7 +414,7 @@ export default function ImportPage() {
           <div className="mt-4 flex justify-end">
             <button
               onClick={handlePreview}
-              disabled={previewing}
+              disabled={previewing || (mappingMode && !mappingReady)}
               className="btn-primary flex items-center gap-2"
             >
               {previewing ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
