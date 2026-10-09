@@ -253,6 +253,8 @@ export class RetentionService {
       where: {
         tenantId,
         deletedAt: null,
+        legalHold: false,
+        hrFolders: { none: { litigationHold: true } },
         retentionDate: { lte: futureDate, gte: new Date() },
         status: { in: ['active', 'checked_out'] },
       },
@@ -266,17 +268,17 @@ export class RetentionService {
 
   // Initiate disposal process
   async initiateDisposal(tenantId: string, boxIds: string[], notes?: string) {
-    const updated = await prisma.box.updateMany({
-      where: {
-        id: { in: boxIds },
-        tenantId,
-        deletedAt: null,
-        status: 'active',
-      },
-      data: {
-        status: 'pending_disposal',
-        notes: notes || undefined,
-      },
+    const uniqueIds = [...new Set(boxIds)];
+    const updated = await prisma.$transaction(async (tx) => {
+      const where: Prisma.BoxWhereInput = {
+        id: { in: uniqueIds }, tenantId, deletedAt: null, status: 'active',
+        legalHold: false, hrFolders: { none: { litigationHold: true } },
+      };
+      const result = await tx.box.updateMany({ where, data: { status: 'pending_disposal', notes: notes || undefined } });
+      if (result.count !== uniqueIds.length) {
+        throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub objęty blokadą brakowania'), { statusCode: 409 });
+      }
+      return result;
     });
 
     if (updated.count > 0) {
@@ -291,37 +293,34 @@ export class RetentionService {
       });
     }
 
-    return { count: updated.count, boxIds };
+    return { count: updated.count, boxIds: uniqueIds };
   }
 
   // Approve disposal
   async approveDisposal(tenantId: string, boxIds: string[]) {
-    const updated = await prisma.box.updateMany({
-      where: {
-        id: { in: boxIds },
-        tenantId,
-        deletedAt: null,
-        status: 'pending_disposal',
-      },
-      data: {
-        status: 'disposed',
-        disposalDate: new Date(),
-      },
-    });
-
-    // Update location counters
-    for (const boxId of boxIds) {
-      const box = await prisma.box.findFirst({
-        where: { id: boxId, deletedAt: null },
-        select: { locationId: true },
-      });
-      if (box?.locationId) {
-        await prisma.location.update({
-          where: { id: box.locationId },
-          data: { currentCount: { decrement: 1 } },
-        });
+    const uniqueIds = [...new Set(boxIds)];
+    const updated = await prisma.$transaction(async (tx) => {
+      const where: Prisma.BoxWhereInput = {
+        id: { in: uniqueIds }, tenantId, deletedAt: null, status: 'pending_disposal',
+        legalHold: false, hrFolders: { none: { litigationHold: true } },
+      };
+      const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
+      if (boxes.length !== uniqueIds.length) {
+        throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub objęty blokadą brakowania'), { statusCode: 409 });
       }
-    }
+      const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: new Date() } });
+      if (result.count !== boxes.length) {
+        throw Object.assign(new Error('Stan kartonów zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
+      }
+      const counts = new Map<string, number>();
+      for (const box of boxes) {
+        if (box.locationId) counts.set(box.locationId, (counts.get(box.locationId) || 0) + 1);
+      }
+      for (const [locationId, count] of counts) {
+        await tx.location.update({ where: { id: locationId }, data: { currentCount: { decrement: count } } });
+      }
+      return result;
+    });
 
     if (updated.count > 0) {
       await notificationService.notifyTenantUsers({

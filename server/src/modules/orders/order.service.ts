@@ -73,8 +73,23 @@ export class OrderService {
       || item.document?.box?.id
       || item.document?.folder?.box?.id
       || item.transferListItem?.box?.id
+      || item.transferListItem?.folder?.box?.id
       || item.hrFolder?.box?.id
       || null;
+  }
+
+  private async assertDisposalNotHeld(order: any, tenantId: string) {
+    const boxIds = [...new Set(order.items.map((item: any) => this.getOrderItemBoxId(item)).filter(Boolean))] as string[];
+    const hrFolderIds = order.items.map((item: any) => item.hrFolderId).filter(Boolean) as string[];
+    const [heldBoxes, heldHrFolders] = await Promise.all([
+      boxIds.length ? prisma.box.count({
+        where: { id: { in: boxIds }, tenantId, OR: [{ legalHold: true }, { hrFolders: { some: { litigationHold: true } } }] },
+      }) : 0,
+      hrFolderIds.length ? prisma.hRFolder.count({ where: { id: { in: hrFolderIds }, tenantId, litigationHold: true } }) : 0,
+    ]);
+    if (heldBoxes || heldHrFolders) {
+      throw Object.assign(new Error('Nie można realizować brakowania dokumentacji objętej blokadą'), { statusCode: 409 });
+    }
   }
 
   private async notifyOrderStatus(order: any, newStatus: OrderStatus, actorId: string) {
@@ -480,6 +495,10 @@ export class OrderService {
   async updateStatus(id: string, tenantId: string, newStatus: OrderStatus, userId: string, notes?: string) {
     const order = await this.getById(id, tenantId);
 
+    if (order.orderType === 'disposal' && newStatus !== 'cancelled' && newStatus !== 'rejected') {
+      await this.assertDisposalNotHeld(order, tenantId);
+    }
+
     if (!isValidTransition(order.status as OrderStatus, newStatus)) {
       throw Object.assign(
         new Error(`Niedozwolona zmiana statusu z "${order.status}" na "${newStatus}"`),
@@ -532,6 +551,7 @@ export class OrderService {
 
   async deliver(id: string, tenantId: string, userId: string) {
     const order = await this.getById(id, tenantId);
+    if (order.orderType === 'disposal') await this.assertDisposalNotHeld(order, tenantId);
     if (!isValidTransition(order.status as OrderStatus, 'delivered')) {
       throw Object.assign(
         new Error(`Niedozwolona zmiana statusu z "${order.status}" na "delivered"`),

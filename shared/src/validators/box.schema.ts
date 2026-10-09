@@ -35,6 +35,14 @@ export const changeBoxStatusSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const boxLegalHoldSchema = z.object({
+  hold: z.boolean(),
+  reason: z.string().trim().min(5, 'Podaj przyczynę blokady').max(1000).optional(),
+}).refine((data) => !data.hold || Boolean(data.reason), {
+  message: 'Podaj przyczynę blokady',
+  path: ['reason'],
+});
+
 const bulkBoxIdsSchema = z.object({
   ids: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').optional(),
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').optional(),

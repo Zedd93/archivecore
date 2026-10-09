@@ -11,6 +11,7 @@ import {
   updateBoxSchema,
   moveBoxSchema,
   changeBoxStatusSchema,
+  boxLegalHoldSchema,
   bulkBoxStatusSchema,
   bulkBoxMoveSchema,
   bulkBoxReceiveSchema,
@@ -26,6 +27,7 @@ router.post('/', ...auth, requirePermission(Permissions.BOX_WRITE), validate(cre
 router.put('/:id', ...auth, requirePermission(Permissions.BOX_WRITE), validate(updateBoxSchema), auditLog('box', 'box.update'), (req, res, next) => boxController.update(req, res, next));
 router.patch('/:id/move', ...auth, requirePermission(Permissions.BOX_MOVE), validate(moveBoxSchema), auditLog('box', 'box.move'), (req, res, next) => boxController.move(req, res, next));
 router.patch('/:id/status', ...auth, requirePermission(Permissions.BOX_STATUS), validate(changeBoxStatusSchema), auditLog('box', 'box.status'), (req, res, next) => boxController.changeStatus(req, res, next));
+router.patch('/:id/legal-hold', ...auth, requirePermission(Permissions.RETENTION_MANAGE), validate(boxLegalHoldSchema), auditLog('box', 'box.legal_hold'), (req, res, next) => boxController.setLegalHold(req, res, next));
 router.post('/bulk-status', ...auth, requirePermission(Permissions.BOX_STATUS), validate(bulkBoxStatusSchema), auditLog('box', 'box.bulk_status'), (req, res, next) => boxController.bulkChangeStatus(req, res, next));
 router.post('/bulk-move', ...auth, requirePermission(Permissions.BOX_MOVE), validate(bulkBoxMoveSchema), auditLog('box', 'box.bulk_move'), (req, res, next) => boxController.bulkMove(req, res, next));
 router.post('/bulk-receive', ...auth, requirePermission(Permissions.BOX_MOVE), validate(bulkBoxReceiveSchema), auditLog('box', 'box.bulk_receive'), (req, res, next) => boxController.bulkReceive(req, res, next));

@@ -373,6 +373,14 @@ export class BoxService {
 
   async changeStatus(id: string, tenantId: string, status: string) {
     await this.getById(id, tenantId);
+    if (status === 'pending_disposal' || status === 'disposed') {
+      const result = await prisma.box.updateMany({
+        where: { id, tenantId, deletedAt: null, legalHold: false, hrFolders: { none: { litigationHold: true } } },
+        data: { status: status as any },
+      });
+      if (result.count !== 1) throw Object.assign(new Error('Karton lub akta osobowe są objęte blokadą brakowania'), { statusCode: 409 });
+      return this.getById(id, tenantId);
+    }
     return prisma.box.update({
       where: { id },
       data: { status: status as any },
@@ -380,6 +388,19 @@ export class BoxService {
   }
 
   async bulkChangeStatus(ids: string[], tenantId: string, status: string) {
+    if (status === 'pending_disposal' || status === 'disposed') {
+      const uniqueIds = [...new Set(ids)];
+      return prisma.$transaction(async (tx) => {
+        const result = await tx.box.updateMany({
+          where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false, hrFolders: { none: { litigationHold: true } } },
+          data: { status: status as any },
+        });
+        if (result.count !== uniqueIds.length) {
+          throw Object.assign(new Error('Co najmniej jeden karton jest niedostępny lub objęty blokadą brakowania'), { statusCode: 409 });
+        }
+        return { updated: result.count };
+      });
+    }
     const result = await prisma.box.updateMany({
       where: { id: { in: ids }, tenantId, deletedAt: null },
       data: { status: status as any },
@@ -488,6 +509,7 @@ export class BoxService {
       select: {
         id: true,
         boxNumber: true,
+        legalHold: true,
         locationId: true,
         _count: {
           select: {
@@ -517,6 +539,10 @@ export class BoxService {
 
     if (boxes.length !== uniqueIds.length) {
       throw Object.assign(new Error('Nie znaleziono części wybranych kartonów lub nie masz do nich dostępu'), { statusCode: 404 });
+    }
+
+    if (boxes.some((box) => box.legalHold)) {
+      throw Object.assign(new Error('Nie można usunąć kartonu objętego blokadą brakowania'), { statusCode: 409 });
     }
 
     const blocked = boxes.filter(({ _count }) =>
@@ -550,10 +576,13 @@ export class BoxService {
       await tx.shareLink.deleteMany({
         where: { entityType: 'box', entityId: { in: uniqueIds } },
       });
-      await tx.box.updateMany({
-        where: { id: { in: uniqueIds }, tenantId, deletedAt: null },
+      const deleted = await tx.box.updateMany({
+        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false },
         data: { deletedAt: new Date(), locationId: null },
       });
+      if (deleted.count !== uniqueIds.length) {
+        throw Object.assign(new Error('Stan kartonów zmienił się. Odśwież listę i spróbuj ponownie.'), { statusCode: 409 });
+      }
 
       for (const locationId of locationIds) {
         const currentCount = await tx.box.count({ where: { locationId, deletedAt: null } });
@@ -562,6 +591,31 @@ export class BoxService {
     });
 
     return { deleted: boxes.length };
+  }
+
+  async setLegalHold(id: string, tenantId: string, hold: boolean, reason?: string) {
+    const box = await this.getById(id, tenantId);
+    if (hold && box.status === 'disposed') {
+      throw Object.assign(new Error('Nie można nałożyć blokady na wybrakowany karton'), { statusCode: 409 });
+    }
+    await prisma.$transaction(async (tx) => {
+      const result = await tx.box.updateMany({
+        where: { id, tenantId, deletedAt: null, status: { not: 'disposed' } },
+        data: {
+          legalHold: hold,
+          legalHoldReason: hold ? reason : null,
+          legalHoldAt: hold ? new Date() : null,
+        },
+      });
+      if (result.count !== 1) throw Object.assign(new Error('Stan kartonu zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
+      if (hold) {
+        await tx.box.updateMany({
+          where: { id, tenantId, status: 'pending_disposal' },
+          data: { status: 'active' },
+        });
+      }
+    });
+    return this.getById(id, tenantId);
   }
 
   async getHistory(id: string, tenantId: string) {

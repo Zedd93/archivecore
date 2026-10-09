@@ -43,6 +43,9 @@ jobs:
       - name: Verify transfer list column mapping
         run: npm run test:transfer-list-mapping
 
+      - name: Verify legal hold and disposal safeguards
+        run: npm run test:legal-hold
+
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
 

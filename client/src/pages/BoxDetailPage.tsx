@@ -10,8 +10,9 @@ import ShareButton from '@/components/ui/ShareButton';
 import Modal from '@/components/ui/Modal';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { useQueryClient } from '@tanstack/react-query';
-import { DOC_TYPES } from '@archivecore/shared';
-import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2, Edit3, RefreshCw } from 'lucide-react';
+import { DOC_TYPES, Permissions } from '@archivecore/shared';
+import { useAuth } from '@/contexts/AuthContext';
+import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2, Edit3, RefreshCw, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 
@@ -19,12 +20,15 @@ export default function BoxDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
   const { data: box, isLoading, refetch } = useDetail('box', '/boxes', id);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [labelLoading, setLabelLoading] = useState(false);
   const queryClient = useQueryClient();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showHoldModal, setShowHoldModal] = useState(false);
+  const [holdReason, setHoldReason] = useState('');
   const [editForm, setEditForm] = useState({ title: '', docType: '', department: '', description: '', notes: '', locationId: '' });
   const [newStatus, setNewStatus] = useState('');
   const [saving, setSaving] = useState(false);
@@ -139,6 +143,30 @@ export default function BoxDetailPage() {
     }
   };
 
+  const handleLegalHold = async () => {
+    if (!box?.id) return;
+    setSaving(true);
+    try {
+      await api.patch(`/boxes/${box.id}/legal-hold`, {
+        hold: !box.legalHold,
+        reason: !box.legalHold ? holdReason.trim() : undefined,
+      });
+      toast.success(t(box.legalHold ? 'boxes.legalHoldReleased' : 'boxes.legalHoldSet'));
+      setShowHoldModal(false);
+      setHoldReason('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['box', id] }),
+        queryClient.invalidateQueries({ queryKey: ['boxes'] }),
+        queryClient.invalidateQueries({ queryKey: ['retention-review'] }),
+        refetch(),
+      ]);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="animate-spin" size={32} /></div>;
   }
@@ -160,6 +188,7 @@ export default function BoxDetailPage() {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{box.boxNumber}</h1>
             <StatusBadge status={box.status} type="box" />
+            {box.legalHold && <span className="badge-red flex items-center gap-1"><ShieldAlert size={14} />{t('boxes.legalHold')}</span>}
           </div>
           <p className="text-gray-500 mt-1">{box.title}</p>
         </div>
@@ -178,6 +207,12 @@ export default function BoxDetailPage() {
             <Edit3 size={16} />
             {t('common.edit')}
           </button>
+          {hasPermission(Permissions.RETENTION_MANAGE) && box.status !== 'disposed' && (
+            <button onClick={() => setShowHoldModal(true)} className="btn-secondary flex items-center gap-2">
+              <ShieldAlert size={16} />
+              {t(box.legalHold ? 'boxes.releaseLegalHold' : 'boxes.setLegalHold')}
+            </button>
+          )}
           <ShareButton entityType="box" entityId={box.id} className="w-full sm:w-auto" />
           <button
             onClick={handlePrintLabel}
@@ -233,6 +268,12 @@ export default function BoxDetailPage() {
                   {box.retentionDate ? new Date(box.retentionDate).toLocaleDateString('pl-PL') : '—'}
                 </dd>
               </div>
+              {box.legalHold && (
+                <div className="col-span-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <dt className="text-sm font-medium text-red-800">{t('boxes.legalHold')}</dt>
+                  <dd className="mt-1 text-sm text-red-700 break-words">{box.legalHoldReason}</dd>
+                </div>
+              )}
             </dl>
             {box.description && (
               <div className="mt-4 pt-4 border-t border-gray-100">
@@ -370,6 +411,24 @@ export default function BoxDetailPage() {
           </div>
         </div>
       </div>
+
+      <Modal isOpen={showHoldModal} onClose={() => setShowHoldModal(false)} title={t(box.legalHold ? 'boxes.releaseLegalHold' : 'boxes.setLegalHold')}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">{t(box.legalHold ? 'boxes.releaseLegalHoldHint' : 'boxes.setLegalHoldHint')}</p>
+          {!box.legalHold && (
+            <div>
+              <label htmlFor="box-legal-hold-reason" className="label-text">{t('boxes.legalHoldReason')}</label>
+              <textarea id="box-legal-hold-reason" value={holdReason} onChange={(event) => setHoldReason(event.target.value)} className="input-field" rows={3} maxLength={1000} />
+            </div>
+          )}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <button type="button" onClick={() => setShowHoldModal(false)} className="btn-secondary">{t('common.cancel')}</button>
+            <button type="button" onClick={handleLegalHold} disabled={saving || (!box.legalHold && holdReason.trim().length < 5)} className="btn-primary">
+              {saving ? t('common.processing') : t('common.confirm')}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={showStatusModal} onClose={() => setShowStatusModal(false)} title={t('boxes.bulk.changeStatus')}>
         <div className="space-y-4">

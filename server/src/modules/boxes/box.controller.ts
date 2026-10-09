@@ -55,6 +55,14 @@ export class BoxController {
     } catch (err) { next(err); }
   }
 
+  async setLegalHold(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const box = await boxService.setLegalHold(req.params.id, req.tenantId, req.body.hold, req.body.reason);
+      return successResponse(res, box);
+    } catch (err) { next(err); }
+  }
+
   async bulkChangeStatus(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

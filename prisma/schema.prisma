@@ -407,6 +407,9 @@ model Box {
   retentionPolicyId String?   @db.Uuid
   retentionDate     DateTime? @db.Date
   disposalDate      DateTime? @db.Date
+  legalHold         Boolean   @default(false)
+  legalHoldReason   String?   @db.Text
+  legalHoldAt       DateTime?
   notes             String?   @db.Text
   customFields      Json?
   createdAt         DateTime  @default(now())
