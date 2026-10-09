@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Camera, Loader2, MapPin, PackageCheck, X } from 'lucide-react';
+import { Camera, Loader2, MapPin, PackageCheck, Volume2, VolumeX, X } from 'lucide-react';
 import { parseLocationQrData, parseQrData } from '@archivecore/shared';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
@@ -11,6 +11,7 @@ import LocationPicker from '@/components/ui/LocationPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/hooks/useConfirm';
+import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 
 interface ReceiveBox {
@@ -39,18 +40,25 @@ export default function WarehouseReceivePage() {
   const [manualCode, setManualCode] = useState('');
   const [notes, setNotes] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const { feedback: scanFeedback, soundEnabled, startCameraSound, toggleSound, showFeedback, clearFeedback } = useScanFeedback(isScanning);
   const [isResolving, setIsResolving] = useState(false);
   const [isReceiving, setIsReceiving] = useState(false);
   const busyRef = useRef(false);
   const tenantRef = useRef(activeTenantId);
-  const lastCameraRef = useRef({ code: '', at: 0 });
+  const lastCameraRef = useRef({ code: '', retryAt: 0 });
 
   useEffect(() => {
     tenantRef.current = activeTenantId;
     setBoxes([]);
     setDestination(null);
     setIsScanning(false);
-  }, [activeTenantId]);
+    clearFeedback();
+    lastCameraRef.current = { code: '', retryAt: 0 };
+  }, [activeTenantId, clearFeedback]);
+
+  const allowCameraRetry = (code: string) => {
+    if (lastCameraRef.current.code === code) lastCameraRef.current.retryAt = Date.now() + 5000;
+  };
 
   const processCode = async (rawCode: string) => {
     const code = rawCode.trim();
@@ -60,28 +68,32 @@ export default function WarehouseReceivePage() {
     try {
       const locationQr = parseLocationQrData(code);
       if (locationQr) {
-        if (!locationQr.isValid) { toast.error(t('warehouseReceive.invalidCode')); return; }
+        if (!locationQr.isValid) { showFeedback('error', t('warehouseReceive.invalidCode')); allowCameraRetry(code); return; }
         const { data } = await api.get(`/locations/${encodeURIComponent(locationQr.locationId)}`);
         const location = data.data;
         if (tenantRef.current !== activeTenantId) return;
         if (location?.id !== locationQr.locationId || !location.isActive || !['shelf', 'level', 'slot'].includes(location.type)) {
-          toast.error(t('warehouseReceive.invalidDestination'));
+          showFeedback('error', t('warehouseReceive.invalidDestination'));
+          allowCameraRetry(code);
           return;
         }
         setDestination({ id: location.id, fullPath: location.fullPath });
-        toast.success(t('warehouseReceive.destinationAdded'));
+        showFeedback('success', t('warehouseReceive.locationScanned', { path: location.fullPath }));
         return;
       }
-      if (!parseQrData(code)?.isValid) { toast.error(t('warehouseReceive.invalidCode')); return; }
+      if (!parseQrData(code)?.isValid) { showFeedback('error', t('warehouseReceive.invalidCode')); allowCameraRetry(code); return; }
       const { data } = await api.get('/boxes', { params: { search: code, unlocated: 'true', status: 'active', limit: 10 } });
       if (tenantRef.current !== activeTenantId) return;
       const box = (data.data as ReceiveBox[] | undefined)?.find((item) => item.qrCode === code && item.locationId === null && item.tenantId === activeTenantId);
-      if (!box) { toast.error(t('warehouseReceive.boxNotFound')); return; }
-      if (boxes.some((item) => item.id === box.id)) { toast(t('warehouseReceive.duplicate')); return; }
+      if (!box) { showFeedback('error', t('warehouseReceive.boxNotFound')); allowCameraRetry(code); return; }
+      if (boxes.some((item) => item.id === box.id)) { showFeedback('duplicate', t('warehouseReceive.duplicate')); return; }
       setBoxes((current) => current.some((item) => item.id === box.id) ? current : [...current, box]);
-      toast.success(t('warehouseReceive.boxAdded', { number: box.boxNumber }));
+      showFeedback('success', t('warehouseReceive.boxAdded', { number: box.boxNumber }));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) {
+        showFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+        allowCameraRetry(code);
+      }
     } finally {
       busyRef.current = false;
       setIsResolving(false);
@@ -90,9 +102,8 @@ export default function WarehouseReceivePage() {
 
   const handleCameraCode = (rawCode: string) => {
     const code = rawCode.trim();
-    const now = Date.now();
-    if (!code || busyRef.current || (lastCameraRef.current.code === code && now - lastCameraRef.current.at < 1500)) return;
-    lastCameraRef.current = { code, at: now };
+    if (!code || busyRef.current || (lastCameraRef.current.code === code && Date.now() < lastCameraRef.current.retryAt)) return;
+    lastCameraRef.current = { code, retryAt: Number.POSITIVE_INFINITY };
     void processCode(code);
   };
 
@@ -140,10 +151,16 @@ export default function WarehouseReceivePage() {
     </div>
     <section className="card space-y-3">
       <h2 className="font-semibold flex items-center gap-2"><Camera size={19} />{t('warehouseReceive.scanner')}</h2>
-      {!isScanning ? <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => setIsScanning(true)}><Camera size={17} />{t('labels.startCamera')}</button> : <>
-        <QrCameraScanner id="archivecore-receive-scanner" onCode={handleCameraCode} onError={() => { toast.error(t('labels.cameraError')); setIsScanning(false); }} />
+      {!isScanning ? <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => { startCameraSound(); lastCameraRef.current = { code: '', retryAt: 0 }; setIsScanning(true); }}><Camera size={17} />{t('labels.startCamera')}</button> : <>
+        <QrCameraScanner id="archivecore-receive-scanner" onCode={handleCameraCode} onError={() => { showFeedback('error', t('labels.cameraError')); setIsScanning(false); }} />
         <button type="button" className="btn-secondary w-full sm:w-auto" onClick={() => setIsScanning(false)}>{t('labels.stopCamera')}</button>
       </>}
+      <button type="button" className="btn-secondary w-full sm:w-auto" aria-pressed={soundEnabled} onClick={toggleSound}>
+        {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{t(soundEnabled ? 'inventory.muteSound' : 'inventory.unmuteSound')}
+      </button>
+      {scanFeedback && <div role="status" aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm font-semibold break-words ${scanFeedbackStyles[scanFeedback.kind]}`}>
+        {t(`warehouseReceive.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
+      </div>}
       <form onSubmit={(event) => { event.preventDefault(); if (!isResolving) { void processCode(manualCode); setManualCode(''); } }}>
         <label htmlFor="receive-code" className="label-text">{t('warehouseReceive.manualCode')}</label>
         <div className="flex flex-col sm:flex-row gap-2">

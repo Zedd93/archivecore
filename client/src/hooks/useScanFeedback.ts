@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ScanFeedbackKind = 'success' | 'warning' | 'duplicate' | 'error';
 
@@ -20,6 +20,7 @@ export function useScanFeedback(isScanning: boolean) {
   const [feedback, setFeedback] = useState<{ kind: ScanFeedbackKind; message: string } | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const clearFeedback = useCallback(() => setFeedback(null), []);
 
   useEffect(() => () => {
     if (audioContextRef.current) void audioContextRef.current.close();
@@ -83,6 +84,6 @@ export function useScanFeedback(isScanning: boolean) {
     startCameraSound,
     toggleSound,
     showFeedback,
-    clearFeedback: () => setFeedback(null),
+    clearFeedback,
   };
 }

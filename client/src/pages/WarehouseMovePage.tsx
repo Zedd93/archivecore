@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Camera, Loader2, MapPin, MoveRight, X } from 'lucide-react';
+import { Camera, Loader2, MapPin, MoveRight, Volume2, VolumeX, X } from 'lucide-react';
 import { parseLocationQrData, parseQrData } from '@archivecore/shared';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
@@ -11,6 +11,7 @@ import LocationPicker from '@/components/ui/LocationPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/hooks/useConfirm';
+import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 
 interface MoveBox {
@@ -35,13 +36,28 @@ export default function WarehouseMovePage() {
   const [boxes, setBoxes] = useState<MoveBox[]>([]);
   const [destination, setDestination] = useState<Destination | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const { feedback: scanFeedback, soundEnabled, startCameraSound, toggleSound, showFeedback, clearFeedback } = useScanFeedback(isScanning);
   const [isResolving, setIsResolving] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const scanBusyRef = useRef(false);
-  const lastCameraCodeRef = useRef('');
+  const tenantRef = useRef(activeTenantId);
+  const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
 
-  const processCode = useCallback(async (rawCode: string) => {
+  useEffect(() => {
+    tenantRef.current = activeTenantId;
+    setBoxes([]);
+    setDestination(null);
+    setIsScanning(false);
+    clearFeedback();
+    lastCameraCodeRef.current = { code: '', retryAt: 0 };
+  }, [activeTenantId, clearFeedback]);
+
+  const allowCameraRetry = (code: string) => {
+    if (lastCameraCodeRef.current.code === code) lastCameraCodeRef.current.retryAt = Date.now() + 5000;
+  };
+
+  const processCode = async (rawCode: string) => {
     const code = rawCode.trim();
     if (!code || scanBusyRef.current || !activeTenantId) return;
     scanBusyRef.current = true;
@@ -50,49 +66,58 @@ export default function WarehouseMovePage() {
       const locationQr = parseLocationQrData(code);
       if (locationQr) {
         if (!locationQr.isValid) {
-          toast.error(t('warehouseMove.invalidCode'));
+          showFeedback('error', t('warehouseMove.invalidCode'));
+          allowCameraRetry(code);
           return;
         }
         const { data } = await api.get(`/locations/${encodeURIComponent(locationQr.locationId)}`);
         const location = data.data;
+        if (tenantRef.current !== activeTenantId) return;
         if (location?.id !== locationQr.locationId || !location.isActive || !['shelf', 'level', 'slot'].includes(location.type)) {
-          toast.error(t('warehouseMove.invalidDestination'));
+          showFeedback('error', t('warehouseMove.invalidDestination'));
+          allowCameraRetry(code);
           return;
         }
         setDestination({ id: location.id, fullPath: location.fullPath });
-        toast.success(t('warehouseMove.destinationAdded'));
+        showFeedback('success', t('warehouseMove.locationScanned', { path: location.fullPath }));
         return;
       }
 
       const boxQr = parseQrData(code);
       if (!boxQr?.isValid) {
-        toast.error(t('warehouseMove.invalidCode'));
+        showFeedback('error', t('warehouseMove.invalidCode'));
+        allowCameraRetry(code);
         return;
       }
       const { data } = await api.get('/boxes', { params: { search: code, limit: 10 } });
+      if (tenantRef.current !== activeTenantId) return;
       const box = (data.data as Array<MoveBox & { qrCode: string }> | undefined)?.find((item) => item.qrCode === code);
       if (!box) {
-        toast.error(t('warehouseMove.boxNotFound'));
+        showFeedback('error', t('warehouseMove.boxNotFound'));
+        allowCameraRetry(code);
         return;
       }
       if (boxes.some((item) => item.id === box.id)) {
-        toast(t('warehouseMove.alreadyAdded'));
+        showFeedback('duplicate', t('warehouseMove.alreadyAdded'));
         return;
       }
       setBoxes((current) => current.some((item) => item.id === box.id) ? current : [...current, box]);
-      toast.success(t('warehouseMove.boxAdded', { number: box.boxNumber }));
+      showFeedback('success', t('warehouseMove.boxAdded', { number: box.boxNumber }));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) {
+        showFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+        allowCameraRetry(code);
+      }
     } finally {
       scanBusyRef.current = false;
       setIsResolving(false);
     }
-  }, [activeTenantId, boxes, t]);
+  };
 
   const handleCameraCode = (rawCode: string) => {
     const code = rawCode.trim();
-    if (scanBusyRef.current || !code || lastCameraCodeRef.current === code) return;
-    lastCameraCodeRef.current = code;
+    if (scanBusyRef.current || !code || (lastCameraCodeRef.current.code === code && Date.now() < lastCameraCodeRef.current.retryAt)) return;
+    lastCameraCodeRef.current = { code, retryAt: Number.POSITIVE_INFINITY };
     void processCode(code);
   };
 
@@ -150,7 +175,7 @@ export default function WarehouseMovePage() {
           {isResolving && <Loader2 size={18} className="animate-spin text-primary-600" aria-label={t('common.loading')} />}
         </div>
         {!isScanning ? (
-          <button type="button" className="btn-primary w-full flex items-center justify-center gap-2" onClick={() => { lastCameraCodeRef.current = ''; setIsScanning(true); }}>
+          <button type="button" className="btn-primary w-full flex items-center justify-center gap-2" onClick={() => { startCameraSound(); lastCameraCodeRef.current = { code: '', retryAt: 0 }; setIsScanning(true); }}>
             <Camera size={17} />{t('labels.startCamera')}
           </button>
         ) : (
@@ -158,11 +183,17 @@ export default function WarehouseMovePage() {
             <QrCameraScanner
               id="archivecore-warehouse-scanner"
               onCode={handleCameraCode}
-              onError={() => { toast.error(t('labels.cameraError')); setIsScanning(false); }}
+              onError={() => { showFeedback('error', t('labels.cameraError')); setIsScanning(false); }}
             />
             <button type="button" className="btn-secondary w-full" onClick={() => setIsScanning(false)}>{t('labels.stopCamera')}</button>
           </>
         )}
+        <button type="button" className="btn-secondary w-full sm:w-auto" aria-pressed={soundEnabled} onClick={toggleSound}>
+          {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{t(soundEnabled ? 'inventory.muteSound' : 'inventory.unmuteSound')}
+        </button>
+        {scanFeedback && <div role="status" aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm font-semibold break-words ${scanFeedbackStyles[scanFeedback.kind]}`}>
+          {t(`warehouseMove.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
+        </div>}
         <form onSubmit={(event) => { event.preventDefault(); if (isResolving) return; void processCode(manualCode); setManualCode(''); }}>
           <label htmlFor="warehouse-code" className="label-text">{t('warehouseMove.manualCode')}</label>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -174,7 +205,7 @@ export default function WarehouseMovePage() {
 
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{t('warehouseMove.boxes', { count: boxes.length })}</h2>
-        <BoxPicker value={boxes} onChange={setBoxes} placeholder={t('warehouseMove.findBox')} showLocation showSelectedChips={false} />
+        <BoxPicker value={boxes} onChange={setBoxes} tenantId={activeTenantId} placeholder={t('warehouseMove.findBox')} showLocation showSelectedChips={false} />
         {boxes.length === 0 ? <p className="text-sm text-gray-500">{t('warehouseMove.noBoxes')}</p> : (
           <ul className="divide-y divide-gray-100">
             {boxes.map((box) => (
@@ -199,6 +230,7 @@ export default function WarehouseMovePage() {
           onLocationChange={(location) => setDestination(location ? { id: location.id, fullPath: location.fullPath } : null)}
           excludeTypes={['warehouse', 'zone', 'rack']}
           placeholder={t('warehouseMove.findDestination')}
+          tenantId={activeTenantId}
         />
         <p className="text-sm text-gray-600 break-words">{destination?.fullPath || t('warehouseMove.noDestination')}</p>
       </section>
