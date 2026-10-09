@@ -21,6 +21,10 @@ async function main() {
     { code: 'RO', name: 'Tylko Odczyt', description: 'Podstawowy dostęp do odczytu', isSystem: true, permissions: ['box.read', 'folder.read', 'document.read', 'attachment.read', 'search.own'] },
   ];
 
+  for (const role of roles) {
+    if (['DA', 'TL', 'AT'].includes(role.code)) role.permissions.push('billing.view');
+  }
+
   console.log('  📋 Tworzenie ról systemowych...');
   for (const role of roles) {
     const existing = await prisma.role.findFirst({

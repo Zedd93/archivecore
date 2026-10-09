@@ -828,6 +828,11 @@
   "reports": {
     "title": "Raporty",
     "subtitle": "Statystyki i analityka archiwum",
+    "monthlyTitle": "Raport miesięczny klienta",
+    "monthlyDescription": "PDF z operacjami za wybrany miesiąc, bieżącym stanem zasobu i nadchodzącymi terminami retencji. Koszty są widoczne tylko dla uprawnionych osób.",
+    "monthlyMonth": "Miesiąc",
+    "monthlyDownload": "Pobierz PDF",
+    "monthlyError": "Nie udało się pobrać raportu miesięcznego",
     "boxesByStatus": "Kartony wg statusu",
     "boxesByDocType": "Kartony wg typu dokumentów",
     "ordersByStatus": "Zlecenia wg statusu",

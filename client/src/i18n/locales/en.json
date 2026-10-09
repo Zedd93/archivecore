@@ -828,6 +828,11 @@
   "reports": {
     "title": "Reports",
     "subtitle": "Archive statistics and analytics",
+    "monthlyTitle": "Monthly client report",
+    "monthlyDescription": "PDF with selected-month activity, current holdings, and upcoming retention deadlines. Costs are visible only to authorized users.",
+    "monthlyMonth": "Month",
+    "monthlyDownload": "Download PDF",
+    "monthlyError": "Could not download the monthly report",
     "boxesByStatus": "Boxes by status",
     "boxesByDocType": "Boxes by document type",
     "ordersByStatus": "Orders by status",

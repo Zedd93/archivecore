@@ -37,6 +37,9 @@ jobs:
       - name: Verify billing export
         run: npm run test:billing-export
 
+      - name: Verify monthly client report
+        run: npm run test:monthly-report
+
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
 

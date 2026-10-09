@@ -6,6 +6,7 @@ export const Permissions = {
   TENANT_SWITCH: 'tenant.switch',
   USER_MANAGE: 'user.manage',
   PRICING_MANAGE: 'pricing.manage',
+  BILLING_VIEW: 'billing.view',
 
   // Boxes
   BOX_READ: 'box.read',
@@ -89,6 +90,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
   [RoleCode.DOXART_ADMIN]: [
     Permissions.TENANT_SWITCH,
     Permissions.PRICING_MANAGE,
+    Permissions.BILLING_VIEW,
     Permissions.BOX_READ, Permissions.BOX_WRITE, Permissions.BOX_DELETE, Permissions.BOX_MOVE, Permissions.BOX_STATUS,
     Permissions.FOLDER_READ, Permissions.FOLDER_WRITE,
     Permissions.DOCUMENT_READ, Permissions.DOCUMENT_WRITE,
@@ -115,6 +117,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
     Permissions.ATTACHMENT_READ,
     Permissions.SEARCH_OWN,
     Permissions.REPORT_VIEW,
+    Permissions.BILLING_VIEW,
     Permissions.TRANSFER_LIST_READ, Permissions.TRANSFER_LIST_WRITE,
   ],
 
@@ -139,6 +142,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionString[]> = {
     Permissions.ATTACHMENT_READ, Permissions.ATTACHMENT_UPLOAD, Permissions.ATTACHMENT_DELETE,
     Permissions.SEARCH_ALL,
     Permissions.REPORT_VIEW, Permissions.REPORT_EXPORT,
+    Permissions.BILLING_VIEW,
     Permissions.AUDIT_VIEW,
     Permissions.RETENTION_MANAGE, Permissions.DISPOSAL_INITIATE, Permissions.DISPOSAL_APPROVE,
     Permissions.IMPORT_DATA, Permissions.EXPORT_DATA,

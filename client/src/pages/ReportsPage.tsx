@@ -2,11 +2,50 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
-import { BarChart3, ChevronDown, ChevronRight, Clock, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
+import { getApiErrorMessageAsync } from '@/utils/apiError';
+import toast from 'react-hot-toast';
+import { BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
+
+const currentMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const previousMonth = () => {
+  const date = new Date();
+  date.setDate(1);
+  date.setMonth(date.getMonth() - 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
 
 export default function ReportsPage() {
   const { t } = useTranslation();
   const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(null);
+  const [reportMonth, setReportMonth] = useState(previousMonth);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const downloadMonthlyReport = async () => {
+    if (!reportMonth || downloadingReport) return;
+    setDownloadingReport(true);
+    try {
+      const { data } = await api.get('/reports/monthly/pdf', {
+        params: { month: reportMonth },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `archivecore-raport-${reportMonth}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(await getApiErrorMessageAsync(error, t('reports.monthlyError')));
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   const { data: boxesByStatus, isLoading: l1 } = useQuery({
     queryKey: ['report-boxes-status'],
@@ -92,6 +131,28 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-bold text-gray-900">{t('reports.title')}</h1>
         <p className="text-sm text-gray-500">{t('reports.subtitle')}</p>
       </div>
+
+      <section className="card">
+        <h2 className="text-lg font-semibold text-gray-900">{t('reports.monthlyTitle')}</h2>
+        <p className="mt-1 text-sm text-gray-500">{t('reports.monthlyDescription')}</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="text-sm font-medium text-gray-700">
+            {t('reports.monthlyMonth')}
+            <input
+              type="month"
+              min="2000-01"
+              max={currentMonth()}
+              value={reportMonth}
+              onChange={(event) => setReportMonth(event.target.value)}
+              className="input mt-1 block"
+            />
+          </label>
+          <button type="button" className="btn-primary flex items-center gap-2" disabled={!reportMonth || downloadingReport} onClick={downloadMonthlyReport}>
+            {downloadingReport ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            {t('reports.monthlyDownload')}
+          </button>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Boxes by status */}

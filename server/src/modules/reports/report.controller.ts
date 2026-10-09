@@ -1,8 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import { reportService } from './report.service';
 import { successResponse, errorResponse } from '../../utils/response';
+import { Permissions } from '@archivecore/shared';
+import { buildMonthlyReportPdf, getMonthlyReport, parseReportMonth } from './monthly-report.service';
 
 export class ReportController {
+  async getMonthlyPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const period = parseReportMonth(req.query.month);
+      if (!period) return errorResponse(res, 'Nieprawidłowy miesiąc raportu', 400);
+      const includeBilling = Boolean(req.user?.permissions.includes(Permissions.BILLING_VIEW));
+      const report = await getMonthlyReport(req.tenantId, period.month, includeBilling);
+      const pdf = await buildMonthlyReportPdf(report);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="archivecore-raport-${period.month}.pdf"`);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(pdf);
+    } catch (err) { next(err); }
+  }
+
   async getDashboard(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

@@ -29,6 +29,7 @@
     "test:inventory-sessions": "node --import tsx --test server/scripts/test-inventory-sessions.mjs",
     "test:warehouse-receive": "node --import tsx --test server/scripts/test-warehouse-receive.mjs",
     "test:warehouse-home": "node --import tsx --test server/scripts/test-warehouse-home.mjs",
+    "test:monthly-report": "node --import tsx --test server/scripts/test-monthly-report.cjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",
