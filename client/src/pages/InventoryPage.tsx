@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, Check, Download, Loader2, MapPin, RotateCcw, ScanLine, X } from 'lucide-react';
+import { Camera, Check, Download, Loader2, MapPin, RotateCcw, ScanLine, Volume2, VolumeX, X } from 'lucide-react';
 import { parseLocationQrData, parseQrData, type InventoryDiscrepancyKind } from '@archivecore/shared';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
@@ -60,6 +60,22 @@ interface SessionHistory {
   total: number;
 }
 
+type ScanFeedbackKind = 'success' | 'warning' | 'duplicate' | 'error';
+
+const scanFeedbackStyles: Record<ScanFeedbackKind, string> = {
+  success: 'border-green-300 bg-green-50 text-green-900',
+  warning: 'border-amber-300 bg-amber-50 text-amber-900',
+  duplicate: 'border-blue-300 bg-blue-50 text-blue-900',
+  error: 'border-red-300 bg-red-50 text-red-900',
+};
+
+const scanTones: Record<ScanFeedbackKind, number[]> = {
+  success: [880],
+  warning: [440, 440],
+  duplicate: [660, 660],
+  error: [220, 220],
+};
+
 export default function InventoryPage() {
   const { t } = useTranslation();
   const { user, hasPermission } = useAuth();
@@ -72,11 +88,57 @@ export default function InventoryPage() {
   const [historyPage, setHistoryPage] = useState(1);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState('');
   const [resolutionNote, setResolutionNote] = useState('');
+  const [scanFeedback, setScanFeedback] = useState<{ kind: ScanFeedbackKind; message: string } | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const busyRef = useRef(false);
   const lastCameraCodeRef = useRef('');
+  const audioContextRef = useRef<AudioContext | null>(null);
   const snapshot = session?.snapshot || null;
   const scanned = session?.scanned || [];
   const isFinished = session?.status === 'completed';
+
+  useEffect(() => () => {
+    if (audioContextRef.current) void audioContextRef.current.close();
+  }, []);
+
+  const unlockSound = () => {
+    if (!window.AudioContext) return;
+    try {
+      audioContextRef.current ??= new AudioContext();
+      void audioContextRef.current.resume();
+    } catch {
+      // The visual result remains available when audio is blocked.
+    }
+  };
+
+  const showScanFeedback = (kind: ScanFeedbackKind, message: string) => {
+    setScanFeedback({ kind, message });
+    if (!isScanning) return;
+    try {
+      if ('vibrate' in navigator) navigator.vibrate(kind === 'success' ? 60 : [100, 80, 100]);
+    } catch {
+      // Vibration support varies by device and browser.
+    }
+    const context = audioContextRef.current;
+    if (!soundEnabled || !context || context.state !== 'running') return;
+    try {
+      scanTones[kind].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const start = context.currentTime + index * 0.16;
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.12, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.12);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.13);
+      });
+    } catch {
+      // Audio is optional; never interrupt a scan because of device support.
+    }
+  };
 
   const { data: history, isLoading: isHistoryLoading, isError: isHistoryError, refetch: refetchHistory } = useQuery<SessionHistory>({
     queryKey: ['inventory-sessions', activeTenantId, historyPage],
@@ -89,10 +151,10 @@ export default function InventoryPage() {
   const recentSessions = history?.sessions || [];
 
   const startSnapshot = async (locationId: string, force = false) => {
-    if (!locationId || busyRef.current) return;
-    if (!force && session?.status === 'in_progress' && snapshot?.location.id === locationId) return;
+    if (!locationId || busyRef.current) return false;
+    if (!force && session?.status === 'in_progress' && snapshot?.location.id === locationId) return true;
     if (session?.status === 'in_progress' && scanned.length > 0
-      && !window.confirm(t('inventory.replaceConfirm'))) return;
+      && !window.confirm(t('inventory.replaceConfirm'))) return false;
     busyRef.current = true;
     setIsBusy(true);
     try {
@@ -101,12 +163,14 @@ export default function InventoryPage() {
       setSelectedDiscrepancy('');
       setResolutionNote('');
       setManualCode('');
-      lastCameraCodeRef.current = '';
+      setScanFeedback(null);
       setHistoryPage(1);
       await queryClient.invalidateQueries({ queryKey: ['inventory-sessions', activeTenantId] });
       toast.success(t('inventory.started'));
+      return true;
     } catch (error) {
       toast.error(getApiErrorMessage(error, t('common.genericError')));
+      return false;
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -124,6 +188,7 @@ export default function InventoryPage() {
       setSelectedDiscrepancy('');
       setResolutionNote('');
       setManualCode('');
+      setScanFeedback(null);
       lastCameraCodeRef.current = '';
     } catch (error) {
       toast.error(getApiErrorMessage(error, t('common.genericError')));
@@ -138,14 +203,15 @@ export default function InventoryPage() {
     if (!code || busyRef.current || !activeTenantId) return;
     const locationQr = parseLocationQrData(code);
     if (locationQr) {
-      if (!locationQr.isValid) { toast.error(t('inventory.invalidCode')); return; }
-      await startSnapshot(locationQr.locationId);
+      if (!locationQr.isValid) { showScanFeedback('error', t('inventory.invalidCode')); return; }
+      if (await startSnapshot(locationQr.locationId)) showScanFeedback('success', t('inventory.locationScanned'));
       return;
     }
-    if (isFinished) { toast.error(t('inventory.finishedHint')); return; }
-    if (!parseQrData(code)?.isValid) { toast.error(t('inventory.invalidCode')); return; }
-    if (!snapshot || !session) { toast.error(t('inventory.chooseLocationFirst')); return; }
-    if (scanned.some((box) => box.qrCode === code)) { toast(t('inventory.duplicate')); return; }
+    if (isFinished) { showScanFeedback('error', t('inventory.finishedHint')); return; }
+    if (!parseQrData(code)?.isValid) { showScanFeedback('error', t('inventory.invalidCode')); return; }
+    if (!snapshot || !session) { showScanFeedback('error', t('inventory.chooseLocationFirst')); return; }
+    const existing = scanned.find((box) => box.qrCode === code);
+    if (existing) { showScanFeedback('duplicate', t('inventory.duplicateBox', { number: existing.boxNumber })); return; }
 
     busyRef.current = true;
     setIsBusy(true);
@@ -156,9 +222,9 @@ export default function InventoryPage() {
       const box = updated.scanned.find((item) => item.qrCode === code);
       if (!box) throw new Error(t('common.genericError'));
       const isExpected = snapshot.expected.some((item) => item.id === box.id);
-      toast[isExpected ? 'success' : 'error'](isExpected ? t('inventory.scanned') : t('inventory.discrepancyToast'));
+      showScanFeedback(isExpected ? 'success' : 'warning', t(isExpected ? 'inventory.scannedBox' : 'inventory.discrepancyBox', { number: box.boxNumber }));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -326,12 +392,20 @@ export default function InventoryPage() {
       <section className="card space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><ScanLine size={19} />{t('inventory.scanner')}</h2>
         {!isScanning ? (
-          <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => { lastCameraCodeRef.current = ''; setIsScanning(true); }}><Camera size={17} />{t('labels.startCamera')}</button>
+          <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => { unlockSound(); lastCameraCodeRef.current = ''; setIsScanning(true); }}><Camera size={17} />{t('labels.startCamera')}</button>
         ) : (
           <>
-            <QrCameraScanner id="archivecore-inventory-scanner" onCode={handleCameraCode} onError={() => { toast.error(t('labels.cameraError')); setIsScanning(false); }} />
+            <QrCameraScanner id="archivecore-inventory-scanner" onCode={handleCameraCode} onError={() => { setScanFeedback({ kind: 'error', message: t('labels.cameraError') }); setIsScanning(false); }} />
             <button type="button" className="btn-secondary w-full sm:w-auto" onClick={() => setIsScanning(false)}>{t('labels.stopCamera')}</button>
           </>
+        )}
+        <button type="button" className="btn-secondary w-full sm:w-auto" aria-pressed={soundEnabled} onClick={() => { if (!soundEnabled) unlockSound(); setSoundEnabled((enabled) => !enabled); }}>
+          {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{t(soundEnabled ? 'inventory.muteSound' : 'inventory.unmuteSound')}
+        </button>
+        {scanFeedback && (
+          <div role="status" aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm font-semibold break-words ${scanFeedbackStyles[scanFeedback.kind]}`}>
+            {t(`inventory.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
+          </div>
         )}
         <form onSubmit={(event) => { event.preventDefault(); void processCode(manualCode); setManualCode(''); }}>
           <label htmlFor="inventory-code" className="label-text">{t('inventory.manualCode')}</label>
