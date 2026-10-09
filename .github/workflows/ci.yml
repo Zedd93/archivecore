@@ -48,3 +48,6 @@ jobs:
 
       - name: Verify loan returns
         run: npm run test:loan-return
+
+      - name: Verify inventory checks
+        run: npm run test:inventory

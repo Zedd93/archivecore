@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Box, MapPin, FolderOpen, ClipboardList,
   Users, QrCode, Search, BarChart3, Shield, Clock,
   Building2, Settings, UserCircle, FileSpreadsheet, X, Upload, ArchiveRestore, Receipt,
-  MoveRight,
+  MoveRight, ScanLine,
 } from 'lucide-react';
 
 interface NavItem {
@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/folders', labelKey: 'layout.nav.folders', icon: <FolderOpen size={20} />, permission: 'folder.read' },
   { to: '/locations', labelKey: 'layout.nav.locations', icon: <MapPin size={20} />, permission: 'location.read' },
   { to: '/warehouse/move', labelKey: 'layout.nav.warehouseMove', icon: <MoveRight size={20} />, permission: 'box.move' },
+  { to: '/warehouse/inventory', labelKey: 'layout.nav.inventory', icon: <ScanLine size={20} />, permission: 'inventory.manage' },
   { to: '/loans', labelKey: 'layout.nav.loans', icon: <ArchiveRestore size={20} />, permission: 'order.read' },
   { to: '/orders', labelKey: 'layout.nav.orders', icon: <ClipboardList size={20} />, permission: 'order.read' },
   { to: '/hr', labelKey: 'layout.nav.hr', icon: <UserCircle size={20} />, permission: 'hr.view' },

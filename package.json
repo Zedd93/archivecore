@@ -25,6 +25,7 @@
     "test:qr": "node --import tsx --test server/scripts/test-qr.mjs",
     "test:order-picking": "node --import tsx --test server/scripts/test-order-picking.mjs",
     "test:loan-return": "node --import tsx --test server/scripts/test-loan-return.mjs",
+    "test:inventory": "node --import tsx --test server/scripts/test-inventory.mjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",
