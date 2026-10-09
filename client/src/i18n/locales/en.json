@@ -1093,6 +1093,7 @@
       "boxes": "Boxes",
       "folders": "Folders",
       "locations": "Locations",
+      "warehouse": "Warehouse",
       "warehouseMove": "QR relocation",
       "warehouseReceive": "QR intake",
       "inventory": "QR shelf check",
@@ -1168,6 +1169,28 @@
     "resolutionStatus": { "open": "Open", "resolved": "Resolved" },
     "resolutionAction": { "resolved": "Resolved", "reopened": "Reopened" },
     "discrepancyKind": { "missing": "Not found", "wrong_location": "Different recorded location", "unexpected": "Unexpected on shelf" }
+  },
+
+  "warehouseHome": {
+    "title": "Warehouse",
+    "subtitle": "Quick access to box operations and orders on your phone.",
+    "receive": "Receive",
+    "receiveDetail": "Place a box on a shelf",
+    "issue": "Issue",
+    "issueDetail": "Process an order",
+    "move": "Move",
+    "moveDetail": "Relocate with QR",
+    "inventory": "Inventory",
+    "inventoryDetail": "Check a shelf",
+    "tasks": "Orders to process ({{count}})",
+    "recentTasksHint": "Showing recent approved, in-progress and ready orders. The nearest deadlines appear first.",
+    "noTasks": "No orders need processing.",
+    "loadError": "Could not load orders. Refresh the list and try again.",
+    "refresh": "Refresh",
+    "deadline": "SLA deadline",
+    "assignee": "Assigned to",
+    "allOrders": "All orders",
+    "noPermission": "You do not have permission to work in the warehouse."
   },
 
   "warehouseReceive": {

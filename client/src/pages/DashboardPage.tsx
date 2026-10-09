@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDashboardKPIs, useList } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
@@ -8,8 +8,9 @@ import Modal from '@/components/ui/Modal';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
 import toast from 'react-hot-toast';
-import { Box, ClipboardList, UserCircle, MapPin, AlertTriangle, Clock, Users, Archive, FolderOpen, FilePlus2 } from 'lucide-react';
+import { Box, ClipboardList, UserCircle, MapPin, AlertTriangle, Clock, Users, Archive, FolderOpen, FilePlus2, Warehouse } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderForm, setFolderForm] = useState(initialFolderForm);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -171,7 +173,11 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="card">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('dashboard.quickActions')}</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {hasPermission('box.move') && <Link to="/warehouse" className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-all">
+            <Warehouse size={24} className="text-primary-600" />
+            <span className="text-sm font-medium text-gray-700">{t('warehouseHome.title')}</span>
+          </Link>}
           <a href="/boxes?action=create" className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-all">
             <Box size={24} className="text-primary-600" />
             <span className="text-sm font-medium text-gray-700">{t('dashboard.newBox')}</span>

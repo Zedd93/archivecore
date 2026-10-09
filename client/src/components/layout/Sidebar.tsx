@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Box, MapPin, FolderOpen, ClipboardList,
   Users, QrCode, Search, BarChart3, Shield, Clock,
   Building2, Settings, UserCircle, FileSpreadsheet, X, Upload, ArchiveRestore, Receipt,
-  MoveRight, ScanLine, PackageCheck,
+  MoveRight, ScanLine, PackageCheck, Warehouse,
 } from 'lucide-react';
 
 interface NavItem {
@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { to: '/boxes', labelKey: 'layout.nav.boxes', icon: <Box size={20} />, permission: 'box.read' },
   { to: '/folders', labelKey: 'layout.nav.folders', icon: <FolderOpen size={20} />, permission: 'folder.read' },
   { to: '/locations', labelKey: 'layout.nav.locations', icon: <MapPin size={20} />, permission: 'location.read' },
+  { to: '/warehouse', labelKey: 'layout.nav.warehouse', icon: <Warehouse size={20} />, permission: 'box.move' },
   { to: '/warehouse/receive', labelKey: 'layout.nav.warehouseReceive', icon: <PackageCheck size={20} />, permission: 'box.move' },
   { to: '/warehouse/move', labelKey: 'layout.nav.warehouseMove', icon: <MoveRight size={20} />, permission: 'box.move' },
   { to: '/warehouse/inventory', labelKey: 'layout.nav.inventory', icon: <ScanLine size={20} />, permission: 'inventory.manage' },
@@ -95,7 +96,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {visibleNav.map(item => (
-          <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass}>
+          <NavLink key={item.to} to={item.to} end={item.to === '/' || item.to === '/warehouse'} className={linkClass}>
             {item.icon}
             {t(item.labelKey)}
           </NavLink>

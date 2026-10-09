@@ -57,3 +57,6 @@ jobs:
 
       - name: Verify QR warehouse receiving
         run: npm run test:warehouse-receive
+
+      - name: Verify warehouse worklist
+        run: npm run test:warehouse-home

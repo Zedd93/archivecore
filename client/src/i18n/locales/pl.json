@@ -1093,6 +1093,7 @@
       "boxes": "Kartony",
       "folders": "Teczki",
       "locations": "Lokalizacje",
+      "warehouse": "Magazyn",
       "warehouseMove": "Przenoszenie QR",
       "warehouseReceive": "Przyjęcie QR",
       "inventory": "Kontrola półki QR",
@@ -1168,6 +1169,28 @@
     "resolutionStatus": { "open": "Do wyjaśnienia", "resolved": "Wyjaśnione" },
     "resolutionAction": { "resolved": "Wyjaśniono", "reopened": "Otwarto ponownie" },
     "discrepancyKind": { "missing": "Nieodnaleziony", "wrong_location": "Inna lokalizacja w ewidencji", "unexpected": "Niespodziewany na półce" }
+  },
+
+  "warehouseHome": {
+    "title": "Magazyn",
+    "subtitle": "Szybki dostęp do pracy z kartonami i zleceniami na telefonie.",
+    "receive": "Przyjmij",
+    "receiveDetail": "Karton na półkę",
+    "issue": "Wydaj",
+    "issueDetail": "Obsłuż zlecenie",
+    "move": "Przenieś",
+    "moveDetail": "Zmień lokalizację QR",
+    "inventory": "Inwentaryzuj",
+    "inventoryDetail": "Sprawdź zawartość półki",
+    "tasks": "Zlecenia do obsługi ({{count}})",
+    "recentTasksHint": "Pokazujemy ostatnie zlecenia w stanach: zatwierdzone, w realizacji i gotowe. Najbliższe terminy są wyżej.",
+    "noTasks": "Nie ma zleceń wymagających obsługi.",
+    "loadError": "Nie udało się pobrać zleceń. Spróbuj odświeżyć listę.",
+    "refresh": "Odśwież",
+    "deadline": "Termin SLA",
+    "assignee": "Przypisano",
+    "allOrders": "Wszystkie zlecenia",
+    "noPermission": "Nie masz uprawnień do pracy w magazynie."
   },
 
   "warehouseReceive": {
