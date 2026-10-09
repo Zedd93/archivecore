@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Check, Download, Loader2, MapPin, RotateCcw, ScanLine, X } from 'lucide-react';
-import { parseLocationQrData, parseQrData } from '@archivecore/shared';
+import { parseLocationQrData, parseQrData, type InventoryDiscrepancyKind } from '@archivecore/shared';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
@@ -29,6 +29,20 @@ interface InventorySession {
   finishedAt: string | null;
   snapshot: Snapshot;
   scanned: ScannedBox[];
+  discrepancies: InventoryDiscrepancy[];
+}
+
+interface InventoryDiscrepancy {
+  boxId: string;
+  kind: InventoryDiscrepancyKind;
+  status: 'open' | 'resolved';
+  history: Array<{
+    id: string;
+    action: 'resolved' | 'reopened';
+    note: string;
+    createdAt: string;
+    user: { firstName: string; lastName: string };
+  }>;
 }
 
 interface SessionSummary {
@@ -56,6 +70,8 @@ export default function InventoryPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
+  const [selectedDiscrepancy, setSelectedDiscrepancy] = useState('');
+  const [resolutionNote, setResolutionNote] = useState('');
   const busyRef = useRef(false);
   const lastCameraCodeRef = useRef('');
   const snapshot = session?.snapshot || null;
@@ -82,6 +98,8 @@ export default function InventoryPage() {
     try {
       const { data } = await api.post('/inventory/sessions', { locationId });
       setSession(data.data);
+      setSelectedDiscrepancy('');
+      setResolutionNote('');
       setManualCode('');
       lastCameraCodeRef.current = '';
       setHistoryPage(1);
@@ -103,6 +121,8 @@ export default function InventoryPage() {
     try {
       const { data } = await api.get(`/inventory/sessions/${encodeURIComponent(id)}`);
       setSession(data.data);
+      setSelectedDiscrepancy('');
+      setResolutionNote('');
       setManualCode('');
       lastCameraCodeRef.current = '';
     } catch (error) {
@@ -189,18 +209,43 @@ export default function InventoryPage() {
     }
   };
 
+  const saveResolution = async (item: InventoryDiscrepancy) => {
+    if (!session || resolutionNote.trim().length < 5 || busyRef.current) return;
+    busyRef.current = true;
+    setIsBusy(true);
+    try {
+      const action = item.status === 'open' ? 'resolved' : 'reopened';
+      const { data } = await api.post(`/inventory/sessions/${session.id}/discrepancies/${item.boxId}/${item.kind}/resolution`, {
+        action, note: resolutionNote.trim(),
+      });
+      setSession(data.data);
+      setSelectedDiscrepancy('');
+      setResolutionNote('');
+      toast.success(t('inventory.resolutionSaved'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
+    } finally {
+      busyRef.current = false;
+      setIsBusy(false);
+    }
+  };
+
   const downloadReport = () => {
     if (!snapshot || !result || !isFinished) return;
+    const resolutionColumns = (boxId: string, kind: InventoryDiscrepancyKind) => {
+      const item = session?.discrepancies.find((entry) => entry.boxId === boxId && entry.kind === kind);
+      return [item ? t(`inventory.resolutionStatus.${item.status}`) : '', item?.history.at(-1)?.note || ''];
+    };
     const rows = [
-      [t('inventory.title'), snapshot.location.fullPath, '', ''],
-      [t('inventory.sessionNumber'), session?.id || '', '', ''],
-      [t('inventory.snapshotAt'), new Date(snapshot.capturedAt).toLocaleString(), '', ''],
-      [t('inventory.finishedAt'), session?.finishedAt ? new Date(session.finishedAt).toLocaleString() : '', '', ''],
-      [t('inventory.csvResult'), t('boxes.boxNumber'), t('common.title'), t('boxes.location')],
-      ...result.matched.map((box) => [t('inventory.matched'), box.boxNumber, box.title, snapshot.location.fullPath]),
-      ...result.missing.map((box) => [t('inventory.missing'), box.boxNumber, box.title, snapshot.location.fullPath]),
-      ...result.wrongLocation.map((box) => [t('inventory.wrongLocation'), box.boxNumber, box.title, box.location?.fullPath || '']),
-      ...result.unexpected.map((box) => [t('inventory.unexpected'), box.boxNumber, box.title, snapshot.location.fullPath]),
+      [t('inventory.title'), snapshot.location.fullPath, '', '', '', ''],
+      [t('inventory.sessionNumber'), session?.id || '', '', '', '', ''],
+      [t('inventory.snapshotAt'), new Date(snapshot.capturedAt).toLocaleString(), '', '', '', ''],
+      [t('inventory.finishedAt'), session?.finishedAt ? new Date(session.finishedAt).toLocaleString() : '', '', '', '', ''],
+      [t('inventory.csvResult'), t('boxes.boxNumber'), t('common.title'), t('boxes.location'), t('inventory.resolution'), t('inventory.resolutionNote')],
+      ...result.matched.map((box) => [t('inventory.matched'), box.boxNumber, box.title, snapshot.location.fullPath, '', '']),
+      ...result.missing.map((box) => [t('inventory.missing'), box.boxNumber, box.title, snapshot.location.fullPath, ...resolutionColumns(box.id, 'missing')]),
+      ...result.wrongLocation.map((box) => [t('inventory.wrongLocation'), box.boxNumber, box.title, box.location?.fullPath || '', ...resolutionColumns(box.id, 'wrong_location')]),
+      ...result.unexpected.map((box) => [t('inventory.unexpected'), box.boxNumber, box.title, snapshot.location.fullPath, ...resolutionColumns(box.id, 'unexpected')]),
     ];
     const csv = `\uFEFF${rows.map((row) => row.map(escapeInventoryCsvCell).join(';')).join('\r\n')}\r\n`;
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -210,6 +255,12 @@ export default function InventoryPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const discrepancyBoxes = result ? [
+    ...result.missing.map((box) => ({ box, kind: 'missing' as const })),
+    ...result.wrongLocation.map((box) => ({ box, kind: 'wrong_location' as const })),
+    ...result.unexpected.map((box) => ({ box, kind: 'unexpected' as const })),
+  ] : [];
 
   const section = (title: string, boxes: InventoryBox[], color: string) => (
     <section className="card space-y-2">
@@ -311,6 +362,42 @@ export default function InventoryPage() {
             {section(t('inventory.wrongLocation'), result.wrongLocation, 'text-amber-700')}
             {section(t('inventory.unexpected'), result.unexpected, 'text-purple-700')}
           </div>
+          {isFinished && session && (
+            <section className="card space-y-3">
+              <h2 className="font-semibold">{t('inventory.resolution')} ({session.discrepancies.filter((item) => item.status === 'open').length} {t('inventory.openCount')})</h2>
+              <p className="text-sm text-gray-500">{t('inventory.resolutionHint')}</p>
+              {discrepancyBoxes.length === 0 ? <p className="text-sm text-gray-500">{t('inventory.noDiscrepancies')}</p> : (
+                <ul className="divide-y divide-gray-100">
+                  {discrepancyBoxes.map(({ box, kind }) => {
+                    const item = session.discrepancies.find((entry) => entry.boxId === box.id && entry.kind === kind);
+                    if (!item) return null;
+                    const key = `${kind}:${box.id}`;
+                    return <li key={key} className="py-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <Link to={`/boxes/${box.id}`} className="font-semibold text-primary-700 hover:underline">{box.boxNumber}</Link>
+                        <span className="break-words">{box.title}</span>
+                        <span className="text-gray-500">{t(`inventory.discrepancyKind.${kind}`)}</span>
+                        <span className={item.status === 'resolved' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>{t(`inventory.resolutionStatus.${item.status}`)}</span>
+                      </div>
+                      {item.history.length > 0 && <ul className="space-y-1 text-xs text-gray-600">
+                        {item.history.map((event) => <li key={event.id} className="break-words">
+                          {new Date(event.createdAt).toLocaleString()} · {event.user.firstName} {event.user.lastName} · {t(`inventory.resolutionAction.${event.action}`)}: {event.note}
+                        </li>)}
+                      </ul>}
+                      {selectedDiscrepancy === key ? <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); void saveResolution(item); }}>
+                        <label htmlFor="inventory-resolution-note" className="label-text">{t('inventory.resolutionNote')}</label>
+                        <textarea id="inventory-resolution-note" className="input-field w-full" maxLength={1000} rows={2} value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} placeholder={t('inventory.resolutionPlaceholder')} />
+                        <div className="flex gap-2">
+                          <button type="submit" className="btn-primary" disabled={resolutionNote.trim().length < 5 || isBusy}>{t(item.status === 'open' ? 'inventory.markResolved' : 'inventory.reopen')}</button>
+                          <button type="button" className="btn-secondary" onClick={() => { setSelectedDiscrepancy(''); setResolutionNote(''); }}>{t('common.cancel')}</button>
+                        </div>
+                      </form> : <button type="button" className="btn-secondary" disabled={isBusy} onClick={() => { setSelectedDiscrepancy(key); setResolutionNote(''); }}>{t(item.status === 'open' ? 'inventory.markResolved' : 'inventory.reopen')}</button>}
+                    </li>;
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
         </>
       )}
     </div>

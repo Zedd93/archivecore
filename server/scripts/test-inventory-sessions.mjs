@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { generateQrData } = require('../../shared/src/utils/qr.ts');
 const { prisma } = require('../dist/config/database.js');
-const { InventoryService } = require('../dist/modules/inventory/inventory.service.js');
+const { InventoryService, inventoryDiscrepancies, resolvedInventoryDiscrepancies } = require('../dist/modules/inventory/inventory.service.js');
 
 const sessionId = '52b90a57-849b-4d21-b62f-08cdfebcf383';
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
@@ -89,4 +89,66 @@ test('undo rejects a stale scan when another operator scanned later', async () =
     await assert.rejects(service.undoScan(sessionId, scanId, tenantId, userId), /Lista skanów zmieniła się/);
     assert.equal(calls.voided.length, 0);
   } finally { restore(); }
+});
+
+test('saved snapshots derive discrepancies even without prior resolution events', () => {
+  const expected = [
+    { id: boxId, boxNumber: '1', title: 'A', locationId: 'shelf-1' },
+    { id: 'box-2', boxNumber: '2', title: 'B', locationId: 'shelf-1' },
+  ];
+  const scanned = [
+    { id: 'box-2', boxNumber: '2', title: 'B', locationId: 'shelf-2' },
+    { id: 'box-3', boxNumber: '3', title: 'C', locationId: 'shelf-1' },
+  ];
+  assert.deepEqual(inventoryDiscrepancies('shelf-1', expected, scanned).map(({ box, kind }) => [box.id, kind]), [
+    [boxId, 'missing'], ['box-2', 'wrong_location'], ['box-3', 'unexpected'],
+  ]);
+});
+
+test('completed historical session exposes open discrepancies and decision history', () => {
+  const event = { id: 'event-1', boxId, kind: 'missing', action: 'resolved', note: 'Found elsewhere', user: { firstName: 'Jan', lastName: 'Nowak' } };
+  const discrepancies = resolvedInventoryDiscrepancies('shelf-1', [
+    { id: boxId, boxNumber: '1', title: 'A', locationId: 'shelf-1' },
+    { id: 'box-2', boxNumber: '2', title: 'B', locationId: 'shelf-1' },
+  ], [], [event]);
+  assert.deepEqual(discrepancies.map(({ boxId: id, status }) => [id, status]), [
+    [boxId, 'resolved'], ['box-2', 'open'],
+  ]);
+  assert.equal(discrepancies[0].history[0].note, 'Found elsewhere');
+});
+
+test('resolution is tenant-scoped, append-only, and rejects stale transitions', async () => {
+  const service = new InventoryService();
+  const events = [];
+  let rowStatus = 'completed';
+  const tx = {
+    $queryRaw: async (query) => {
+      assert.match(query.sql, /"tenantId"/);
+      assert.ok(query.values.includes(tenantId));
+      return rowStatus === 'missing' ? [] : [{ status: rowStatus }];
+    },
+    inventorySession: { findUniqueOrThrow: async () => ({
+      locationId: 'shelf-1', expected: [{ id: boxId, boxNumber: '1', title: 'A', locationId: 'shelf-1' }], scans: [],
+    }) },
+    inventoryResolutionEvent: {
+      findFirst: async () => events.length ? events.at(-1) : null,
+      create: async ({ data }) => { events.push(data); },
+    },
+  };
+  const transaction = mock.method(prisma, '$transaction', async (callback) => callback(tx));
+  const getSession = mock.method(service, 'getSession', async () => ({ id: sessionId }));
+  try {
+    await service.recordResolution(sessionId, tenantId, boxId, 'missing', 'resolved', 'Located', userId);
+    assert.equal(events[0].userId, userId);
+    assert.equal(events[0].note, 'Located');
+    await assert.rejects(service.recordResolution(sessionId, tenantId, boxId, 'missing', 'resolved', 'Again', userId), /Stan rozbieżności/);
+    await service.recordResolution(sessionId, tenantId, boxId, 'missing', 'reopened', 'New doubt', userId);
+    assert.equal(events.length, 2);
+    await assert.rejects(service.recordResolution(sessionId, tenantId, boxId, 'unexpected', 'resolved', 'Wrong kind', userId), /nie należy/);
+    rowStatus = 'in_progress';
+    await assert.rejects(service.recordResolution(sessionId, tenantId, boxId, 'missing', 'resolved', 'Early', userId), /Najpierw zakończ/);
+    rowStatus = 'missing';
+    await assert.rejects(service.recordResolution(sessionId, tenantId, boxId, 'missing', 'resolved', 'Other tenant', userId), /nie znaleziona/);
+    assert.equal(events.length, 2);
+  } finally { getSession.mock.restore(); transaction.mock.restore(); }
 });

@@ -1154,7 +1154,19 @@
     "replaceConfirm": "Rozpocząć inną kontrolę? Obecne skany pozostaną zapisane i będzie można do nich wrócić.",
     "draftWarning": "Skany są zapisywane na bieżąco. Kartony do sprawdzenia staną się nieodnalezionymi dopiero po zakończeniu kontroli.",
     "csvResult": "Wynik kontroli",
-    "noPermission": "Nie masz uprawnienia do kontroli półki."
+    "noPermission": "Nie masz uprawnienia do kontroli półki.",
+    "resolution": "Wyjaśnianie rozbieżności",
+    "openCount": "otwartych",
+    "resolutionHint": "Decyzja wymaga uzasadnienia i pozostaje w historii. Nie zmienia automatycznie lokalizacji ani stanu kartonu.",
+    "noDiscrepancies": "Nie ma rozbieżności do wyjaśnienia.",
+    "resolutionNote": "Uzasadnienie (minimum 5 znaków)",
+    "resolutionPlaceholder": "Opisz ustalenia i podjęte działania",
+    "markResolved": "Oznacz jako wyjaśnione",
+    "reopen": "Otwórz ponownie",
+    "resolutionSaved": "Zapisano decyzję o rozbieżności",
+    "resolutionStatus": { "open": "Do wyjaśnienia", "resolved": "Wyjaśnione" },
+    "resolutionAction": { "resolved": "Wyjaśniono", "reopened": "Otwarto ponownie" },
+    "discrepancyKind": { "missing": "Nieodnaleziony", "wrong_location": "Inna lokalizacja w ewidencji", "unexpected": "Niespodziewany na półce" }
   },
 
   "warehouseMove": {

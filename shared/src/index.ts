@@ -38,5 +38,6 @@ export * from './validators/pricing.schema';
 
 // Utils
 export * from './utils/qr';
+export * from './utils/inventory';
 export * from './utils/retention';
 export * from './utils/formatting';

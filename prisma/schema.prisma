@@ -295,6 +295,7 @@ model User {
   notifications        Notification[]
   closedBillingPeriods   BillingPeriod[] @relation("BillingPeriodCloser")
   invoicedBillingPeriods BillingPeriod[] @relation("BillingPeriodInvoicer")
+  inventoryResolutionEvents InventoryResolutionEvent[]
 
   @@index([tenantId])
   @@index([email])
@@ -453,6 +454,7 @@ model InventorySession {
   tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   location Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
   scans    InventoryScan[]
+  resolutionEvents InventoryResolutionEvent[]
 
   @@index([tenantId, startedAt])
   @@map("inventory_sessions")
@@ -472,6 +474,24 @@ model InventoryScan {
 
   @@index([sessionId, voidedAt, scannedAt])
   @@map("inventory_scans")
+}
+
+model InventoryResolutionEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  sequence  Int      @unique @default(autoincrement())
+  sessionId String   @db.Uuid
+  boxId     String   @db.Uuid
+  kind      String   @db.VarChar(30)
+  action    String   @db.VarChar(20)
+  note      String   @db.Text
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  session InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, boxId, kind, sequence])
+  @@map("inventory_resolution_events")
 }
 
 model Folder {

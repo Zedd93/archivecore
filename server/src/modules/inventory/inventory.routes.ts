@@ -65,6 +65,24 @@ router.post('/sessions/:id/finish', async (req: Request, res: Response, next: Ne
   } catch (error) { next(error); }
 });
 
+const resolutionSchema = z.object({ action: z.enum(['resolved', 'reopened']), note: z.string().trim().min(5).max(1000) });
+const discrepancyKindSchema = z.enum(['missing', 'wrong_location', 'unexpected']);
+
+router.post('/sessions/:id/discrepancies/:boxId/:kind/resolution', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.tenantId) return errorResponse(res, 'Wybierz firmę klienta', 400);
+    if (!uuidSchema.safeParse(req.params.id).success || !uuidSchema.safeParse(req.params.boxId).success) {
+      return errorResponse(res, 'Nieprawidłowy identyfikator kontroli lub kartonu', 400);
+    }
+    const kind = discrepancyKindSchema.safeParse(req.params.kind);
+    const body = resolutionSchema.safeParse(req.body);
+    if (!kind.success || !body.success) return errorResponse(res, 'Podaj rodzaj rozbieżności i uzasadnienie (5-1000 znaków)', 400);
+    return successResponse(res, await inventoryService.recordResolution(
+      req.params.id, req.tenantId, req.params.boxId, kind.data, body.data.action, body.data.note, req.user!.userId,
+    ));
+  } catch (error) { next(error); }
+});
+
 router.get('/locations/:id/snapshot', async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.tenantId) return errorResponse(res, 'Wybierz firmę klienta', 400);
