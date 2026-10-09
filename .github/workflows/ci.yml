@@ -51,3 +51,6 @@ jobs:
 
       - name: Verify inventory checks
         run: npm run test:inventory
+
+      - name: Verify saved inventory sessions
+        run: npm run test:inventory-sessions

@@ -31,6 +31,11 @@ enum BoxStatus {
   damaged
 }
 
+enum InventorySessionStatus {
+  in_progress
+  completed
+}
+
 enum FolderStatus {
   active
   checked_out
@@ -205,6 +210,7 @@ model Tenant {
   priceLists        PriceList[]
   billingEvents     BillingEvent[]
   billingPeriods    BillingPeriod[]
+  inventorySessions InventorySession[]
 
   @@map("tenants")
 }
@@ -373,6 +379,7 @@ model Location {
   boxes       Box[]
   custodyFrom CustodyEvent[] @relation("CustodyFromLocation")
   custodyTo   CustodyEvent[] @relation("CustodyToLocation")
+  inventorySessions InventorySession[]
 
   @@index([parentId])
   @@index([tenantId])
@@ -428,6 +435,43 @@ model Box {
   @@index([retentionDate])
   @@index([docType])
   @@map("boxes")
+}
+
+model InventorySession {
+  id             String                 @id @default(uuid()) @db.Uuid
+  tenantId       String                 @db.Uuid
+  locationId     String                 @db.Uuid
+  locationPath   String                 @db.VarChar(500)
+  expected       Json
+  excludedCount  Int                    @default(0)
+  status         InventorySessionStatus @default(in_progress)
+  startedById    String                 @db.Uuid
+  startedAt      DateTime               @default(now())
+  finishedById   String?                @db.Uuid
+  finishedAt     DateTime?
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  scans    InventoryScan[]
+
+  @@index([tenantId, startedAt])
+  @@map("inventory_sessions")
+}
+
+model InventoryScan {
+  id          String    @id @default(uuid()) @db.Uuid
+  sessionId   String    @db.Uuid
+  boxId       String    @db.Uuid
+  boxData     Json
+  scannedById String    @db.Uuid
+  scannedAt   DateTime  @default(now())
+  voidedById  String?   @db.Uuid
+  voidedAt    DateTime?
+
+  session InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, voidedAt, scannedAt])
+  @@map("inventory_scans")
 }
 
 model Folder {
