@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database';
 import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '@prisma/client';
-import { isValidTransition } from './order-state-machine';
+import { canMarkReadyAfterPicking, isValidTransition } from './order-state-machine';
 import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
@@ -438,8 +438,8 @@ export class OrderService {
 
   async addItem(orderId: string, tenantId: string, item: any, department?: string) {
     const order = await this.getById(orderId, tenantId);
-    if (['completed', 'cancelled'].includes(order.status)) {
-      throw Object.assign(new Error('Nie można dodawać pozycji do zakończonego albo anulowanego zlecenia'), { statusCode: 400 });
+    if (['ready', 'delivered', 'completed', 'cancelled'].includes(order.status)) {
+      throw Object.assign(new Error('Nie można dodawać pozycji do gotowego, wydanego, zakończonego albo anulowanego zlecenia'), { statusCode: 400 });
     }
 
     const resolvedItem = await this.resolveOrderItem(item, tenantId, department);
@@ -521,6 +521,11 @@ export class OrderService {
   }
 
   async markReady(id: string, tenantId: string, userId: string) {
+    const order = await this.getById(id, tenantId);
+    if (order.status === 'in_progress'
+      && !canMarkReadyAfterPicking(order.orderType, order.items.map((item) => item.itemStatus))) {
+      throw Object.assign(new Error('Najpierw potwierdź pobranie wszystkich pozycji zlecenia'), { statusCode: 400 });
+    }
     return this.updateStatus(id, tenantId, 'ready', userId);
   }
 
@@ -711,20 +716,36 @@ export class OrderService {
     return this.updateStatus(id, tenantId, 'cancelled', userId, notes);
   }
 
-  async updateItemStatus(orderId: string, itemId: string, tenantId: string, status: string, userId: string) {
+  async updateItemStatus(
+    orderId: string, itemId: string, tenantId: string,
+    status: 'pending' | 'picked', userId: string
+  ) {
     const order = await this.getById(orderId, tenantId);
     const item = order.items.find((i: any) => i.id === itemId);
     if (!item) throw Object.assign(new Error('Pozycja nie znaleziona'), { statusCode: 404 });
+    if (order.orderType !== 'checkout' || order.status !== 'in_progress') {
+      throw Object.assign(new Error('Pobieranie pozycji jest dostępne tylko podczas realizacji zlecenia wydania'), { statusCode: 400 });
+    }
 
-    return prisma.orderItem.update({
-      where: { id: itemId },
+    const previousStatus = status === OrderItemStatus.picked ? OrderItemStatus.pending : OrderItemStatus.picked;
+    const result = await prisma.orderItem.updateMany({
+      where: {
+        id: itemId,
+        orderId,
+        itemStatus: previousStatus,
+        order: { tenantId, status: OrderStatus.in_progress },
+      },
       data: {
-        itemStatus: status as any,
-        pickedById: status === 'picked' ? userId : undefined,
-        pickedAt: status === 'picked' ? new Date() : undefined,
-        deliveredAt: status === 'delivered' ? new Date() : undefined,
+        itemStatus: status,
+        pickedById: status === OrderItemStatus.picked ? userId : null,
+        pickedAt: status === OrderItemStatus.picked ? new Date() : null,
       },
     });
+    if (result.count !== 1) {
+      throw Object.assign(new Error('Status pozycji zmienił się w międzyczasie. Odśwież zlecenie.'), { statusCode: 409 });
+    }
+
+    return prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } });
   }
 
   async assign(id: string, tenantId: string, assigneeId: string) {

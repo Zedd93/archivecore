@@ -34,7 +34,7 @@ export const cancelOrderSchema = z.object({
 });
 
 export const updateOrderItemStatusSchema = z.object({
-  status: z.enum(['pending', 'picked', 'delivered', 'returned', 'issue']),
+  status: z.enum(['pending', 'picked']),
 });
 
 export const createCustodyEventSchema = z.object({

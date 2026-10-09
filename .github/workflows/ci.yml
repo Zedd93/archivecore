@@ -42,3 +42,6 @@ jobs:
 
       - name: Verify QR formats
         run: npm run test:qr
+
+      - name: Verify order picking
+        run: npm run test:order-picking

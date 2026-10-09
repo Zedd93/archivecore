@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,8 +14,10 @@ import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
+import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus } from 'lucide-react';
+import { matchOrderItemQr } from '@/utils/orderPicking';
+import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw } from 'lucide-react';
 
 // Status flow steps
 const STATUS_STEPS = ['draft', 'submitted', 'approved', 'in_progress', 'ready', 'delivered', 'completed'];
@@ -42,6 +44,11 @@ export default function OrderDetailPage() {
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [addingItems, setAddingItems] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [pickingItemId, setPickingItemId] = useState<string | null>(null);
+  const pickBusyRef = useRef(false);
+  const lastCameraCodeRef = useRef('');
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'), return_order: t('orders.typeReturn'),
@@ -61,6 +68,60 @@ export default function OrderDetailPage() {
   const currentStepIndex = STATUS_STEPS.indexOf(order.status);
   const isCancelled = order.status === 'cancelled';
   const isRejected = order.status === 'rejected';
+  const canPick = order.orderType === 'checkout' && order.status === 'in_progress' && hasPermission('order.process');
+  const handledCount = order.items?.filter((item: any) => ['picked', 'delivered', 'returned'].includes(item.itemStatus)).length ?? 0;
+  const remainingCount = (order.items?.length ?? 0) - handledCount;
+
+  const updatePick = async (itemId: string, status: 'pending' | 'picked') => {
+    if (!id || pickBusyRef.current) return;
+    pickBusyRef.current = true;
+    setPickingItemId(itemId);
+    try {
+      await api.patch(`/orders/${id}/items/${itemId}/status`, { status });
+      await queryClient.invalidateQueries({ queryKey: ['order', id] });
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success(t(status === 'picked' ? 'orders.detail.pickedSuccess' : 'orders.detail.pickUndone'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      await queryClient.invalidateQueries({ queryKey: ['order', id] });
+    } finally {
+      pickBusyRef.current = false;
+      setPickingItemId(null);
+    }
+  };
+
+  const processPickCode = (rawCode: string) => {
+    if (!canPick || pickBusyRef.current) return;
+    const match = matchOrderItemQr(order.items, rawCode);
+    if (match.kind === 'invalid') {
+      toast.error(t('orders.detail.invalidPickCode'));
+      return;
+    }
+    if (match.kind === 'missing') {
+      toast.error(t('orders.detail.codeNotInOrder'));
+      return;
+    }
+    if (match.kind === 'ambiguous') {
+      toast.error(t('orders.detail.ambiguousPickCode'));
+      return;
+    }
+    if (match.item.itemStatus === 'picked') {
+      toast(t('orders.detail.alreadyPicked'));
+      return;
+    }
+    if (match.item.itemStatus !== 'pending') {
+      toast.error(t('orders.detail.cannotPickItem'));
+      return;
+    }
+    void updatePick(match.item.id, 'picked');
+  };
+
+  const handleCameraCode = (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code || pickBusyRef.current || lastCameraCodeRef.current === code) return;
+    lastCameraCodeRef.current = code;
+    processPickCode(code);
+  };
 
   const handleAction = async (action: string) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}` });
@@ -179,7 +240,7 @@ export default function OrderDetailPage() {
             </button>
           )}
           {order.status === 'in_progress' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending}>
+            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending || (order.orderType === 'checkout' && (order.items.length === 0 || remainingCount > 0))}>
               <Package size={16} /> {t('orders.detail.markReady')}
             </button>
           )}
@@ -201,12 +262,43 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
+      {canPick && (
+        <div className="card space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">{t('orders.detail.pickingTitle')}</h2>
+            <p className="text-sm text-gray-600">{t('orders.detail.pickingProgress', { picked: handledCount, total: order.items.length })}</p>
+            {remainingCount > 0 && <p className="text-xs text-amber-700 mt-1">{t('orders.detail.pickingRequired')}</p>}
+          </div>
+          {!isScanning ? (
+            <button type="button" className="btn-primary w-full sm:w-auto flex items-center justify-center gap-2" onClick={() => { lastCameraCodeRef.current = ''; setIsScanning(true); }}>
+              <Camera size={17} />{t('labels.startCamera')}
+            </button>
+          ) : (
+            <div className="space-y-2 max-w-lg">
+              <QrCameraScanner
+                id="archivecore-order-pick-scanner"
+                onCode={handleCameraCode}
+                onError={() => { toast.error(t('labels.cameraError')); setIsScanning(false); }}
+              />
+              <button type="button" className="btn-secondary w-full" onClick={() => setIsScanning(false)}>{t('labels.stopCamera')}</button>
+            </div>
+          )}
+          <form onSubmit={(event) => { event.preventDefault(); if (pickBusyRef.current) return; processPickCode(manualCode); setManualCode(''); }} className="max-w-lg">
+            <label htmlFor="order-pick-code" className="label-text">{t('orders.detail.manualPickCode')}</label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input id="order-pick-code" className="input-field font-mono" value={manualCode} onChange={(event) => setManualCode(event.target.value)} placeholder="AC:... / ACF:..." />
+              <button type="submit" className="btn-secondary shrink-0" disabled={!manualCode.trim() || pickingItemId !== null}>{t('orders.detail.checkCode')}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Items */}
         <div className="lg:col-span-2 card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('orders.detail.items', { count: order.items?.length || 0 })}</h2>
-            {canAddItems && !['completed', 'cancelled'].includes(order.status) && (
+            {canAddItems && !['ready', 'delivered', 'completed', 'cancelled'].includes(order.status) && (
               <button type="button" onClick={() => setShowAddItem(true)} className="btn-secondary flex items-center gap-2 text-sm">
                 <Plus size={14} /> {t('orders.detail.addItem', 'Dodaj pozycję')}
               </button>
@@ -215,8 +307,8 @@ export default function OrderDetailPage() {
           {order.items?.length > 0 ? (
             <div className="space-y-2">
               {order.items.map((item: any) => (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
+                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="min-w-0 break-words">
                     {item.box && (
                       <div className="text-sm">
                         <span className="font-mono font-medium text-primary-700">{item.box.boxNumber}</span>
@@ -255,7 +347,21 @@ export default function OrderDetailPage() {
                       </div>
                     )}
                   </div>
-                  <StatusBadge status={item.itemStatus} type="orderItem" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={item.itemStatus} type="orderItem" />
+                    {canPick && item.itemStatus === 'pending' && (
+                      <button type="button" className="btn-secondary text-xs" disabled={pickingItemId !== null} onClick={() => { void updatePick(item.id, 'picked'); }}>
+                        {pickingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                        {t('orders.detail.markPicked')}
+                      </button>
+                    )}
+                    {canPick && item.itemStatus === 'picked' && (
+                      <button type="button" className="btn-secondary text-xs" disabled={pickingItemId !== null} onClick={() => { void updatePick(item.id, 'pending'); }}>
+                        {pickingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                        {t('orders.detail.undoPick')}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

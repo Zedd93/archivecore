@@ -1,4 +1,4 @@
-import { OrderStatus } from '@prisma/client';
+import { OrderItemStatus, OrderStatus, OrderType } from '@prisma/client';
 
 // Valid state transitions: { [currentStatus]: allowedNextStatuses[] }
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -15,6 +15,15 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 export function isValidTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ORDER_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+export function canMarkReadyAfterPicking(orderType: OrderType, itemStatuses: OrderItemStatus[]): boolean {
+  return orderType !== OrderType.checkout
+    || (itemStatuses.length > 0 && itemStatuses.every((status) => (
+      status === OrderItemStatus.picked
+      || status === OrderItemStatus.delivered
+      || status === OrderItemStatus.returned
+    )));
 }
 
 // Actions that specific roles can perform
