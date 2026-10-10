@@ -5,13 +5,13 @@ import api from '@/services/api';
 import { useCreate } from '@/hooks/useApi';
 import { DOC_TYPES, Permissions, RoleCode } from '@archivecore/shared';
 import { useAuth } from '@/contexts/AuthContext';
-import { getApiErrorMessage } from '@/utils/apiError';
+import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import toast from 'react-hot-toast';
-import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2 } from 'lucide-react';
+import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2, Download } from 'lucide-react';
 
 const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
 
@@ -27,6 +27,8 @@ export default function RetentionPage() {
   const [upcomingPage, setUpcomingPage] = useState(1);
   const [pendingPage, setPendingPage] = useState(1);
   const [approvedPage, setApprovedPage] = useState(1);
+  const [completedPage, setCompletedPage] = useState(1);
+  const [downloadingConfirmation, setDownloadingConfirmation] = useState<string | null>(null);
   const [selectedDueIds, setSelectedDueIds] = useState<Set<string>>(new Set());
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
   const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<string>>(new Set());
@@ -89,6 +91,12 @@ export default function RetentionPage() {
     enabled: Boolean(activeTenantId) && (canApproveDisposal || canCompleteDisposal),
   });
 
+  const { data: completedDisposals, isLoading: completedLoading, isError: completedError } = useQuery({
+    queryKey: ['retention-completed', activeTenantId, completedPage],
+    queryFn: async () => { const { data } = await api.get('/retention/disposal/completed', { params: { page: completedPage, limit: reviewLimit } }); return data.data; },
+    enabled: Boolean(activeTenantId) && (canApproveDisposal || canCompleteDisposal),
+  });
+
   const { data: upcomingBoxes, isLoading: upcomingLoading, isError: upcomingError } = useQuery({
     queryKey: ['retention-review', activeTenantId, 'upcoming', reviewDays, upcomingPage],
     queryFn: async () => { const { data } = await api.get('/retention/review', { params: { scope: 'upcoming', days: reviewDays, page: upcomingPage, limit: reviewLimit } }); return data.data; },
@@ -109,6 +117,7 @@ export default function RetentionPage() {
     setUpcomingPage(1);
     setPendingPage(1);
     setApprovedPage(1);
+    setCompletedPage(1);
   }, [activeTenantId]);
 
   const createPolicy = useCreate('/retention/policies', ['retention-policies'], t('admin.retention.policyCreated'));
@@ -167,6 +176,34 @@ export default function RetentionPage() {
     },
     { key: 'retentionPolicy', header: t('admin.retention.policies'), render: (item) => item.retentionPolicy?.name || '—' },
     { key: 'status', header: t('common.status'), render: (item) => <div className="flex flex-wrap gap-1"><StatusBadge status={item.status} type="box" />{item.legalHold && <span className="badge-red">{t('boxes.legalHold')}</span>}</div> },
+  ];
+
+  const downloadConfirmation = async (id: string) => {
+    if (downloadingConfirmation) return;
+    setDownloadingConfirmation(id);
+    try {
+      const { data } = await api.get(`/retention/disposal/completed/${encodeURIComponent(id)}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `archivecore-brakowanie-${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(await getApiErrorMessageAsync(error, t('admin.retention.disposal.downloadError')));
+    } finally {
+      setDownloadingConfirmation(null);
+    }
+  };
+
+  const completedColumns: Column<any>[] = [
+    { key: 'completedAt', header: t('admin.retention.disposal.completedAt'), render: (item) => new Date(item.completedAt).toLocaleString('pl-PL') },
+    { key: 'protocolReference', header: t('admin.retention.disposal.protocolReference') },
+    { key: 'boxCount', header: t('boxes.title') },
+    { key: 'completedBy', header: t('admin.retention.disposal.completedBy') },
+    { key: 'download', header: t('admin.retention.disposal.confirmation'), render: (item) => <button type="button" className="btn-secondary text-xs" disabled={downloadingConfirmation === item.id} onClick={() => downloadConfirmation(item.id)}><Download size={14} />{t('admin.retention.disposal.download')}</button> },
   ];
 
   const handleCreatePolicy = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -296,6 +333,7 @@ export default function RetentionPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['retention-pending'] }),
         queryClient.invalidateQueries({ queryKey: ['retention-approved'] }),
+        queryClient.invalidateQueries({ queryKey: ['retention-completed'] }),
         queryClient.invalidateQueries({ queryKey: ['retention-review'] }),
         queryClient.invalidateQueries({ queryKey: ['boxes'] }),
         queryClient.invalidateQueries({ queryKey: ['locations-tree'] }),
@@ -396,6 +434,15 @@ export default function RetentionPage() {
           <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.approvedHint')}</p>
           {approvedError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={approvedBoxes?.data || []} isLoading={approvedLoading} emptyMessage={t('admin.retention.disposal.noApproved')} selectable={canCompleteDisposal} selectedIds={selectedApprovedIds} onSelectionChange={setSelectedApprovedIds} />}
           <Pagination page={approvedPage} limit={reviewLimit} total={approvedBoxes?.total || 0} onPageChange={(page) => { setSelectedApprovedIds(new Set()); setApprovedPage(page); }} />
+        </div>
+      )}
+
+      {activeTenantId && (canApproveDisposal || canCompleteDisposal) && (
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-1">{t('admin.retention.disposal.completedTitle')}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.completedHint')}</p>
+          {completedError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={completedColumns} data={completedDisposals?.data || []} isLoading={completedLoading} emptyMessage={t('admin.retention.disposal.noCompleted')} />}
+          <Pagination page={completedPage} limit={reviewLimit} total={completedDisposals?.total || 0} onPageChange={setCompletedPage} />
         </div>
       )}
 

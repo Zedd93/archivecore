@@ -8,6 +8,7 @@ const { BoxService } = require('../dist/modules/boxes/box.service.js');
 const { RetentionService } = require('../dist/modules/retention/retention.service.js');
 const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
+const { parseDisposalConfirmation, buildDisposalConfirmationPdf } = require('../dist/modules/retention/disposal-confirmation.js');
 const { boxLegalHoldSchema, changeBoxStatusSchema, bulkBoxStatusSchema } = require('../../shared/src/validators/box.schema.ts');
 const { approveDisposalSchema, rejectDisposalSchema, completeDisposalSchema } = require('../../shared/src/validators/retention.schema.ts');
 
@@ -353,7 +354,10 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
       box: {
         findMany: async ({ where }) => {
           assert.equal(where.status, 'approved_disposal');
-          return [{ id: boxId, locationId }, { id: secondBoxId, locationId }];
+          return [
+            { id: boxId, locationId, boxNumber: 'K-1', title: 'Teczki Łódź', location: { fullPath: 'Magazyn / Regał 1' } },
+            { id: secondBoxId, locationId, boxNumber: 'K-2', title: 'Akta', location: { fullPath: 'Magazyn / Regał 1' } },
+          ];
         },
         updateMany: async ({ data }) => { assert.equal(data.status, 'disposed'); assert.equal(data.locationId, null); return { count: 2 }; },
         count: async ({ where }) => { assert.equal(where.locationId, locationId); return 0; },
@@ -371,8 +375,47 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
     assert.equal(folders[0].data.status, 'disposed');
     assert.equal(audits[0].newValues.protocolReference, 'PROT-2026-1');
     assert.equal(audits[0].oldValues.locationId, locationId);
+    assert.equal(audits[0].newValues.batchId, result.batchId);
+    assert.equal(audits[2].entityType, 'disposal_batch');
+    assert.equal(audits[2].entityId, result.batchId);
+    assert.equal(audits[2].newValues.protocolReference, 'PROT-2026-1');
+    assert.deepEqual(audits[2].newValues.boxes.map((box) => box.boxNumber), ['K-1', 'K-2']);
+    assert.equal(audits[2].newValues.boxes[0].location, 'Magazyn / Regał 1');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('completed disposal history and confirmation are scoped to the selected tenant', async () => {
+  const service = new RetentionService();
+  const calls = [];
+  const record = {
+    entityId: boxId,
+    createdAt: new Date('2026-10-10T10:00:00Z'),
+    newValues: { protocolReference: 'PROT-2026-1', boxes: [{ id: boxId, boxNumber: 'K-1', title: 'Teczki Łódź', location: 'Magazyn 1' }] },
+    tenant: { name: 'Spółdzielnia Łódź' },
+    user: { firstName: 'Anna', lastName: 'Nowak' },
+  };
+  const auditLog = prisma.auditLog;
+  const originals = { findMany: auditLog.findMany, count: auditLog.count, findFirst: auditLog.findFirst };
+  auditLog.findMany = async (args) => { calls.push(args.where); return [record]; };
+  auditLog.count = async (args) => { calls.push(args.where); return 1; };
+  auditLog.findFirst = async (args) => { calls.push(args.where); return args.where.tenantId === tenantId ? record : null; };
+  try {
+    const history = await service.getCompletedDisposal(tenantId);
+    assert.equal(history.total, 1);
+    assert.equal(history.data[0].boxCount, 1);
+    const confirmation = parseDisposalConfirmation(await service.getCompletedDisposalRecord(tenantId, boxId));
+    assert.equal(confirmation.tenantName, 'Spółdzielnia Łódź');
+    assert.equal(confirmation.boxes[0].title, 'Teczki Łódź');
+    const pdf = await buildDisposalConfirmationPdf(confirmation);
+    assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+    assert.ok(pdf.length > 5000);
+    await assert.rejects(service.getCompletedDisposalRecord('other-tenant', boxId), { statusCode: 404 });
+    assert.ok(calls.every((where) => where.entityType === 'disposal_batch' && where.action === 'disposal.batch_completed'));
+    assert.ok(calls.slice(0, 3).every((where) => where.tenantId === tenantId));
+  } finally {
+    Object.assign(auditLog, originals);
   }
 });
 
@@ -382,6 +425,7 @@ test('disposal decisions require a reason, protocol and explicit confirmation', 
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: false }).success, false);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true }).success, true);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: Array(501).fill(boxId), protocolReference: 'P-1', confirmed: true }).success, false);
 });
 
 test('disposal orders resolve boxes through transfer list folders', async () => {

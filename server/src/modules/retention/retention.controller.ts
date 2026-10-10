@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { retentionService } from './retention.service';
 import { successResponse, errorResponse } from '../../utils/response';
+import { buildDisposalConfirmationPdf, parseDisposalConfirmation } from './disposal-confirmation';
+import { z } from 'zod';
 
 export class RetentionController {
   async listPolicies(req: Request, res: Response, next: NextFunction) {
@@ -106,6 +108,27 @@ export class RetentionController {
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 25));
       const boxes = await retentionService.getApprovedDisposal(req.tenantId, page, limit);
       return successResponse(res, boxes);
+    } catch (err) { next(err); }
+  }
+
+  async getCompletedDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 25));
+      return successResponse(res, await retentionService.getCompletedDisposal(req.tenantId, page, limit));
+    } catch (err) { next(err); }
+  }
+
+  async downloadDisposalConfirmation(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator potwierdzenia', 400);
+      const record = await retentionService.getCompletedDisposalRecord(req.tenantId, req.params.id);
+      const pdf = await buildDisposalConfirmationPdf(parseDisposalConfirmation(record));
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="archivecore-brakowanie-${req.params.id}.pdf"`);
+      return res.send(pdf);
     } catch (err) { next(err); }
   }
 

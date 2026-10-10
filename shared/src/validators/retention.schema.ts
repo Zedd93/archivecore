@@ -40,7 +40,7 @@ export const rejectDisposalSchema = z.object({
 });
 
 export const completeDisposalSchema = z.object({
-  boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
+  boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').max(500, 'Jednorazowo można zakończyć brakowanie maksymalnie 500 kartonów'),
   protocolReference: z.string().trim().min(3, 'Podaj numer protokołu').max(200),
   confirmed: z.literal(true),
 });

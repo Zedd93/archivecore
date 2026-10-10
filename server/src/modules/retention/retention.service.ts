@@ -3,6 +3,7 @@ import { BoxStatus, Prisma } from '@prisma/client';
 import { IJwtPayload, Permissions, RoleCode } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { parseJrwaDocx } from './jrwa-import.parser';
+import { randomUUID } from 'node:crypto';
 
 export class RetentionService {
   private async recordDisposalAudit(
@@ -373,6 +374,41 @@ export class RetentionService {
     return { data, total, page, limit };
   }
 
+  async getCompletedDisposal(tenantId: string, page = 1, limit = 25) {
+    const where: Prisma.AuditLogWhereInput = { tenantId, entityType: 'disposal_batch', action: 'disposal.batch_completed' };
+    const [data, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { entityId: true, createdAt: true, newValues: true, user: { select: { firstName: true, lastName: true } } },
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+    return { data: data.map((entry) => ({
+      id: entry.entityId,
+      completedAt: entry.createdAt,
+      completedBy: `${entry.user.firstName} ${entry.user.lastName}`,
+      ...(entry.newValues && typeof entry.newValues === 'object' && !Array.isArray(entry.newValues) ? {
+        protocolReference: entry.newValues.protocolReference,
+        boxCount: Array.isArray(entry.newValues.boxes) ? entry.newValues.boxes.length : 0,
+      } : { protocolReference: '', boxCount: 0 }),
+    })), total, page, limit };
+  }
+
+  async getCompletedDisposalRecord(tenantId: string, id: string) {
+    const record = await prisma.auditLog.findFirst({
+      where: { tenantId, entityId: id, entityType: 'disposal_batch', action: 'disposal.batch_completed' },
+      include: {
+        tenant: { select: { name: true } },
+        user: { select: { firstName: true, lastName: true } },
+      },
+    });
+    if (!record) throw Object.assign(new Error('Potwierdzenie brakowania nie zostało znalezione'), { statusCode: 404 });
+    return record;
+  }
+
   // Initiate disposal process
   async initiateDisposal(tenantId: string, boxIds: string[], actorId: string, notes?: string) {
     const uniqueIds = [...new Set(boxIds)];
@@ -480,16 +516,21 @@ export class RetentionService {
 
   async completeDisposal(tenantId: string, boxIds: string[], actorId: string, protocolReference: string) {
     const uniqueIds = [...new Set(boxIds)];
+    const batchId = randomUUID();
+    const completedAt = new Date();
     const updated = await prisma.$transaction(async (tx) => {
       const where: Prisma.BoxWhereInput = {
         ...this.disposalEligibility(tenantId),
         id: { in: uniqueIds }, status: 'approved_disposal', retentionDate: { lte: new Date() },
       };
-      const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
+      const boxes = await tx.box.findMany({ where, select: {
+        id: true, locationId: true, boxNumber: true, title: true,
+        location: { select: { fullPath: true } },
+      } });
       if (boxes.length !== uniqueIds.length) {
         throw Object.assign(new Error('Co najmniej jeden karton nie ma ważnej zgody lub jest objęty blokadą'), { statusCode: 409 });
       }
-      const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: new Date(), locationId: null } });
+      const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: completedAt, locationId: null } });
       if (result.count !== boxes.length) {
         throw Object.assign(new Error('Stan kartonów zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
       }
@@ -503,15 +544,32 @@ export class RetentionService {
         await tx.location.update({ where: { id: locationId }, data: { currentCount } });
       }
       await tx.auditLog.createMany({
-        data: boxes.map((box) => ({
+        data: [...boxes.map((box) => ({
           tenantId,
           userId: actorId,
           action: 'disposal.completed',
           entityType: 'box',
           entityId: box.id,
           oldValues: { status: 'approved_disposal', locationId: box.locationId },
-          newValues: { status: 'disposed', locationId: null, protocolReference },
-        })),
+          newValues: { status: 'disposed', locationId: null, protocolReference, batchId },
+        })), {
+          tenantId,
+          userId: actorId,
+          action: 'disposal.batch_completed',
+          entityType: 'disposal_batch',
+          entityId: batchId,
+          oldValues: Prisma.JsonNull,
+          newValues: {
+            protocolReference,
+            completedAt: completedAt.toISOString(),
+            boxes: boxes.map((box) => ({
+              id: box.id,
+              boxNumber: box.boxNumber,
+              title: box.title,
+              location: box.location?.fullPath || null,
+            })),
+          },
+        }],
       });
       return result;
     });
@@ -528,7 +586,7 @@ export class RetentionService {
         actionUrl: '/admin/retention',
       });
     }
-    return { count: updated.count };
+    return { count: updated.count, batchId };
   }
 }
 
