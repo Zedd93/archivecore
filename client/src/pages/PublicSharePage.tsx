@@ -304,7 +304,7 @@ function SharedHRView({ entity }: { entity: any }) {
         </div>
         <div>
           <dt className="text-sm text-gray-500">{t('hr.retentionPeriod')}</dt>
-          <dd className="text-sm mt-1">{entity.retentionPeriod ? `${entity.retentionPeriod} lat` : '—'}</dd>
+          <dd className="text-sm mt-1">{entity.retentionBasis === 'needs_review' ? t('hr.needsReview') : entity.retentionPeriod === 'fifty_years' ? t('hr.retention50') : entity.retentionPeriod === 'ten_years' ? t('hr.retention10') : '—'}</dd>
         </div>
       </dl>
     </div>

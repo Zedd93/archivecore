@@ -32,6 +32,7 @@
     "test:monthly-report": "node --import tsx --test server/scripts/test-monthly-report.cjs",
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
     "test:legal-hold": "node --import tsx --test server/scripts/test-legal-hold.mjs",
+    "test:hr-retention": "node --import tsx --test server/scripts/test-hr-retention.mjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",

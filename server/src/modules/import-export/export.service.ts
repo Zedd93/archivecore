@@ -75,8 +75,10 @@ const HR_COLUMNS: ExportColumn[] = [
   { header: 'Stanowisko', key: 'position' },
   { header: 'Data zatrudnienia', key: 'employmentStart', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Data zakończenia', key: 'employmentEnd', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
-  { header: 'Okres retencji', key: 'retentionPeriod', transform: (v) => RETENTION_PERIOD_LABELS[v] || v },
-  { header: 'Data końca retencji', key: 'retentionEndDate', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
+  { header: 'Podstawa retencji', key: 'retentionBasis', transform: (v) => ({ needs_review: 'Wymaga weryfikacji', pre_1999: 'Zatrudnienie przed 1999 r.', transitional_50: '1999-2018 bez ZUS RIA', transitional_ria: '1999-2018 z ZUS RIA', post_2018: 'Zatrudnienie od 2019 r.' } as Record<string, string>)[v] || v },
+  { header: 'Data złożenia ZUS RIA', key: 'riaSubmittedAt', transform: (v) => v ? new Date(v).toISOString().split('T')[0] : '' },
+  { header: 'Okres retencji', key: 'retentionPeriod', transform: (v, row) => row.retentionBasis === 'needs_review' ? 'Wymaga weryfikacji' : RETENTION_PERIOD_LABELS[v] || v },
+  { header: 'Data końca retencji', key: 'retentionEndDate', transform: (v, row) => row.retentionBasis !== 'needs_review' && v ? new Date(v).toISOString().split('T')[0] : '' },
   { header: 'Status brakowania', key: 'disposalStatus', transform: (v) => DISPOSAL_STATUS_LABELS[v] || v },
   { header: 'Forma przechowywania', key: 'storageForm', transform: (v) => STORAGE_FORM_LABELS[v] || v },
   { header: 'Blokada sądowa', key: 'litigationHold', transform: (v) => v ? 'Tak' : 'Nie' },
@@ -278,6 +280,8 @@ export class ExportService {
   async exportHR(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx'): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const where: Prisma.HRFolderWhereInput = { tenantId };
     if (filters.employmentStatus) where.employmentStatus = filters.employmentStatus as any;
+    if (filters.retentionBasis === 'needs_review') where.retentionBasis = 'needs_review';
+    if (filters.retentionBasis === 'verified') where.retentionBasis = { not: 'needs_review' };
     if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
     if (filters.search) {
       where.OR = [
@@ -301,6 +305,8 @@ export class ExportService {
         department: true,
         position: true,
         retentionPeriod: true,
+        retentionBasis: true,
+        riaSubmittedAt: true,
         retentionEndDate: true,
         disposalStatus: true,
         storageForm: true,

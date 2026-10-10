@@ -46,6 +46,9 @@ jobs:
       - name: Verify legal hold and disposal safeguards
         run: npm run test:legal-hold
 
+      - name: Verify personnel record retention dates
+        run: npm run test:hr-retention
+
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
 

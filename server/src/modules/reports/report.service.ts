@@ -248,10 +248,10 @@ export class ReportService {
     const in365 = new Date(); in365.setDate(in365.getDate() + 365);
 
     const [expired, within30, within90, within365, onHold] = await Promise.all([
-      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { lt: now }, disposalStatus: 'active' } }),
-      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { gte: now, lt: in30 }, disposalStatus: 'active' } }),
-      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { gte: in30, lt: in90 }, disposalStatus: 'active' } }),
-      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { gte: in90, lt: in365 }, disposalStatus: 'active' } }),
+      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { lt: now }, retentionBasis: { not: 'needs_review' }, disposalStatus: 'active', litigationHold: false } }),
+      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { gte: now, lt: in30 }, retentionBasis: { not: 'needs_review' }, disposalStatus: 'active', litigationHold: false } }),
+      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { gte: in30, lt: in90 }, retentionBasis: { not: 'needs_review' }, disposalStatus: 'active', litigationHold: false } }),
+      prisma.hRFolder.count({ where: { tenantId, retentionEndDate: { gte: in90, lt: in365 }, retentionBasis: { not: 'needs_review' }, disposalStatus: 'active', litigationHold: false } }),
       prisma.hRFolder.count({ where: { tenantId, litigationHold: true } }),
     ]);
 

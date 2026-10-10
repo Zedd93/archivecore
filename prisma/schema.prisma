@@ -61,6 +61,20 @@ enum RetentionPeriodType {
   fifty_years
 }
 
+enum HRRiaStatus {
+  unknown
+  not_submitted
+  submitted
+}
+
+enum HRRetentionBasis {
+  needs_review
+  pre_1999
+  transitional_50
+  transitional_ria
+  post_2018
+}
+
 enum DisposalStatus {
   active
   pending_review
@@ -599,6 +613,10 @@ model HRFolder {
   department          String?             @db.VarChar(200)
   position            String?             @db.VarChar(200)
   retentionPeriod     RetentionPeriodType @default(ten_years)
+  riaStatus           HRRiaStatus         @default(unknown)
+  riaSubmittedAt      DateTime?           @db.Date
+  retentionBasis      HRRetentionBasis    @default(needs_review)
+  retentionReviewRequired Boolean         @default(false)
   retentionBaseDate   DateTime?           @db.Date
   retentionEndDate    DateTime?           @db.Date
   disposalStatus      DisposalStatus      @default(active)

@@ -36,7 +36,7 @@ export async function getMonthlyReport(tenantId: string, month: string, includeB
       select: { completedAt: true, slaDeadline: true },
     }),
     db.box.count({ where: { tenantId, deletedAt: null, status: { not: 'disposed' }, retentionDate: upcomingRange } }),
-    db.hRFolder.count({ where: { tenantId, disposalStatus: 'active', retentionEndDate: upcomingRange } }),
+    db.hRFolder.count({ where: { tenantId, disposalStatus: 'active', retentionEndDate: upcomingRange, retentionBasis: { not: 'needs_review' }, litigationHold: false } }),
     includeBilling
       ? db.billingEvent.groupBy({
         by: ['status', 'currency'],

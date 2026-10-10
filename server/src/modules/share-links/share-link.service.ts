@@ -148,6 +148,7 @@ export class ShareLinkService {
             position: true,
             employmentStatus: true,
             retentionPeriod: true,
+            retentionBasis: true,
             storageForm: true,
             // Do NOT expose PESEL or other sensitive data
           },

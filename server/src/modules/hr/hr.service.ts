@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
-import { Prisma, HRPartCode, EmploymentStatus } from '@prisma/client';
+import { Prisma, HRPartCode, EmploymentStatus, HRRiaStatus } from '@prisma/client';
 import { encryptAES256, decryptAES256, hmacSha256 } from '../../utils/crypto';
+import { calculateHRRetention } from './hr-retention';
 
 const HR_PARTS: HRPartCode[] = ['A', 'B', 'C', 'D', 'E'];
 
@@ -20,6 +21,8 @@ export class HRService {
     const where: Prisma.HRFolderWhereInput = { tenantId };
 
     if (filters.employmentStatus) where.employmentStatus = filters.employmentStatus as EmploymentStatus;
+    if (filters.retentionBasis === 'needs_review') where.retentionBasis = 'needs_review';
+    if (filters.retentionBasis === 'verified') where.retentionBasis = { not: 'needs_review' };
     if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
     if (filters.disposalStatus) where.disposalStatus = filters.disposalStatus as any;
     if (filters.storageForm) where.storageForm = filters.storageForm as any;
@@ -51,6 +54,10 @@ export class HRService {
           department: true,
           position: true,
           retentionPeriod: true,
+          retentionBasis: true,
+          riaStatus: true,
+          riaSubmittedAt: true,
+          retentionReviewRequired: true,
           retentionEndDate: true,
           disposalStatus: true,
           storageForm: true,
@@ -121,14 +128,13 @@ export class HRService {
       );
     }
 
-    // Calculate retention dates
-    const retentionBaseDate = data.employmentEnd ? new Date(data.employmentEnd) : null;
-    let retentionEndDate: Date | null = null;
-    if (retentionBaseDate) {
-      const years = data.retentionPeriod === 'fifty_years' ? 50 : 10;
-      retentionEndDate = new Date(retentionBaseDate);
-      retentionEndDate.setFullYear(retentionEndDate.getFullYear() + years);
-    }
+    const retention = calculateHRRetention({
+      employmentStart: data.employmentStart,
+      employmentEnd: data.employmentEnd,
+      riaStatus: data.riaStatus || 'unknown',
+      riaSubmittedAt: data.riaSubmittedAt,
+      retentionReviewRequired: data.retentionReviewRequired,
+    });
 
     const folder = await prisma.hRFolder.create({
       data: {
@@ -143,9 +149,13 @@ export class HRService {
         employmentStatus: data.employmentStatus || 'active',
         department: data.department,
         position: data.position,
-        retentionPeriod: data.retentionPeriod || 'ten_years',
-        retentionBaseDate,
-        retentionEndDate,
+        retentionPeriod: retention.retentionPeriod,
+        retentionBasis: retention.retentionBasis,
+        riaStatus: data.riaStatus || 'unknown',
+        riaSubmittedAt: data.riaSubmittedAt ? new Date(data.riaSubmittedAt) : null,
+        retentionReviewRequired: data.retentionReviewRequired || false,
+        retentionBaseDate: retention.retentionBaseDate,
+        retentionEndDate: retention.retentionEndDate,
         storageForm: data.storageForm || 'paper',
         boxId: data.boxId,
         notes: data.notes,
@@ -170,15 +180,16 @@ export class HRService {
   }
 
   async update(id: string, tenantId: string, data: any) {
-    await this.getById(id, tenantId);
+    const folder = await prisma.hRFolder.findFirst({ where: { id, tenantId } });
+    if (!folder) throw Object.assign(new Error('Akta osobowe nie znalezione'), { statusCode: 404 });
     await this.validateBoxAccess(data.boxId, tenantId);
 
     const updateData: any = {};
     if (data.employeeFirstName) updateData.employeeFirstName = data.employeeFirstName;
     if (data.employeeLastName) updateData.employeeLastName = data.employeeLastName;
     if (data.employeeIdNumber !== undefined) updateData.employeeIdNumber = data.employeeIdNumber;
-    if (data.employmentStart) updateData.employmentStart = new Date(data.employmentStart);
-    if (data.employmentEnd) updateData.employmentEnd = new Date(data.employmentEnd);
+    if (data.employmentStart !== undefined) updateData.employmentStart = data.employmentStart ? new Date(data.employmentStart) : null;
+    if (data.employmentEnd !== undefined) updateData.employmentEnd = data.employmentEnd ? new Date(data.employmentEnd) : null;
     if (data.employmentStatus) updateData.employmentStatus = data.employmentStatus;
     if (data.department !== undefined) updateData.department = data.department;
     if (data.position !== undefined) updateData.position = data.position;
@@ -186,15 +197,27 @@ export class HRService {
     if (data.boxId !== undefined) updateData.boxId = data.boxId;
     if (data.notes !== undefined) updateData.notes = data.notes;
 
-    // Recalculate retention if employment end date changed
-    if (data.employmentEnd) {
-      const folder = await prisma.hRFolder.findUnique({ where: { id } });
-      if (folder) {
-        const years = folder.retentionPeriod === 'fifty_years' ? 50 : 10;
-        updateData.retentionBaseDate = new Date(data.employmentEnd);
-        updateData.retentionEndDate = new Date(data.employmentEnd);
-        updateData.retentionEndDate.setFullYear(updateData.retentionEndDate.getFullYear() + years);
+    if (data.employmentStart !== undefined || data.employmentEnd !== undefined || data.riaStatus !== undefined || data.riaSubmittedAt !== undefined || data.retentionReviewRequired !== undefined) {
+      const employmentStart = data.employmentStart === undefined ? folder.employmentStart : data.employmentStart;
+      const employmentEnd = data.employmentEnd === undefined ? folder.employmentEnd : data.employmentEnd;
+      const startYear = employmentStart ? new Date(employmentStart).getUTCFullYear() : null;
+      const transitional = startYear !== null && startYear >= 1999 && startYear < 2019;
+      const riaStatus: HRRiaStatus = transitional ? (data.riaStatus ?? folder.riaStatus) : 'unknown';
+      const riaSubmittedAt = transitional && riaStatus === 'submitted'
+        ? (data.riaSubmittedAt === undefined ? folder.riaSubmittedAt : data.riaSubmittedAt)
+        : null;
+      if (riaStatus === 'submitted' && !riaSubmittedAt) {
+        throw Object.assign(new Error('Podaj datę złożenia raportu ZUS RIA'), { statusCode: 400 });
       }
+      if (riaSubmittedAt && (new Date(riaSubmittedAt) < new Date('2019-01-01') || (employmentEnd && new Date(riaSubmittedAt) < new Date(employmentEnd)))) {
+        throw Object.assign(new Error('Data ZUS RIA nie może poprzedzać 2019 r. ani zakończenia zatrudnienia'), { statusCode: 400 });
+      }
+      if (employmentStart && employmentEnd && new Date(employmentEnd) < new Date(employmentStart)) {
+        throw Object.assign(new Error('Data zakończenia pracy nie może poprzedzać daty rozpoczęcia'), { statusCode: 400 });
+      }
+      const retentionReviewRequired = data.retentionReviewRequired ?? folder.retentionReviewRequired;
+      const retention = calculateHRRetention({ employmentStart, employmentEnd, riaStatus, riaSubmittedAt, retentionReviewRequired });
+      Object.assign(updateData, retention, { riaStatus, riaSubmittedAt: riaSubmittedAt ? new Date(riaSubmittedAt) : null, retentionReviewRequired });
     }
 
     const updated = await prisma.hRFolder.update({
@@ -308,6 +331,7 @@ export class HRService {
       where: {
         tenantId,
         retentionEndDate: { lte: futureDate, gte: new Date() },
+        retentionBasis: { not: 'needs_review' },
         disposalStatus: 'active',
         litigationHold: false,
       },

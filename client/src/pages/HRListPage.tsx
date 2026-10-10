@@ -30,8 +30,11 @@ const emptyCreateForm = {
   department: '',
   position: '',
   employmentStart: '',
+  employmentEnd: '',
   employmentStatus: 'active',
-  retentionPeriod: 'ten_years',
+  riaStatus: 'unknown',
+  riaSubmittedAt: '',
+  retentionReviewRequired: false,
   storageForm: 'paper',
 };
 
@@ -41,11 +44,13 @@ export default function HRListPage() {
   const { user, hasPermission } = useAuth();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
-  const [filters, setFilters] = useState({ search: '', employmentStatus: '', department: '' });
+  const [filters, setFilters] = useState({ search: '', employmentStatus: '', department: '', retentionBasis: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [createForm, setCreateForm] = useState({ ...emptyCreateForm, tenantId: localStorage.getItem('tenantId') || '' });
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const canSelectTenant = !user?.tenantId && (hasPermission('tenant.manage') || hasPermission('tenant.switch'));
+  const startYear = Number(createForm.employmentStart.slice(0, 4));
+  const isTransitional = startYear >= 1999 && startYear < 2019;
 
   const { data, isLoading } = useList('hr', '/hr', { page, limit: 20, ...filters });
   const createHR = useCreate('/hr', ['hr'], t('common.success'));
@@ -80,7 +85,9 @@ export default function HRListPage() {
     {
       key: 'retentionPeriod',
       header: t('hr.retention'),
-      render: (item) => item.retentionPeriod === 'fifty_years' ? t('hr.retention50') : t('hr.retention10'),
+      render: (item) => item.retentionBasis === 'needs_review'
+        ? <span className="badge-yellow">{t('hr.needsReview')}</span>
+        : item.retentionPeriod === 'fifty_years' ? t('hr.retention50') : t('hr.retention10'),
     },
     {
       key: 'storageForm',
@@ -123,8 +130,11 @@ export default function HRListPage() {
       department: createForm.department.trim() || undefined,
       position: createForm.position.trim() || undefined,
       employmentStart: createForm.employmentStart || undefined,
-      employmentStatus: createForm.employmentStatus,
-      retentionPeriod: createForm.retentionPeriod,
+      employmentEnd: createForm.employmentEnd || undefined,
+      employmentStatus: createForm.employmentEnd ? 'terminated' : createForm.employmentStatus,
+      riaStatus: isTransitional ? createForm.riaStatus : 'unknown',
+      riaSubmittedAt: isTransitional && createForm.riaStatus === 'submitted' ? createForm.riaSubmittedAt || undefined : undefined,
+      retentionReviewRequired: createForm.retentionReviewRequired,
       storageForm: createForm.storageForm,
       boxId: selectedBoxes[0]?.id || undefined,
     };
@@ -195,6 +205,11 @@ export default function HRListPage() {
             <option value="terminated">{t('hr.statusTerminated')}</option>
             <option value="retired">{t('hr.statusRetired')}</option>
           </select>
+          <select value={filters.retentionBasis} onChange={(e) => { setPage(1); setFilters({ ...filters, retentionBasis: e.target.value }); }} className="input-field w-full sm:w-48" aria-label={t('hr.retentionFilter')}>
+            <option value="">{t('hr.allRetention')}</option>
+            <option value="needs_review">{t('hr.needsReview')}</option>
+            <option value="verified">{t('hr.calculated')}</option>
+          </select>
         </div>
       </div>
 
@@ -260,17 +275,18 @@ export default function HRListPage() {
               <input id="hr-create-position" value={createForm.position} onChange={(e) => setCreateForm({ ...createForm, position: e.target.value })} className="input-field" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label htmlFor="hr-create-hireDate" className="label-text">{t('hr.createModal.hireDate')}</label>
-              <input id="hr-create-hireDate" type="date" value={createForm.employmentStart} onChange={(e) => setCreateForm({ ...createForm, employmentStart: e.target.value })} className="input-field" />
+              <input id="hr-create-hireDate" type="date" value={createForm.employmentStart} onChange={(e) => {
+                const year = Number(e.target.value.slice(0, 4));
+                setCreateForm({ ...createForm, employmentStart: e.target.value, ...(year >= 1999 && year < 2019 ? {} : { riaStatus: 'unknown', riaSubmittedAt: '' }) });
+              }} className="input-field" />
             </div>
             <div>
-              <label htmlFor="hr-create-retentionPeriod" className="label-text">{t('hr.retention')}</label>
-              <select id="hr-create-retentionPeriod" value={createForm.retentionPeriod} onChange={(e) => setCreateForm({ ...createForm, retentionPeriod: e.target.value })} className="input-field">
-                <option value="ten_years">{t('hr.retention10')}</option>
-                <option value="fifty_years">{t('hr.retention50')}</option>
-              </select>
+              <label htmlFor="hr-create-endDate" className="label-text">{t('hr.endDate')}</label>
+              <input id="hr-create-endDate" type="date" value={createForm.employmentEnd} onChange={(e) => setCreateForm({ ...createForm, employmentEnd: e.target.value })} className="input-field" aria-invalid={!!formErrors.employmentEnd} />
+              {formErrors.employmentEnd && <p className="text-xs text-red-600 mt-1">{formErrors.employmentEnd}</p>}
             </div>
             <div>
               <label htmlFor="hr-create-storageForm" className="label-text">{t('hr.storageForm')}</label>
@@ -281,6 +297,26 @@ export default function HRListPage() {
               </select>
             </div>
           </div>
+          {isTransitional && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="hr-create-ria-status" className="label-text">{t('hr.riaStatus')}</label>
+              <select id="hr-create-ria-status" value={createForm.riaStatus} onChange={(e) => setCreateForm({ ...createForm, riaStatus: e.target.value, riaSubmittedAt: '' })} className="input-field">
+                <option value="unknown">{t('hr.riaUnknown')}</option>
+                <option value="not_submitted">{t('hr.riaNotSubmitted')}</option>
+                <option value="submitted">{t('hr.riaSubmitted')}</option>
+              </select>
+            </div>
+            {createForm.riaStatus === 'submitted' && <div>
+              <label htmlFor="hr-create-ria-date" className="label-text">{t('hr.riaSubmittedAt')} *</label>
+              <input id="hr-create-ria-date" type="date" value={createForm.riaSubmittedAt} onChange={(e) => setCreateForm({ ...createForm, riaSubmittedAt: e.target.value })} className="input-field" aria-invalid={!!formErrors.riaSubmittedAt} />
+              {formErrors.riaSubmittedAt && <p className="text-xs text-red-600 mt-1">{formErrors.riaSubmittedAt}</p>}
+            </div>}
+          </div>}
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input type="checkbox" className="mt-1" checked={createForm.retentionReviewRequired} onChange={(e) => setCreateForm({ ...createForm, retentionReviewRequired: e.target.checked })} />
+            <span>{t('hr.manualReviewRequired')}</span>
+          </label>
+          <p className="text-xs text-amber-700">{t('hr.retentionHint')}</p>
           <div>
             <label className="label-text">{t('hr.box')}</label>
             <BoxPicker
