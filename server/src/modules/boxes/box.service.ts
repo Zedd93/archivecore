@@ -299,16 +299,14 @@ export class BoxService {
     return box;
   }
 
-  async update(id: string, tenantId: string, data: any) {
-    const box = await this.getById(id, tenantId); // Verify access
+  async update(id: string, tenantId: string, data: any, userId: string, department?: string) {
+    const box = await this.getById(id, tenantId, department); // Verify access
     if (box.status === 'disposed') {
       throw Object.assign(new Error('Nie można edytować wybrakowanego kartonu'), { statusCode: 409 });
     }
     await this.validateBoxLocation(data.locationId, tenantId);
 
-    const updated = await prisma.box.update({
-      where: { id },
-      data: {
+    const updateData = {
         title: data.title,
         docType: data.docType,
         department: data.department === undefined ? undefined : data.department.trim() || null,
@@ -320,61 +318,87 @@ export class BoxService {
         description: data.description,
         customFields: data.customFields,
         barcode: data.barcode,
-      },
+    };
+
+    if (data.locationId !== undefined && data.locationId !== box.locationId) {
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.box.updateMany({
+          where: {
+            id, tenantId, deletedAt: null, locationId: box.locationId, status: { not: 'disposed' },
+            ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+          },
+          data: updateData,
+        });
+        if (updated.count !== 1) {
+          throw Object.assign(new Error('Lokalizacja kartonu zmieniła się. Odśwież dane i spróbuj ponownie.'), { statusCode: 409 });
+        }
+        if (box.locationId) {
+          await tx.location.update({ where: { id: box.locationId }, data: { currentCount: { decrement: 1 } } });
+        }
+        await tx.location.update({ where: { id: data.locationId }, data: { currentCount: { increment: 1 } } });
+        await tx.custodyEvent.create({
+          data: {
+            boxId: id,
+            eventType: 'transfer',
+            fromLocationId: box.locationId,
+            toLocationId: data.locationId,
+            toUserId: userId,
+          },
+        });
+        return tx.box.findUniqueOrThrow({
+          where: { id },
+          include: {
+            location: { select: { id: true, fullPath: true, code: true } },
+            tenant: { select: { id: true, name: true, shortCode: true } },
+          },
+        });
+      });
+    }
+
+    return prisma.box.update({
+      where: { id },
+      data: updateData,
       include: {
         location: { select: { id: true, fullPath: true, code: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
       },
     });
-
-    if (data.locationId !== undefined && data.locationId !== box.locationId) {
-      if (box.locationId) {
-        await prisma.location.update({
-          where: { id: box.locationId },
-          data: { currentCount: { decrement: 1 } },
-        });
-      }
-      if (data.locationId) {
-        await prisma.location.update({
-          where: { id: data.locationId },
-          data: { currentCount: { increment: 1 } },
-        });
-      }
-    }
-
-    return updated;
   }
 
-  async move(id: string, tenantId: string, locationId: string, notes?: string) {
+  async move(id: string, tenantId: string, locationId: string, userId: string, notes?: string, department?: string) {
     await this.validateBoxLocation(locationId, tenantId);
 
-    const box = await this.getById(id, tenantId);
+    const box = await this.getById(id, tenantId, department);
     if (box.status === 'disposed') {
       throw Object.assign(new Error('Nie można przenieść wybrakowanego kartonu'), { statusCode: 409 });
     }
     const oldLocationId = box.locationId;
 
-    const updated = await prisma.box.update({
-      where: { id },
-      data: { locationId },
-      include: {
-        location: { select: { id: true, fullPath: true, code: true } },
-      },
-    });
+    if (oldLocationId === locationId) return box;
 
-    // Update location counters
-    if (oldLocationId) {
-      await prisma.location.update({
-        where: { id: oldLocationId },
-        data: { currentCount: { decrement: 1 } },
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.box.updateMany({
+        where: {
+          id, tenantId, deletedAt: null, locationId: oldLocationId, status: { not: 'disposed' },
+          ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+        },
+        data: { locationId },
       });
-    }
-    await prisma.location.update({
-      where: { id: locationId },
-      data: { currentCount: { increment: 1 } },
+      if (updated.count !== 1) {
+        throw Object.assign(new Error('Lokalizacja kartonu zmieniła się. Odśwież dane i spróbuj ponownie.'), { statusCode: 409 });
+      }
+      if (oldLocationId) {
+        await tx.location.update({ where: { id: oldLocationId }, data: { currentCount: { decrement: 1 } } });
+      }
+      await tx.location.update({ where: { id: locationId }, data: { currentCount: { increment: 1 } } });
+      await tx.custodyEvent.create({
+        data: { boxId: id, eventType: 'transfer', fromLocationId: oldLocationId, toLocationId: locationId, toUserId: userId, notes },
+      });
+      return tx.box.findUniqueOrThrow({
+        where: { id },
+        include: { location: { select: { id: true, fullPath: true, code: true } } },
+      });
     });
-
-    return updated;
   }
 
   async changeStatus(id: string, tenantId: string, status: string) {
@@ -407,7 +431,7 @@ export class BoxService {
     });
   }
 
-  async bulkMove(ids: string[], tenantId: string, locationId: string, department?: string) {
+  async bulkMove(ids: string[], tenantId: string, locationId: string, userId: string, notes?: string, department?: string) {
     await this.validateBoxLocation(locationId, tenantId);
 
     const uniqueIds = [...new Set(ids)];
@@ -430,12 +454,20 @@ export class BoxService {
         return acc;
       }, {});
 
-      const updated = await tx.box.updateMany({
-        where: { ...where, id: { in: movedBoxes.map(box => box.id) } },
-        data: { locationId },
-      });
-      if (updated.count !== movedBoxes.length) {
-        throw Object.assign(new Error('Nie przeniesiono wszystkich kartonów. Spróbuj ponownie.'), { statusCode: 409 });
+      const bySource = new Map<string | null, string[]>();
+      for (const box of movedBoxes) {
+        const group = bySource.get(box.locationId) || [];
+        group.push(box.id);
+        bySource.set(box.locationId, group);
+      }
+      for (const [sourceId, group] of bySource) {
+        const updated = await tx.box.updateMany({
+          where: { ...where, id: { in: group }, locationId: sourceId },
+          data: { locationId },
+        });
+        if (updated.count !== group.length) {
+          throw Object.assign(new Error('Lokalizacja części kartonów zmieniła się. Odśwież dane i spróbuj ponownie.'), { statusCode: 409 });
+        }
       }
       for (const [oldLocationId, count] of Object.entries(decrementByLocation)) {
         await tx.location.update({
@@ -446,6 +478,16 @@ export class BoxService {
       await tx.location.update({
         where: { id: locationId },
         data: { currentCount: { increment: movedBoxes.length } },
+      });
+      await tx.custodyEvent.createMany({
+        data: movedBoxes.map((box) => ({
+          boxId: box.id,
+          eventType: 'transfer' as const,
+          fromLocationId: box.locationId,
+          toLocationId: locationId,
+          toUserId: userId,
+          notes,
+        })),
       });
 
       return { updated: boxes.length, moved: movedBoxes.length };

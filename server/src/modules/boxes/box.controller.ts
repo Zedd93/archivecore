@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { boxService } from './box.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { custodyService } from '../orders/custody.service';
 
 export class BoxController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -21,6 +22,14 @@ export class BoxController {
     } catch (err) { next(err); }
   }
 
+  async getCustody(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      await boxService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      return successResponse(res, await custodyService.getTransfersByBox(req.params.id, req.tenantId, req.accessDepartment || undefined));
+    } catch (err) { next(err); }
+  }
+
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
@@ -32,7 +41,7 @@ export class BoxController {
   async update(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const box = await boxService.update(req.params.id, req.tenantId, req.body);
+      const box = await boxService.update(req.params.id, req.tenantId, req.body, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, box);
     } catch (err) { next(err); }
   }
@@ -41,7 +50,7 @@ export class BoxController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { locationId, notes } = req.body;
-      const box = await boxService.move(req.params.id, req.tenantId, locationId, notes);
+      const box = await boxService.move(req.params.id, req.tenantId, locationId, req.user!.userId, notes, req.accessDepartment || undefined);
       return successResponse(res, box);
     } catch (err) { next(err); }
   }
@@ -77,10 +86,10 @@ export class BoxController {
   async bulkMove(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const { ids, locationId } = req.body;
+      const { ids, locationId, notes } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) return errorResponse(res, 'Brak ID', 400);
       if (!locationId) return errorResponse(res, 'Brak lokalizacji', 400);
-      const result = await boxService.bulkMove(ids, req.tenantId, locationId, req.accessDepartment || undefined);
+      const result = await boxService.bulkMove(ids, req.tenantId, locationId, req.user!.userId, notes, req.accessDepartment || undefined);
       return successResponse(res, result);
     } catch (err) { next(err); }
   }

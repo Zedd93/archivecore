@@ -23,6 +23,7 @@ const auth = [authenticate, tenantContext];
 
 router.get('/', ...auth, requirePermission(Permissions.BOX_READ), (req, res, next) => boxController.list(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.BOX_READ), (req, res, next) => boxController.getById(req, res, next));
+router.get('/:id/custody', ...auth, requirePermission(Permissions.BOX_READ), (req, res, next) => boxController.getCustody(req, res, next));
 router.post('/', ...auth, requirePermission(Permissions.BOX_WRITE), validate(createBoxSchema), auditLog('box', 'box.create'), (req, res, next) => boxController.create(req, res, next));
 router.put('/:id', ...auth, requirePermission(Permissions.BOX_WRITE), validate(updateBoxSchema), auditLog('box', 'box.update'), (req, res, next) => boxController.update(req, res, next));
 router.patch('/:id/move', ...auth, requirePermission(Permissions.BOX_MOVE), validate(moveBoxSchema), auditLog('box', 'box.move'), (req, res, next) => boxController.move(req, res, next));

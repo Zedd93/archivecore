@@ -80,10 +80,13 @@ export class CustodyService {
     });
   }
 
-  async getByBox(boxId: string, tenantId: string) {
+  async getTransfersByBox(boxId: string, tenantId: string, department?: string) {
     // Verify box belongs to tenant
     const box = await prisma.box.findFirst({
-      where: { id: boxId, tenantId, deletedAt: null },
+      where: {
+        id: boxId, tenantId, deletedAt: null,
+        ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+      },
       select: { id: true },
     });
     if (!box) {
@@ -91,8 +94,9 @@ export class CustodyService {
     }
 
     return prisma.custodyEvent.findMany({
-      where: { boxId },
+      where: { boxId, eventType: 'transfer' },
       orderBy: { eventAt: 'desc' },
+      take: 50,
       include: {
         fromUser: { select: { id: true, firstName: true, lastName: true } },
         toUser: { select: { id: true, firstName: true, lastName: true } },

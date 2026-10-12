@@ -9,19 +9,37 @@ import ActivityTimeline from '@/components/ui/ActivityTimeline';
 import ShareButton from '@/components/ui/ShareButton';
 import Modal from '@/components/ui/Modal';
 import LocationPicker from '@/components/ui/LocationPicker';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOC_TYPES, Permissions } from '@archivecore/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2, Edit3, RefreshCw, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 
+interface BoxMoveEvent {
+  id: string;
+  eventAt: string;
+  eventType: string;
+  fromLocation?: { fullPath: string } | null;
+  toLocation?: { fullPath: string } | null;
+  toUser?: { firstName: string; lastName: string } | null;
+  notes?: string | null;
+}
+
 export default function BoxDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { hasPermission } = useAuth();
   const { data: box, isLoading, refetch } = useDetail('box', '/boxes', id);
+  const { data: custodyEvents, isLoading: movesLoading, isError: movesError } = useQuery({
+    queryKey: ['box-custody', id],
+    enabled: Boolean(box?.id),
+    queryFn: async () => {
+      const response = await api.get<{ data: BoxMoveEvent[] }>(`/boxes/${id}/custody`);
+      return response.data.data;
+    },
+  });
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [labelLoading, setLabelLoading] = useState(false);
   const queryClient = useQueryClient();
@@ -106,6 +124,7 @@ export default function BoxDetailPage() {
       setShowEditModal(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['box', id] }),
+        queryClient.invalidateQueries({ queryKey: ['box-custody', id] }),
         queryClient.invalidateQueries({ queryKey: ['boxes'] }),
         queryClient.invalidateQueries({ queryKey: ['locations-tree'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
@@ -389,6 +408,24 @@ export default function BoxDetailPage() {
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('boxes.changeHistory')}</h3>
             <ActivityTimeline entityType="box" entityId={box.id} />
+          </div>
+
+          <div className="card">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('boxes.moveHistory')}</h3>
+            {movesLoading ? <p className="text-sm text-gray-500">{t('common.loading')}</p>
+              : movesError ? <p role="alert" className="text-sm text-red-700">{t('boxes.moveHistoryError')}</p>
+                : custodyEvents?.length ? <ul className="divide-y divide-gray-100">
+                  {custodyEvents.map((event) => <li key={event.id} className="py-3 text-sm space-y-1">
+                    <p className="font-medium text-gray-900 break-words">
+                      {event.fromLocation?.fullPath || t('boxes.noLocation')} → {event.toLocation?.fullPath || t('boxes.noLocation')}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(event.eventAt).toLocaleString(i18n.language === 'en' ? 'en-GB' : 'pl-PL')}
+                      {event.toUser && ` · ${event.toUser.firstName} ${event.toUser.lastName}`}
+                    </p>
+                    {event.notes && <p className="text-xs text-gray-600 break-words">{event.notes}</p>}
+                  </li>)}
+                </ul> : <p className="text-sm text-gray-500">{t('boxes.noMoveHistory')}</p>}
           </div>
 
           {/* Metadata */}
