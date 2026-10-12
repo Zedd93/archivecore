@@ -2,6 +2,7 @@ import app from './app';
 import { config } from './config/env';
 import { prisma } from './config/database';
 import { redis } from './config/redis';
+import { webhookService } from './modules/integrations/webhook.service';
 
 const log = {
   info: (...args: unknown[]) => { if (config.nodeEnv !== 'test') process.stdout.write(args.join(' ') + '\n'); },
@@ -38,8 +39,16 @@ async function main() {
     log.info(`❤️  Health: http://localhost:${config.port}/api/health`);
   });
 
+  const deliverWebhooks = () => {
+    void webhookService.processDue().catch(() => log.error('Webhook delivery worker failed; retrying later'));
+  };
+  const webhookTimer = setInterval(deliverWebhooks, 30_000);
+  webhookTimer.unref();
+  deliverWebhooks();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
+    clearInterval(webhookTimer);
     log.info(`\n📡 Received ${signal}, shutting down...`);
     server.close(async () => {
       await prisma.$disconnect();

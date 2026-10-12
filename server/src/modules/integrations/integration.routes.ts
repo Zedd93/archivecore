@@ -9,6 +9,7 @@ import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { successResponse } from '../../utils/response';
 import { integrationService } from './integration.service';
+import { webhookService } from './webhook.service';
 
 const management = Router();
 management.use(authenticate, tenantContext, requirePermission(Permissions.INTEGRATION_MANAGE));
@@ -40,6 +41,36 @@ management.post('/keys', validate(createKeySchema), async (req, res, next) => {
 
 management.delete('/keys/:id', validate(z.object({ id: z.string().uuid() }), 'params'), async (req, res, next) => {
   try { return successResponse(res, await integrationService.revokeKey(tenantId(req), req.user!.userId, req.params.id, req.ip)); }
+  catch (error) { next(error); }
+});
+
+const createWebhookSchema = z.object({
+  name: z.string().trim().min(3).max(100),
+  url: z.string().trim().min(1).max(2048),
+});
+
+management.get('/webhooks', async (req, res, next) => {
+  try { return successResponse(res, await webhookService.listEndpoints(tenantId(req))); }
+  catch (error) { next(error); }
+});
+
+management.post('/webhooks', validate(createWebhookSchema), async (req, res, next) => {
+  try {
+    const endpoint = await webhookService.createEndpoint(
+      tenantId(req), req.user!.userId, req.body.name, req.body.url, req.ip,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    return successResponse(res, endpoint, 201);
+  } catch (error) { next(error); }
+});
+
+management.delete('/webhooks/:id', validate(z.object({ id: z.string().uuid() }), 'params'), async (req, res, next) => {
+  try { return successResponse(res, await webhookService.deactivateEndpoint(tenantId(req), req.user!.userId, req.params.id, req.ip)); }
+  catch (error) { next(error); }
+});
+
+management.get('/webhook-deliveries', async (req, res, next) => {
+  try { return successResponse(res, await webhookService.listDeliveries(tenantId(req))); }
   catch (error) { next(error); }
 });
 

@@ -5,6 +5,7 @@ import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS, generateF
 import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
 import { scanOrderVisibility } from './scan-access';
+import { webhookService } from '../integrations/webhook.service';
 
 function calculateSlaDeadline(priority: string): Date {
   const slaMap: Record<string, number> = {
@@ -524,15 +525,19 @@ export class OrderService {
 
     const updateData = this.getStatusUpdateData(order, newStatus, userId, notes);
 
-    const updated = await prisma.order.update({
-      where: { id },
-      data: updateData,
-      include: {
-        requester: { select: { id: true, firstName: true, lastName: true } },
-        approver: { select: { id: true, firstName: true, lastName: true } },
-        assignee: { select: { id: true, firstName: true, lastName: true } },
-        items: true,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.order.update({
+        where: { id },
+        data: updateData,
+        include: {
+          requester: { select: { id: true, firstName: true, lastName: true } },
+          approver: { select: { id: true, firstName: true, lastName: true } },
+          assignee: { select: { id: true, firstName: true, lastName: true } },
+          items: true,
+        },
+      });
+      await webhookService.enqueueOrderStatus(tx, changed, order.status, newStatus);
+      return changed;
     });
 
     await this.notifyOrderStatus(updated, newStatus, userId);
@@ -590,12 +595,12 @@ export class OrderService {
         : undefined;
     const billingEvents = await billingService.buildOrderDeliveryEvents(order, deliveredAt);
 
-    const operations: Prisma.PrismaPromise<any>[] = [
-      prisma.order.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
         where: { id },
         data: this.getStatusUpdateData(order, 'delivered', userId),
-      }),
-      prisma.orderItem.updateMany({
+      });
+      await tx.orderItem.updateMany({
         where: {
           orderId: id,
           itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
@@ -604,12 +609,10 @@ export class OrderService {
           itemStatus: nextItemStatus,
           deliveredAt,
         },
-      }),
-    ];
+      });
 
-    if (boxIds.length > 0) {
-      operations.push(
-        prisma.custodyEvent.createMany({
+      if (boxIds.length > 0) {
+        await tx.custodyEvent.createMany({
           data: boxIds.map((boxId: string) => ({
             orderId: id,
             boxId,
@@ -617,29 +620,24 @@ export class OrderService {
             fromUserId: userId,
             toUserId: order.requestedBy,
           })),
-        })
-      );
-    }
+        });
+      }
 
-    if (boxIds.length > 0 && boxStatus) {
-      operations.push(
-        prisma.box.updateMany({
+      if (boxIds.length > 0 && boxStatus) {
+        await tx.box.updateMany({
           where: { id: { in: boxIds }, tenantId, deletedAt: null },
           data: { status: boxStatus },
-        })
-      );
-    }
+        });
+      }
 
-    if (billingEvents.length > 0) {
-      operations.push(
-        prisma.billingEvent.createMany({
+      if (billingEvents.length > 0) {
+        await tx.billingEvent.createMany({
           data: billingEvents,
           skipDuplicates: true,
-        })
-      );
-    }
-
-    await prisma.$transaction(operations);
+        });
+      }
+      await webhookService.enqueueOrderStatus(tx, order, order.status, 'delivered');
+    });
     await this.notifyOrderStatus(order, 'delivered', userId);
 
     return this.getById(id, tenantId);
@@ -730,11 +728,14 @@ export class OrderService {
       const remainingDeliveredItems = await tx.orderItem.count({
         where: { orderId, itemStatus: OrderItemStatus.delivered },
       });
+      let statusChanged = false;
       if (remainingDeliveredItems === 0) {
-        await tx.order.updateMany({
+        const updated = await tx.order.updateMany({
           where: { id: orderId, tenantId, status: 'delivered' },
           data: { status: 'completed', completedAt: returnedAt },
         });
+        statusChanged = updated.count === 1;
+        if (statusChanged) await webhookService.enqueueOrderStatus(tx, order, order.status, 'completed');
       }
       if (boxId) {
         const stillCheckedOut = await tx.orderItem.count({

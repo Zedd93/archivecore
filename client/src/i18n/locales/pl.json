@@ -1159,6 +1159,32 @@
       "apiHint": "Odczyt statusów zleceń:",
       "authHint": "Przekaż klucz w nagłówku Authorization: Bearer <klucz>."
     },
+    "webhooks": {
+      "title": "Webhooki zleceń",
+      "description": "ArchiveCore wyśle podpisane powiadomienie, gdy zmieni się status zlecenia klienta.",
+      "secretOnce": "Skopiuj sekret do weryfikacji podpisu. Nie pokażemy go ponownie.",
+      "name": "Nazwa odbiorcy",
+      "url": "Adres odbiorcy",
+      "urlHint": "Wymagany publiczny adres HTTPS na porcie 443. Serwer nie wysyła webhooków na adresy wewnętrzne.",
+      "create": "Dodaj webhook",
+      "created": "Webhook dodany",
+      "createError": "Nie udało się dodać webhooka",
+      "endpoints": "Odbiorcy",
+      "noEndpoints": "Brak odbiorców webhooków",
+      "deactivate": "Wyłącz",
+      "deactivateConfirm": "Wyłączyć webhook „{{name}}”? Oczekujące powiadomienia nie zostaną wysłane.",
+      "deactivated": "Webhook wyłączony",
+      "deactivateError": "Nie udało się wyłączyć webhooka",
+      "deliveries": "Ostatnie wysyłki",
+      "noDeliveries": "Brak wysyłek",
+      "attempts": "Próby: {{count}}",
+      "status": {
+        "pending": "oczekuje",
+        "sending": "wysyłanie",
+        "delivered": "dostarczono",
+        "failed": "nie dostarczono"
+      }
+    },
     "security": {
       "title": "Zmiana hasła",
       "currentPassword": "Obecne hasło",

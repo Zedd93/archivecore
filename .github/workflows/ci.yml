@@ -58,6 +58,9 @@ jobs:
       - name: Verify partner API access
         run: npm run test:integrations
 
+      - name: Verify order webhooks
+        run: npm run test:webhooks
+
       - name: Verify personnel record retention dates
         run: npm run test:hr-retention
 

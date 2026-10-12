@@ -7,6 +7,7 @@ import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useAuth } from '@/contexts/AuthContext';
+import WebhooksSection from './WebhooksSection';
 
 interface IntegrationKey {
   id: string;
@@ -142,6 +143,7 @@ export default function IntegrationsTab() {
         <code className="block break-all">GET /api/v1/orders/:id</code>
         <p>{t('settings.integrations.authHint')}</p>
       </div>
+      <WebhooksSection tenantId={tenantId} />
       </>}
       {ConfirmDialogElement}
     </div>

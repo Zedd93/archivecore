@@ -230,6 +230,7 @@ model Tenant {
   disposalEvidence  DisposalEvidence[]
   scanFiles         OrderScanFile[]
   integrationKeys   IntegrationKey[]
+  webhookEndpoints  WebhookEndpoint[]
 
   @@map("tenants")
 }
@@ -318,6 +319,7 @@ model User {
   disposalEvidence    DisposalEvidence[]
   uploadedScanFiles   OrderScanFile[]
   createdIntegrationKeys IntegrationKey[]
+  createdWebhookEndpoints WebhookEndpoint[]
 
   @@index([tenantId])
   @@index([email])
@@ -341,6 +343,45 @@ model IntegrationKey {
 
   @@index([tenantId, revokedAt])
   @@map("integration_keys")
+}
+
+model WebhookEndpoint {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  createdById     String    @db.Uuid
+  name            String    @db.VarChar(100)
+  url             String    @db.Text
+  secretEncrypted String    @db.Text
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy  User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, isActive])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id            String    @id @default(uuid()) @db.Uuid
+  endpointId    String    @db.Uuid
+  eventId       String    @db.Uuid
+  payloadText   String    @db.Text
+  status        String    @default("pending") @db.VarChar(20)
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  leaseUntil    DateTime?
+  lastError     String?   @db.VarChar(255)
+  createdAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+
+  @@unique([endpointId, eventId])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
 }
 
 model Notification {

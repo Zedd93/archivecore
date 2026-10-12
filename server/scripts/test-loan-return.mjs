@@ -29,8 +29,8 @@ test('QR matches the exact loaned entity and preserves multiple matches for sele
   assert.equal(matchActiveLoansByQr(loans, badCode).kind, 'invalid');
 });
 
-function setup({ updatedCount = 1, remaining = 0, stillCheckedOut = 0 } = {}) {
-  const calls = { updates: [], custody: [], completed: [], boxUpdates: [] };
+function setup({ updatedCount = 1, remaining = 0, stillCheckedOut = 0, webhookEndpoints = [] } = {}) {
+  const calls = { updates: [], custody: [], completed: [], boxUpdates: [], webhookDeliveries: [] };
   const order = {
     id: orderId,
     tenantId,
@@ -55,6 +55,8 @@ function setup({ updatedCount = 1, remaining = 0, stillCheckedOut = 0 } = {}) {
     box: {
       updateMany: async (args) => { calls.boxUpdates.push(args); return { count: 1 }; },
     },
+    webhookEndpoint: { findMany: async () => webhookEndpoints },
+    webhookDelivery: { createMany: async (args) => { calls.webhookDeliveries.push(args); return { count: args.data.length }; } },
   };
   const mocks = [
     mock.method(orderService, 'getById', async () => order),
@@ -71,6 +73,17 @@ test('return records custody once and closes an order after its last item', asyn
     assert.equal(calls.custody.length, 1);
     assert.equal(calls.completed.length, 1);
     assert.equal(calls.boxUpdates.length, 1);
+  } finally { restore(); }
+});
+
+test('returning the last loan item queues a completed status webhook', async () => {
+  const { calls, restore } = setup({ webhookEndpoints: [{ id: 'endpoint-a' }] });
+  try {
+    await orderService.returnLoanItem(orderId, itemId, tenantId, userId);
+    assert.equal(calls.webhookDeliveries.length, 1);
+    const payload = JSON.parse(calls.webhookDeliveries[0].data[0].payloadText);
+    assert.equal(payload.data.previousStatus, 'delivered');
+    assert.equal(payload.data.status, 'completed');
   } finally { restore(); }
 });
 

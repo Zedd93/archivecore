@@ -1159,6 +1159,32 @@
       "apiHint": "Read order statuses:",
       "authHint": "Send the key in the Authorization: Bearer <key> header."
     },
+    "webhooks": {
+      "title": "Order webhooks",
+      "description": "ArchiveCore sends a signed notification when a client's order status changes.",
+      "secretOnce": "Copy the signing secret now. It will not be shown again.",
+      "name": "Recipient name",
+      "url": "Recipient URL",
+      "urlHint": "A public HTTPS URL on port 443 is required. Internal addresses are blocked.",
+      "create": "Add webhook",
+      "created": "Webhook added",
+      "createError": "Could not add the webhook",
+      "endpoints": "Recipients",
+      "noEndpoints": "No webhook recipients",
+      "deactivate": "Disable",
+      "deactivateConfirm": "Disable “{{name}}”? Pending notifications will not be sent.",
+      "deactivated": "Webhook disabled",
+      "deactivateError": "Could not disable the webhook",
+      "deliveries": "Recent deliveries",
+      "noDeliveries": "No deliveries yet",
+      "attempts": "Attempts: {{count}}",
+      "status": {
+        "pending": "pending",
+        "sending": "sending",
+        "delivered": "delivered",
+        "failed": "failed"
+      }
+    },
     "security": {
       "title": "Change password",
       "currentPassword": "Current password",

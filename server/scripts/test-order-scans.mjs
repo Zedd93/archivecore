@@ -144,16 +144,24 @@ test('delivering a scan does not move boxes or create custody events', async () 
     notify: notificationService.notifyTenantUsers,
   };
   let updatedItems = 0;
+  let webhookPayload;
   billingService.buildOrderDeliveryEvents = async () => [];
   prisma.order.update = async () => order;
   prisma.orderItem.updateMany = async () => { updatedItems++; return { count: 1 }; };
   prisma.custodyEvent.createMany = async () => { throw new Error('unexpected custody event'); };
   prisma.box.updateMany = async () => { throw new Error('unexpected box movement'); };
-  prisma.$transaction = async (operations) => Promise.all(operations);
+  prisma.$transaction = async (callback) => callback({
+    order: { update: prisma.order.update },
+    orderItem: { updateMany: prisma.orderItem.updateMany },
+    webhookEndpoint: { findMany: async () => [{ id: 'endpoint-a' }] },
+    webhookDelivery: { createMany: async ({ data }) => { webhookPayload = JSON.parse(data[0].payloadText); return { count: 1 }; } },
+  });
   notificationService.notifyTenantUsers = async () => undefined;
   try {
     await service.deliver(orderId, tenantId, userId);
     assert.equal(updatedItems, 1);
+    assert.equal(webhookPayload.data.status, 'delivered');
+    assert.equal(webhookPayload.data.orderType, 'scan');
   } finally {
     billingService.buildOrderDeliveryEvents = originals.build;
     prisma.order.update = originals.orderUpdate;
