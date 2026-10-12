@@ -159,7 +159,11 @@ export class RetentionController {
   async completeDisposal(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const result = await retentionService.completeDisposal(req.tenantId, req.body.boxIds, req.user!.userId, req.body.protocolReference);
+      const result = await retentionService.completeDisposal(req.tenantId, req.body.boxIds, req.user!.userId, req.body.protocolReference, {
+        methodDescription: req.body.methodDescription,
+        weightKg: req.body.weightKg,
+        executionNote: req.body.executionNote,
+      });
       return successResponse(res, result);
     } catch (err) { next(err); }
   }

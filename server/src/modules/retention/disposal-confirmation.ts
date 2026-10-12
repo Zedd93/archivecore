@@ -9,6 +9,9 @@ export type DisposalConfirmation = {
   completedBy: string;
   completedAt: Date;
   protocolReference: string;
+  methodDescription: string | null;
+  weightKg: number | null;
+  executionNote: string | null;
   boxes: Array<{ id: string; boxNumber: string; title: string; location: string | null }>;
 };
 
@@ -20,7 +23,8 @@ export function parseDisposalConfirmation(record: {
   user: { firstName: string; lastName: string };
 }): DisposalConfirmation {
   const values = record.newValues;
-  if (!record.entityId || !record.tenant || !values || typeof values !== 'object' || Array.isArray(values)) {
+  if (!record.entityId || !values || typeof values !== 'object' || Array.isArray(values) ||
+    (!record.tenant && typeof values.tenantName !== 'string')) {
     throw new Error('Niekompletny zapis brakowania');
   }
   const boxes = values.boxes;
@@ -32,10 +36,13 @@ export function parseDisposalConfirmation(record: {
   }
   return {
     id: record.entityId,
-    tenantName: record.tenant.name,
-    completedBy: `${record.user.firstName} ${record.user.lastName}`,
+    tenantName: typeof values.tenantName === 'string' ? values.tenantName : record.tenant!.name,
+    completedBy: typeof values.completedByName === 'string' ? values.completedByName : `${record.user.firstName} ${record.user.lastName}`,
     completedAt: record.createdAt,
     protocolReference: values.protocolReference,
+    methodDescription: typeof values.methodDescription === 'string' ? values.methodDescription : null,
+    weightKg: typeof values.weightKg === 'number' && Number.isFinite(values.weightKg) && values.weightKg > 0 ? values.weightKg : null,
+    executionNote: typeof values.executionNote === 'string' ? values.executionNote : null,
     boxes: boxes as DisposalConfirmation['boxes'],
   };
 }
@@ -69,11 +76,28 @@ export function buildDisposalConfirmationPdf(record: DisposalConfirmation): Prom
     doc.text(`Potwierdził w systemie: ${record.completedBy}`);
     doc.text(`Identyfikator operacji: ${record.id}`);
     doc.text(`Liczba kartonów: ${record.boxes.length}`);
+    if (record.methodDescription || record.weightKg !== null || record.executionNote) {
+      doc.moveDown(0.5).fontSize(9).fillColor('#6b7280').text('Dane zadeklarowane przez operatora przy potwierdzeniu:');
+      doc.fontSize(11).fillColor('#1f2937');
+      if (record.methodDescription) doc.text(`Metoda: ${record.methodDescription}`);
+      if (record.weightKg !== null) doc.text(`Masa: ${new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 }).format(record.weightKg)} kg`);
+      if (record.executionNote) doc.text(`Uwagi: ${record.executionNote}`);
+    }
     doc.moveDown(0.9).fontSize(15).fillColor('#155e75').text('Kartony objęte operacją');
     doc.moveDown(0.3);
     for (const [index, box] of record.boxes.entries()) {
-      doc.fontSize(10).fillColor('#1f2937').text(`${index + 1}. ${box.boxNumber} - ${box.title}`, { continued: false });
-      doc.fontSize(8).fillColor('#6b7280').text(`ID: ${box.id}  |  Lokalizacja przed brakowaniem: ${box.location || 'brak'}`, { paragraphGap: 6 });
+      const heading = `${index + 1}. ${box.boxNumber} - ${box.title}`;
+      const detail = `ID: ${box.id}  |  Lokalizacja przed brakowaniem: ${box.location || 'brak'}`;
+      doc.fontSize(10);
+      const headingHeight = doc.heightOfString(heading);
+      doc.fontSize(8);
+      const detailHeight = doc.heightOfString(detail);
+      if (doc.y + headingHeight + detailHeight + 8 > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        doc.fontSize(15).fillColor('#155e75').text('Kartony objęte operacją (ciąg dalszy)', { paragraphGap: 8 });
+      }
+      doc.fontSize(10).fillColor('#1f2937').text(heading);
+      doc.fontSize(8).fillColor('#6b7280').text(detail, { paragraphGap: 6 });
     }
     doc.end();
   });

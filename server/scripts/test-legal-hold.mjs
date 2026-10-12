@@ -364,12 +364,16 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
       },
       folder: { updateMany: async (args) => { folders.push(args); } },
       location: { update: async (args) => { locations.push(args); } },
+      tenant: { findUnique: async () => ({ name: 'Spółdzielnia Łódź' }) },
+      user: { findUnique: async () => ({ firstName: 'Anna', lastName: 'Nowak' }) },
       auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
     })),
     mock.method(notificationService, 'notifyTenantUsers', async () => {}),
   ];
   try {
-    const result = await service.completeDisposal(tenantId, [boxId, secondBoxId], proposerId, 'PROT-2026-1');
+    const result = await service.completeDisposal(tenantId, [boxId, secondBoxId], proposerId, 'PROT-2026-1', {
+      methodDescription: 'Niszczenie mechaniczne', weightKg: 12.5, executionNote: 'Przekazano do zniszczenia',
+    });
     assert.equal(result.count, 2);
     assert.deepEqual(locations, [{ where: { id: locationId }, data: { currentCount: 0 } }]);
     assert.equal(folders[0].data.status, 'disposed');
@@ -381,6 +385,11 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
     assert.equal(audits[2].newValues.protocolReference, 'PROT-2026-1');
     assert.deepEqual(audits[2].newValues.boxes.map((box) => box.boxNumber), ['K-1', 'K-2']);
     assert.equal(audits[2].newValues.boxes[0].location, 'Magazyn / Regał 1');
+    assert.equal(audits[2].newValues.tenantName, 'Spółdzielnia Łódź');
+    assert.equal(audits[2].newValues.completedByName, 'Anna Nowak');
+    assert.equal(audits[2].newValues.methodDescription, 'Niszczenie mechaniczne');
+    assert.equal(audits[2].newValues.weightKg, 12.5);
+    assert.equal(audits[2].newValues.executionNote, 'Przekazano do zniszczenia');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -392,9 +401,13 @@ test('completed disposal history and confirmation are scoped to the selected ten
   const record = {
     entityId: boxId,
     createdAt: new Date('2026-10-10T10:00:00Z'),
-    newValues: { protocolReference: 'PROT-2026-1', boxes: [{ id: boxId, boxNumber: 'K-1', title: 'Teczki Łódź', location: 'Magazyn 1' }] },
-    tenant: { name: 'Spółdzielnia Łódź' },
-    user: { firstName: 'Anna', lastName: 'Nowak' },
+    newValues: {
+      protocolReference: 'PROT-2026-1', tenantName: 'Spółdzielnia Łódź', completedByName: 'Anna Nowak',
+      methodDescription: 'Niszczenie mechaniczne', weightKg: 12.5, executionNote: 'Protokół podpisano poza systemem',
+      boxes: [{ id: boxId, boxNumber: 'K-1', title: 'Teczki Łódź', location: 'Magazyn 1' }],
+    },
+    tenant: null,
+    user: { firstName: 'Nowe', lastName: 'Nazwisko' },
   };
   const auditLog = prisma.auditLog;
   const originals = { findMany: auditLog.findMany, count: auditLog.count, findFirst: auditLog.findFirst };
@@ -405,8 +418,13 @@ test('completed disposal history and confirmation are scoped to the selected ten
     const history = await service.getCompletedDisposal(tenantId);
     assert.equal(history.total, 1);
     assert.equal(history.data[0].boxCount, 1);
+    assert.equal(history.data[0].completedBy, 'Anna Nowak');
     const confirmation = parseDisposalConfirmation(await service.getCompletedDisposalRecord(tenantId, boxId));
     assert.equal(confirmation.tenantName, 'Spółdzielnia Łódź');
+    assert.equal(confirmation.completedBy, 'Anna Nowak');
+    assert.equal(confirmation.methodDescription, 'Niszczenie mechaniczne');
+    assert.equal(confirmation.weightKg, 12.5);
+    assert.equal(confirmation.executionNote, 'Protokół podpisano poza systemem');
     assert.equal(confirmation.boxes[0].title, 'Teczki Łódź');
     const pdf = await buildDisposalConfirmationPdf(confirmation);
     assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
@@ -419,12 +437,30 @@ test('completed disposal history and confirmation are scoped to the selected ten
   }
 });
 
+test('older disposal confirmations remain readable without execution details', () => {
+  const confirmation = parseDisposalConfirmation({
+    entityId: boxId,
+    createdAt: new Date('2026-10-10T10:00:00Z'),
+    newValues: { protocolReference: 'P-OLD', boxes: [{ id: boxId, boxNumber: 'K-1', title: 'Akta', location: null }] },
+    tenant: { name: 'Klient' },
+    user: { firstName: 'Jan', lastName: 'Kowalski' },
+  });
+  assert.equal(confirmation.tenantName, 'Klient');
+  assert.equal(confirmation.completedBy, 'Jan Kowalski');
+  assert.equal(confirmation.methodDescription, null);
+  assert.equal(confirmation.weightKg, null);
+  assert.equal(confirmation.executionNote, null);
+});
+
 test('disposal decisions require a reason, protocol and explicit confirmation', () => {
   assert.equal(approveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Nie' }).success, false);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: false }).success, false);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true }).success, true);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, methodDescription: 'Niszczenie', weightKg: 12.5 }).success, true);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, weightKg: 0 }).success, false);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, methodDescription: 'x' }).success, false);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: Array(501).fill(boxId), protocolReference: 'P-1', confirmed: true }).success, false);
 });
 

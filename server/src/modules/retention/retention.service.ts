@@ -389,7 +389,9 @@ export class RetentionService {
     return { data: data.map((entry) => ({
       id: entry.entityId,
       completedAt: entry.createdAt,
-      completedBy: `${entry.user.firstName} ${entry.user.lastName}`,
+      completedBy: entry.newValues && typeof entry.newValues === 'object' && !Array.isArray(entry.newValues) && typeof entry.newValues.completedByName === 'string'
+        ? entry.newValues.completedByName
+        : `${entry.user.firstName} ${entry.user.lastName}`,
       ...(entry.newValues && typeof entry.newValues === 'object' && !Array.isArray(entry.newValues) ? {
         protocolReference: entry.newValues.protocolReference,
         boxCount: Array.isArray(entry.newValues.boxes) ? entry.newValues.boxes.length : 0,
@@ -514,7 +516,13 @@ export class RetentionService {
     return { count: updated.count };
   }
 
-  async completeDisposal(tenantId: string, boxIds: string[], actorId: string, protocolReference: string) {
+  async completeDisposal(
+    tenantId: string,
+    boxIds: string[],
+    actorId: string,
+    protocolReference: string,
+    details: { methodDescription?: string; weightKg?: number; executionNote?: string } = {},
+  ) {
     const uniqueIds = [...new Set(boxIds)];
     const batchId = randomUUID();
     const completedAt = new Date();
@@ -530,6 +538,9 @@ export class RetentionService {
       if (boxes.length !== uniqueIds.length) {
         throw Object.assign(new Error('Co najmniej jeden karton nie ma ważnej zgody lub jest objęty blokadą'), { statusCode: 409 });
       }
+      const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+      const operator = await tx.user.findUnique({ where: { id: actorId }, select: { firstName: true, lastName: true } });
+      if (!tenant || !operator) throw Object.assign(new Error('Nie znaleziono klienta lub operatora brakowania'), { statusCode: 409 });
       const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: completedAt, locationId: null } });
       if (result.count !== boxes.length) {
         throw Object.assign(new Error('Stan kartonów zmienił się. Spróbuj ponownie.'), { statusCode: 409 });
@@ -562,6 +573,11 @@ export class RetentionService {
           newValues: {
             protocolReference,
             completedAt: completedAt.toISOString(),
+            tenantName: tenant.name,
+            completedByName: `${operator.firstName} ${operator.lastName}`,
+            ...(details.methodDescription ? { methodDescription: details.methodDescription } : {}),
+            ...(details.weightKg !== undefined ? { weightKg: details.weightKg } : {}),
+            ...(details.executionNote ? { executionNote: details.executionNote } : {}),
             boxes: boxes.map((box) => ({
               id: box.id,
               boxNumber: box.boxNumber,

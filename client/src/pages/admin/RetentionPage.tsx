@@ -35,6 +35,9 @@ export default function RetentionPage() {
   const [disposalAction, setDisposalAction] = useState<'approve' | 'reject' | 'complete' | null>(null);
   const [decisionText, setDecisionText] = useState('');
   const [protocolReference, setProtocolReference] = useState('');
+  const [methodDescription, setMethodDescription] = useState('');
+  const [weightKg, setWeightKg] = useState('');
+  const [executionNote, setExecutionNote] = useState('');
   const [completionConfirmed, setCompletionConfirmed] = useState(false);
   const [decisionSubmitting, setDecisionSubmitting] = useState(false);
   const [proposalNotes, setProposalNotes] = useState('');
@@ -313,19 +316,36 @@ export default function RetentionPage() {
     if (!boxIds.length) return;
     if (disposalAction === 'reject' && decisionText.trim().length < 5) return;
     if (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed)) return;
+    const parsedWeight = weightKg.trim() ? Number(weightKg) : undefined;
+    if (disposalAction === 'complete' && (
+      (methodDescription.trim().length > 0 && methodDescription.trim().length < 3) ||
+      (parsedWeight !== undefined && (!Number.isFinite(parsedWeight) || parsedWeight <= 0 || parsedWeight > 100000))
+    )) {
+      toast.error(t('admin.retention.disposal.invalidExecutionDetails'));
+      return;
+    }
     setDecisionSubmitting(true);
     try {
       await api.post(`/retention/disposal/${disposalAction}`, {
         boxIds,
         ...(disposalAction === 'approve' && decisionText.trim() ? { notes: decisionText.trim() } : {}),
         ...(disposalAction === 'reject' ? { reason: decisionText.trim() } : {}),
-        ...(disposalAction === 'complete' ? { protocolReference: protocolReference.trim(), confirmed: true } : {}),
+        ...(disposalAction === 'complete' ? {
+          protocolReference: protocolReference.trim(),
+          ...(methodDescription.trim() ? { methodDescription: methodDescription.trim() } : {}),
+          ...(parsedWeight !== undefined ? { weightKg: parsedWeight } : {}),
+          ...(executionNote.trim() ? { executionNote: executionNote.trim() } : {}),
+          confirmed: true,
+        } : {}),
       });
       toast.success(t(`admin.retention.disposal.${disposalAction}Success`, { count: boxIds.length }));
       setSelectedPendingIds(new Set());
       setSelectedApprovedIds(new Set());
       setDecisionText('');
       setProtocolReference('');
+      setMethodDescription('');
+      setWeightKg('');
+      setExecutionNote('');
       setCompletionConfirmed(false);
       setDisposalAction(null);
       setPendingPage(1);
@@ -489,6 +509,18 @@ export default function RetentionPage() {
             <div>
               <label htmlFor="disposal-protocol" className="label-text">{t('admin.retention.disposal.protocolReference')} *</label>
               <input id="disposal-protocol" className="input-field" value={protocolReference} onChange={(e) => setProtocolReference(e.target.value)} maxLength={200} />
+            </div>
+            <div>
+              <label htmlFor="disposal-method" className="label-text">{t('admin.retention.disposal.methodDescription')}</label>
+              <input id="disposal-method" className="input-field" value={methodDescription} onChange={(e) => setMethodDescription(e.target.value)} maxLength={200} />
+            </div>
+            <div>
+              <label htmlFor="disposal-weight" className="label-text">{t('admin.retention.disposal.weightKg')}</label>
+              <input id="disposal-weight" type="number" min="0.01" max="100000" step="any" className="input-field" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} />
+            </div>
+            <div>
+              <label htmlFor="disposal-execution-note" className="label-text">{t('admin.retention.disposal.executionNote')}</label>
+              <textarea id="disposal-execution-note" className="input-field" rows={2} maxLength={1000} value={executionNote} onChange={(e) => setExecutionNote(e.target.value)} />
             </div>
             <label className="flex items-start gap-2 text-sm text-gray-700">
               <input type="checkbox" className="mt-1" checked={completionConfirmed} onChange={(e) => setCompletionConfirmed(e.target.checked)} />
