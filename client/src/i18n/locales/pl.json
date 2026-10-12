@@ -994,7 +994,9 @@
     "billableStorageInherited": "Ustawienie rozliczania jest dziedziczone z lokalizacji nadrzędnej.",
     "billableBadge": "Rozliczany",
     "pickLocation": "Wybierz lokalizację...",
-    "noResults": "Nie znaleziono lokalizacji"
+    "noResults": "Nie znaleziono lokalizacji",
+    "suggestedFreeSpace": "Proponowane wolne miejsca",
+    "availableSpaces": "Wolne miejsca: {{count}}"
   },
 
   "labels": {

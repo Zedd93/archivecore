@@ -406,6 +406,8 @@ export default function BoxListPage() {
               placeholder={t('boxes.bulk.locationPlaceholder')}
               excludeTypes={['warehouse', 'zone', 'rack']}
               tenantId={activeTenantId}
+              suggestPlacement
+              placementCount={selectedIds.size}
             />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t">
@@ -444,6 +446,7 @@ export default function BoxListPage() {
                 placeholder={t('boxes.bulk.locationPlaceholder')}
                 excludeTypes={['warehouse', 'zone', 'rack']}
                 tenantId={activeTenantId}
+                suggestPlacement
               />
             </FormField>
           </div>

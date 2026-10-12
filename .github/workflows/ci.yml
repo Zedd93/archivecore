@@ -52,6 +52,9 @@ jobs:
       - name: Verify scan-on-demand orders
         run: npm run test:order-scans
 
+      - name: Verify location capacity suggestions
+        run: npm run test:location-capacity
+
       - name: Verify personnel record retention dates
         run: npm run test:hr-retention
 

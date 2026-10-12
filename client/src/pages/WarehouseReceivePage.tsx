@@ -181,7 +181,7 @@ export default function WarehouseReceivePage() {
     </section>
     <section className="card space-y-3">
       <h2 className="font-semibold flex items-center gap-2"><MapPin size={19} />{t('warehouseReceive.destination')}</h2>
-      <LocationPicker value={destination?.id || ''} onChange={(id) => { if (!id) setDestination(null); }} onLocationChange={(location) => setDestination(location ? { id: location.id, fullPath: location.fullPath } : null)} excludeTypes={['warehouse', 'zone', 'rack']} placeholder={t('warehouseReceive.chooseDestination')} tenantId={activeTenantId} />
+      <LocationPicker value={destination?.id || ''} onChange={(id) => { if (!id) setDestination(null); }} onLocationChange={(location) => setDestination(location ? { id: location.id, fullPath: location.fullPath } : null)} excludeTypes={['warehouse', 'zone', 'rack']} placeholder={t('warehouseReceive.chooseDestination')} tenantId={activeTenantId} suggestPlacement placementCount={boxes.length} />
       {destination && <p className="text-sm break-words">{destination.fullPath}</p>}
       <label htmlFor="receive-notes" className="label-text">{t('warehouseReceive.notes')}</label>
       <textarea id="receive-notes" className="input-field w-full" rows={2} maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} />

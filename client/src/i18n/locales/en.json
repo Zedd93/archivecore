@@ -994,7 +994,9 @@
     "billableStorageInherited": "The billing setting is inherited from the parent location.",
     "billableBadge": "Billable",
     "pickLocation": "Select location...",
-    "noResults": "No locations found"
+    "noResults": "No locations found",
+    "suggestedFreeSpace": "Suggested available locations",
+    "availableSpaces": "Spaces available: {{count}}"
   },
 
   "labels": {

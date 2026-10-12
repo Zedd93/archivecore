@@ -231,6 +231,8 @@ export default function WarehouseMovePage() {
           excludeTypes={['warehouse', 'zone', 'rack']}
           placeholder={t('warehouseMove.findDestination')}
           tenantId={activeTenantId}
+          suggestPlacement
+          placementCount={boxes.length}
         />
         <p className="text-sm text-gray-600 break-words">{destination?.fullPath || t('warehouseMove.noDestination')}</p>
       </section>

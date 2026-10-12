@@ -54,7 +54,10 @@ export class LocationController {
 
   async getAvailableSlots(req: Request, res: Response, next: NextFunction) {
     try {
-      const slots = await locationService.getAvailableSlots(req.tenantId || null);
+      const selectedTenantId = canSelectLocationTenant(req)
+        ? (req.query.tenantId as string | undefined) || req.tenantId || null
+        : req.tenantId || null;
+      const slots = await locationService.getAvailableSlots(selectedTenantId);
       return successResponse(res, slots);
     } catch (err) { next(err); }
   }

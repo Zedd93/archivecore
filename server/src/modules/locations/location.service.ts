@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { findAvailableLocations } from './location-capacity';
 
 export class LocationService {
   private compactUpdateData(data: Record<string, unknown>) {
@@ -194,14 +195,18 @@ export class LocationService {
   }
 
   async getAvailableSlots(tenantId: string | null) {
-    return prisma.location.findMany({
-      where: {
-        isActive: true,
-        type: { in: ['shelf', 'slot'] },
-        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {}),
-      },
-      orderBy: { fullPath: 'asc' },
-    });
+    const [locations, counts] = await Promise.all([
+      prisma.location.findMany({
+        select: { id: true, parentId: true, tenantId: true, type: true, code: true, name: true, fullPath: true, capacity: true, isActive: true },
+      }),
+      prisma.box.groupBy({
+        by: ['locationId'],
+        where: { locationId: { not: null }, deletedAt: null, status: { not: 'disposed' } },
+        _count: { _all: true },
+      }),
+    ]);
+    const directCounts = new Map(counts.filter((row) => row.locationId).map((row) => [row.locationId!, row._count._all]));
+    return findAvailableLocations(locations, directCounts, tenantId);
   }
 
   async getBoxes(locationId: string, tenantId: string) {

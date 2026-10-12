@@ -24,6 +24,11 @@ interface FlatLocation {
   fullPath: string;
 }
 
+interface AvailableLocation extends FlatLocation {
+  available: number;
+  occupied: number;
+}
+
 interface LocationPickerProps {
   id?: string;
   value?: string;
@@ -33,6 +38,8 @@ interface LocationPickerProps {
   excludeTypes?: string[];
   excludeIds?: string[];
   tenantId?: string;
+  suggestPlacement?: boolean;
+  placementCount?: number;
   className?: string;
 }
 
@@ -105,6 +112,8 @@ export default function LocationPicker({
   excludeTypes = [],
   excludeIds = [],
   tenantId,
+  suggestPlacement = false,
+  placementCount = 1,
   className = '',
 }: LocationPickerProps) {
   const { t } = useTranslation();
@@ -124,6 +133,18 @@ export default function LocationPicker({
       });
       return data.data as LocationNode[];
     },
+  });
+
+  const { data: availableLocations } = useQuery({
+    queryKey: ['locations-available-slots', activeTenantId || 'active'],
+    queryFn: async () => {
+      const { data } = await api.get('/locations/available-slots', {
+        params: activeTenantId ? { tenantId: activeTenantId } : undefined,
+      });
+      return data.data as AvailableLocation[];
+    },
+    enabled: suggestPlacement && open,
+    staleTime: 0,
   });
 
   const flatLocations = useMemo(() => {
@@ -146,6 +167,13 @@ export default function LocationPicker({
         loc.name.toLowerCase().includes(lower),
     );
   }, [search, flatLocations]);
+
+  const suggestions = useMemo(() => {
+    if (search.trim() || !availableLocations) return [];
+    return availableLocations
+      .filter((loc) => loc.available >= placementCount && !excludeTypes.includes(loc.type) && !excludeIds.includes(loc.id))
+      .slice(0, 5);
+  }, [availableLocations, excludeTypes, excludeIds, placementCount, search]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -250,6 +278,26 @@ export default function LocationPicker({
           />
         </div>
       </div>
+      {suggestions.length > 0 && (
+        <div className="border-b border-gray-100 py-1">
+          <p className="px-3 py-1 text-xs font-semibold text-green-700">
+            {t('locations.suggestedFreeSpace')}
+          </p>
+          {suggestions.map((loc) => (
+            <button
+              key={`suggested-${loc.id}`}
+              type="button"
+              onClick={() => handleSelect(loc)}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-green-50"
+              title={loc.fullPath}
+            >
+              <span className="block font-medium text-gray-800">{formatLocationLabel(loc)}</span>
+              <span className="block truncate text-xs text-gray-500">{loc.fullPath}</span>
+              <span className="text-xs text-green-700">{t('locations.availableSpaces', { count: loc.available })}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {isLoading ? (
         <div className="flex items-center justify-center py-4">
           <Loader2 size={20} className="animate-spin text-primary-500" />
