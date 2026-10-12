@@ -28,6 +28,7 @@ Multi-tenant archive management system for organizations. Manage physical docume
 - PWA with offline support
 - Keyboard shortcuts (press `?` to see all)
 - Audit log for all operations
+- Tenant-scoped read-only partner API ([integration guide](docs/partner-api.md))
 
 ## Quick Start
 

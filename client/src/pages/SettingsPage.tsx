@@ -4,17 +4,18 @@ import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { User, Shield, Bell, Palette, Loader2, Eye, EyeOff } from 'lucide-react';
+import { User, Shield, Bell, Palette, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
+import IntegrationsTab from './settings/IntegrationsTab';
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, ThemePreference } from '@/utils/theme';
 
-type Tab = 'profile' | 'security' | 'notifications' | 'appearance';
+type Tab = 'profile' | 'security' | 'notifications' | 'appearance' | 'integrations';
 
 function meetsPasswordRequirements(password: string) {
   return password.length >= 8 && /[A-ZĄĆĘŁŃÓŚŹŻ]/.test(password) && /[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]/.test(password);
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
@@ -23,6 +24,7 @@ export default function SettingsPage() {
     { id: 'security', label: t('settings.tabSecurity'), icon: <Shield size={18} /> },
     { id: 'notifications', label: t('settings.tabNotifications'), icon: <Bell size={18} /> },
     { id: 'appearance', label: t('settings.tabAppearance'), icon: <Palette size={18} /> },
+    ...(hasPermission('integration.manage') ? [{ id: 'integrations' as const, label: t('settings.tabIntegrations'), icon: <KeyRound size={18} /> }] : []),
   ];
 
   return (
@@ -59,6 +61,7 @@ export default function SettingsPage() {
           {activeTab === 'security' && <SecurityTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
+          {activeTab === 'integrations' && hasPermission('integration.manage') && <IntegrationsTab />}
         </div>
       </div>
     </div>

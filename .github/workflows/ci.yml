@@ -55,6 +55,9 @@ jobs:
       - name: Verify location capacity suggestions
         run: npm run test:location-capacity
 
+      - name: Verify partner API access
+        run: npm run test:integrations
+
       - name: Verify personnel record retention dates
         run: npm run test:hr-retention
 

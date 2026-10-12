@@ -229,6 +229,7 @@ model Tenant {
   inventorySessions InventorySession[]
   disposalEvidence  DisposalEvidence[]
   scanFiles         OrderScanFile[]
+  integrationKeys   IntegrationKey[]
 
   @@map("tenants")
 }
@@ -316,10 +317,30 @@ model User {
   inventoryResolutionEvents InventoryResolutionEvent[]
   disposalEvidence    DisposalEvidence[]
   uploadedScanFiles   OrderScanFile[]
+  createdIntegrationKeys IntegrationKey[]
 
   @@index([tenantId])
   @@index([email])
   @@map("users")
+}
+
+model IntegrationKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  createdById String    @db.Uuid
+  name        String    @db.VarChar(100)
+  keyHash     String    @unique @db.VarChar(64)
+  keyPrefix   String    @db.VarChar(24)
+  expiresAt   DateTime
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, revokedAt])
+  @@map("integration_keys")
 }
 
 model Notification {

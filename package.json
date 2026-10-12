@@ -35,6 +35,7 @@
     "test:disposal-evidence": "node --test server/scripts/test-disposal-evidence.mjs",
     "test:order-scans": "node --import tsx --test server/scripts/test-order-scans.mjs",
     "test:location-capacity": "node --import tsx --test server/scripts/test-location-capacity.mjs",
+    "test:integrations": "node --import tsx --test server/scripts/test-integrations.mjs",
     "test:hr-retention": "node --import tsx --test server/scripts/test-hr-retention.mjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
