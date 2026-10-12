@@ -21,6 +21,7 @@ Multi-tenant archive management system for organizations. Manage physical docume
 - Custody chain tracking with digital signatures
 - HR personnel folder management (PESEL encrypted at rest)
 - Transfer list management (JRWA-compliant) with CSV/XLSX import
+- Local OCR-assisted transfer list import from scans, with mandatory human review ([server setup](docs/scan-import.md))
 - Location tree with capacity tracking
 - Full-text search across all entities
 - QR code label generation (single & bulk A4)

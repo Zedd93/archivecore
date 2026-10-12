@@ -1,10 +1,11 @@
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 import { prisma } from '../../config/database';
-import { DOC_TYPES, DOC_TYPE_LABELS, generateQrData, normalizeDisplayText, peselSchema } from '@archivecore/shared';
+import { DOC_TYPES, DOC_TYPE_LABELS, createTransferListItemSchema, generateQrData, normalizeDisplayText, peselSchema } from '@archivecore/shared';
 import { encryptAES256, hmacSha256 } from '../../utils/crypto';
 import { inspectTransferListImport, parseTransferListImport, TransferListImportOptions } from '../transfer-lists/transfer-list-import.parser';
 import { transferListService } from '../transfer-lists/transfer-list.service';
+import { recognizeScan } from './scan-ocr.service';
 
 // ─── Row validation schemas (relaxed versions for import) ─
 
@@ -43,6 +44,12 @@ const hrImportRowSchema = z.object({
   retentionPeriod: z.enum(['ten_years', 'fifty_years']).default('ten_years'),
   storageForm: z.enum(['paper', 'digital', 'hybrid']).default('paper'),
 });
+
+const reviewedScanSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  confirmed: z.literal(true),
+  items: z.array(createTransferListItemSchema).min(1).max(500),
+}).strict();
 
 // ─── Column mapping (header → field) ─────────────────────
 
@@ -128,6 +135,33 @@ function transferListTitleFromFilename(filename: string): string {
 // ─── Import Service ──────────────────────────────────────
 
 export class ImportService {
+
+  async recognizeTransferListScan(buffer: Buffer) {
+    return recognizeScan(buffer);
+  }
+
+  async importReviewedScan(input: unknown, tenantId: string, userId: string): Promise<ImportResult> {
+    const parsed = reviewedScanSchema.safeParse(input);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const row = issue.path[0] === 'items' && typeof issue.path[1] === 'number' ? issue.path[1] + 1 : null;
+      throw Object.assign(new Error(`${row ? `Pozycja ${row}: ` : ''}${issue.message}`), { statusCode: 400 });
+    }
+
+    const list = await transferListService.create({
+      title: parsed.data.title,
+      notes: 'Import z zeskanowanego spisu, po weryfikacji przez użytkownika',
+    }, tenantId, userId);
+    const result = await transferListService.importItems(list.id, tenantId, userId, parsed.data.items);
+    return {
+      totalRows: parsed.data.items.length,
+      imported: result.imported,
+      errors: result.errorDetails.map(({ itemIndex, message }) => ({ row: itemIndex + 1, message })),
+      listId: list.id,
+      listNumber: list.listNumber,
+      title: list.title,
+    };
+  }
 
   /**
    * Dry-run: parse and validate without inserting

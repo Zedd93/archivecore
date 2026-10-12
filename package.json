@@ -31,6 +31,7 @@
     "test:warehouse-home": "node --import tsx --test server/scripts/test-warehouse-home.mjs",
     "test:monthly-report": "node --import tsx --test server/scripts/test-monthly-report.cjs",
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
+    "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",
     "test:legal-hold": "node --import tsx --test server/scripts/test-legal-hold.mjs",
     "test:disposal-evidence": "node --test server/scripts/test-disposal-evidence.mjs",
     "test:order-scans": "node --import tsx --test server/scripts/test-order-scans.mjs",

@@ -5,6 +5,22 @@ import { parseTransferListImportOptions } from '../transfer-lists/transfer-list-
 
 export class ImportController {
 
+  async recognizeTransferListScan(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Nie załączono skanu', 400);
+      return successResponse(res, await importService.recognizeTransferListScan(req.file.buffer));
+    } catch (err) { next(err); }
+  }
+
+  async importReviewedScan(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const result = await importService.importReviewedScan(req.body, req.tenantId, req.user!.userId);
+      return successResponse(res, result, 201);
+    } catch (err) { next(err); }
+  }
+
   async inspectTransferLists(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

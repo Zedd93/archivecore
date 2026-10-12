@@ -5,6 +5,7 @@ import api from '@/services/api';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
+import ScanImportPanel from './ScanImportPanel';
 import {
   Upload, FileSpreadsheet, AlertTriangle, CheckCircle2,
   Loader2, X, ArrowRight, Download,
@@ -64,6 +65,7 @@ export default function ImportPage() {
   const { t } = useTranslation();
   const ENTITY_OPTIONS = useEntityOptions();
   const [entityType, setEntityType] = useState<EntityType>('boxes');
+  const [scanMode, setScanMode] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -257,7 +259,7 @@ export default function ImportPage() {
             <button
               key={opt.value}
               disabled={previewing || importing || inspecting}
-              onClick={() => { setEntityType(opt.value); handleReset(); }}
+              onClick={() => { setEntityType(opt.value); setScanMode(false); handleReset(); }}
               className={`text-left p-4 rounded-lg border-2 transition-colors ${
                 entityType === opt.value
                   ? 'border-primary-500 bg-primary-50'
@@ -271,6 +273,16 @@ export default function ImportPage() {
         </div>
       </div>
 
+      {entityType === 'transfer-lists' && (
+        <div className="card flex flex-wrap gap-2">
+          <button type="button" className={scanMode ? 'btn-secondary' : 'btn-primary'}
+            onClick={() => setScanMode(false)}>{t('import.excelMode')}</button>
+          <button type="button" className={scanMode ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => { handleReset(); setScanMode(true); }}>{t('import.scanMode')}</button>
+        </div>
+      )}
+
+      {entityType === 'transfer-lists' && scanMode ? <ScanImportPanel /> : <>
       {/* Step 2: File upload */}
       <div className="card">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('import.step2')}</h2>
@@ -555,6 +567,7 @@ export default function ImportPage() {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
