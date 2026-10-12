@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import toast from 'react-hot-toast';
-import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2, Download } from 'lucide-react';
+import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2, Download, Image } from 'lucide-react';
 
 const RETENTION_YEAR_OPTIONS = [1, 2, 5, 10, 25, 50, 75, 100] as const;
 
@@ -29,6 +29,11 @@ export default function RetentionPage() {
   const [approvedPage, setApprovedPage] = useState(1);
   const [completedPage, setCompletedPage] = useState(1);
   const [downloadingConfirmation, setDownloadingConfirmation] = useState<string | null>(null);
+  const [evidenceBatchId, setEvidenceBatchId] = useState<string | null>(null);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidenceInputKey, setEvidenceInputKey] = useState(0);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  const [downloadingEvidence, setDownloadingEvidence] = useState<string | null>(null);
   const [selectedDueIds, setSelectedDueIds] = useState<Set<string>>(new Set());
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
   const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<string>>(new Set());
@@ -100,6 +105,12 @@ export default function RetentionPage() {
     enabled: Boolean(activeTenantId) && (canApproveDisposal || canCompleteDisposal),
   });
 
+  const { data: evidence = [], isLoading: evidenceLoading, isError: evidenceError } = useQuery({
+    queryKey: ['retention-evidence', activeTenantId, evidenceBatchId],
+    queryFn: async () => { const { data } = await api.get(`/retention/disposal/completed/${encodeURIComponent(evidenceBatchId!)}/evidence`); return data.data; },
+    enabled: Boolean(activeTenantId && evidenceBatchId),
+  });
+
   const { data: upcomingBoxes, isLoading: upcomingLoading, isError: upcomingError } = useQuery({
     queryKey: ['retention-review', activeTenantId, 'upcoming', reviewDays, upcomingPage],
     queryFn: async () => { const { data } = await api.get('/retention/review', { params: { scope: 'upcoming', days: reviewDays, page: upcomingPage, limit: reviewLimit } }); return data.data; },
@@ -113,6 +124,8 @@ export default function RetentionPage() {
   });
 
   useEffect(() => {
+    setEvidenceBatchId(null);
+    setEvidenceFile(null);
     setSelectedDueIds(new Set());
     setSelectedPendingIds(new Set());
     setSelectedApprovedIds(new Set());
@@ -201,12 +214,54 @@ export default function RetentionPage() {
     }
   };
 
+  const uploadEvidence = async () => {
+    if (!evidenceBatchId || !evidenceFile || uploadingEvidence) return;
+    if (!['image/jpeg', 'image/png'].includes(evidenceFile.type) || evidenceFile.size > 5 * 1024 * 1024) {
+      toast.error(t('admin.retention.disposal.evidenceInvalid'));
+      return;
+    }
+    setUploadingEvidence(true);
+    try {
+      const form = new FormData();
+      form.append('file', evidenceFile);
+      await api.post(`/retention/disposal/completed/${encodeURIComponent(evidenceBatchId)}/evidence`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setEvidenceFile(null);
+      setEvidenceInputKey((key) => key + 1);
+      await queryClient.invalidateQueries({ queryKey: ['retention-evidence', activeTenantId, evidenceBatchId] });
+      toast.success(t('admin.retention.disposal.evidenceUploaded'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('admin.retention.disposal.evidenceUploadError')));
+    } finally {
+      setUploadingEvidence(false);
+    }
+  };
+
+  const downloadEvidence = async (id: string, fileName: string) => {
+    if (!evidenceBatchId || downloadingEvidence) return;
+    setDownloadingEvidence(id);
+    try {
+      const { data } = await api.get(`/retention/disposal/completed/${encodeURIComponent(evidenceBatchId)}/evidence/${encodeURIComponent(id)}/file`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(await getApiErrorMessageAsync(error, t('admin.retention.disposal.evidenceDownloadError')));
+    } finally {
+      setDownloadingEvidence(null);
+    }
+  };
+
   const completedColumns: Column<any>[] = [
     { key: 'completedAt', header: t('admin.retention.disposal.completedAt'), render: (item) => new Date(item.completedAt).toLocaleString('pl-PL') },
     { key: 'protocolReference', header: t('admin.retention.disposal.protocolReference') },
     { key: 'boxCount', header: t('boxes.title') },
     { key: 'completedBy', header: t('admin.retention.disposal.completedBy') },
-    { key: 'download', header: t('admin.retention.disposal.confirmation'), render: (item) => <button type="button" className="btn-secondary text-xs" disabled={downloadingConfirmation === item.id} onClick={() => downloadConfirmation(item.id)}><Download size={14} />{t('admin.retention.disposal.download')}</button> },
+    { key: 'download', header: t('admin.retention.disposal.confirmation'), render: (item) => <div className="flex flex-wrap gap-2"><button type="button" className="btn-secondary text-xs" disabled={downloadingConfirmation === item.id} onClick={() => downloadConfirmation(item.id)}><Download size={14} />{t('admin.retention.disposal.download')}</button><button type="button" className="btn-secondary text-xs" onClick={() => setEvidenceBatchId(item.id)}><Image size={14} />{t('admin.retention.disposal.evidence')}</button></div> },
   ];
 
   const handleCreatePolicy = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -538,6 +593,27 @@ export default function RetentionPage() {
           </div>
         </div>
       </Modal>}
+
+      <Modal isOpen={Boolean(evidenceBatchId)} onClose={() => { setEvidenceBatchId(null); setEvidenceFile(null); }} title={t('admin.retention.disposal.evidenceTitle')} size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">{t('admin.retention.disposal.evidenceHint')}</p>
+          {evidenceError && <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.evidenceLoadError')}</p>}
+          {evidenceLoading ? <p className="text-sm text-gray-500">{t('common.loading')}</p> : !evidenceError && evidence.length === 0 ? <p className="text-sm text-gray-500">{t('admin.retention.disposal.noEvidence')}</p> : (
+            <ul className="space-y-2">
+              {evidence.map((photo: any) => <li key={photo.id} className="rounded border border-gray-200 p-3 text-sm">
+                <div className="font-medium break-all">{photo.fileName}</div>
+                <div className="text-xs text-gray-500">{new Date(photo.uploadedAt).toLocaleString('pl-PL')} · SHA-256: <span className="font-mono break-all">{photo.checksumSha256}</span></div>
+                <button type="button" className="btn-secondary mt-2 text-xs" disabled={downloadingEvidence === photo.id} onClick={() => downloadEvidence(photo.id, photo.fileName)}><Download size={14} />{t('admin.retention.disposal.downloadPhoto')}</button>
+              </li>)}
+            </ul>
+          )}
+          {canCompleteDisposal && !evidenceError && evidence.length < 5 && <div className="border-t border-gray-200 pt-4 space-y-3">
+            <label htmlFor="disposal-evidence-file" className="label-text">{t('admin.retention.disposal.addEvidence')}</label>
+            <input key={evidenceInputKey} id="disposal-evidence-file" type="file" accept="image/jpeg,image/png" className="input-field" onChange={(event) => setEvidenceFile(event.target.files?.[0] || null)} />
+            <button type="button" className="btn-primary" disabled={!evidenceFile || uploadingEvidence} onClick={uploadEvidence}>{uploadingEvidence ? t('common.processing') : t('admin.retention.disposal.uploadEvidence')}</button>
+          </div>}
+        </div>
+      </Modal>
 
       {/* Create Policy Modal */}
       <Modal isOpen={showCreatePolicy} onClose={() => setShowCreatePolicy(false)} title={t('admin.retention.createModal.title')} size="md">

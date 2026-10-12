@@ -46,6 +46,9 @@ jobs:
       - name: Verify legal hold and disposal safeguards
         run: npm run test:legal-hold
 
+      - name: Verify disposal photo evidence
+        run: npm run test:disposal-evidence
+
       - name: Verify personnel record retention dates
         run: npm run test:hr-retention
 

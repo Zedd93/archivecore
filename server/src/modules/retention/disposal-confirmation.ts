@@ -15,6 +15,13 @@ export type DisposalConfirmation = {
   boxes: Array<{ id: string; boxNumber: string; title: string; location: string | null }>;
 };
 
+export type DisposalEvidenceImage = {
+  fileName: string;
+  checksumSha256: string;
+  uploadedAt: Date;
+  buffer: Buffer;
+};
+
 export function parseDisposalConfirmation(record: {
   entityId: string | null;
   createdAt: Date;
@@ -58,7 +65,7 @@ function fontPath() {
   return found;
 }
 
-export function buildDisposalConfirmationPdf(record: DisposalConfirmation): Promise<Buffer> {
+export function buildDisposalConfirmationPdf(record: DisposalConfirmation, evidence: DisposalEvidenceImage[] = []): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 48, info: { Title: `Potwierdzenie brakowania ${record.protocolReference}`, Author: 'ArchiveCore' } });
     const chunks: Buffer[] = [];
@@ -75,6 +82,7 @@ export function buildDisposalConfirmationPdf(record: DisposalConfirmation): Prom
     doc.text(`Wykonano: ${record.completedAt.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
     doc.text(`Potwierdził w systemie: ${record.completedBy}`);
     doc.text(`Identyfikator operacji: ${record.id}`);
+    doc.text(`PDF wygenerowano: ${new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
     doc.text(`Liczba kartonów: ${record.boxes.length}`);
     if (record.methodDescription || record.weightKg !== null || record.executionNote) {
       doc.moveDown(0.5).fontSize(9).fillColor('#6b7280').text('Dane zadeklarowane przez operatora przy potwierdzeniu:');
@@ -98,6 +106,15 @@ export function buildDisposalConfirmationPdf(record: DisposalConfirmation): Prom
       }
       doc.fontSize(10).fillColor('#1f2937').text(heading);
       doc.fontSize(8).fillColor('#6b7280').text(detail, { paragraphGap: 6 });
+    }
+    for (const [index, photo] of evidence.entries()) {
+      doc.addPage();
+      doc.fontSize(16).fillColor('#155e75').text(`Zdjęcie dowodowe ${index + 1}/${evidence.length}`);
+      doc.moveDown(0.4).fontSize(9).fillColor('#1f2937').text(`Plik: ${photo.fileName}`);
+      doc.text(`Przesłano: ${photo.uploadedAt.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
+      doc.fontSize(8).fillColor('#6b7280').text(`SHA-256: ${photo.checksumSha256}`);
+      doc.moveDown(0.7);
+      doc.image(photo.buffer, 48, doc.y, { fit: [500, 540], align: 'center' });
     }
     doc.end();
   });

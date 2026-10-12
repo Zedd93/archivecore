@@ -3,6 +3,7 @@ import { retentionService } from './retention.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { buildDisposalConfirmationPdf, parseDisposalConfirmation } from './disposal-confirmation';
 import { z } from 'zod';
+import { disposalEvidenceService } from './disposal-evidence.service';
 
 export class RetentionController {
   async listPolicies(req: Request, res: Response, next: NextFunction) {
@@ -125,10 +126,44 @@ export class RetentionController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator potwierdzenia', 400);
       const record = await retentionService.getCompletedDisposalRecord(req.tenantId, req.params.id);
-      const pdf = await buildDisposalConfirmationPdf(parseDisposalConfirmation(record));
+      const evidence = await disposalEvidenceService.forPdf(req.tenantId, req.params.id);
+      const pdf = await buildDisposalConfirmationPdf(parseDisposalConfirmation(record), evidence);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="archivecore-brakowanie-${req.params.id}.pdf"`);
+      res.setHeader('Cache-Control', 'private, no-store');
       return res.send(pdf);
+    } catch (err) { next(err); }
+  }
+
+  async listDisposalEvidence(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator brakowania', 400);
+      return successResponse(res, await disposalEvidenceService.list(req.tenantId, req.params.id));
+    } catch (err) { next(err); }
+  }
+
+  async uploadDisposalEvidence(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator brakowania', 400);
+      if (!req.file) return errorResponse(res, 'Dołącz zdjęcie JPEG lub PNG o rozmiarze do 5 MB', 400);
+      return successResponse(res, await disposalEvidenceService.upload(req.tenantId, req.params.id, req.user!.userId, req.file), 201);
+    } catch (err) { next(err); }
+  }
+
+  async downloadDisposalEvidence(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success || !z.string().uuid().safeParse(req.params.evidenceId).success) {
+        return errorResponse(res, 'Nieprawidłowy identyfikator zdjęcia', 400);
+      }
+      const file = await disposalEvidenceService.download(req.tenantId, req.params.id, req.params.evidenceId);
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="disposal-evidence-${req.params.evidenceId}.${file.mimeType === 'image/png' ? 'png' : 'jpg'}"`);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(file.buffer);
     } catch (err) { next(err); }
   }
 

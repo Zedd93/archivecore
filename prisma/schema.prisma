@@ -226,6 +226,7 @@ model Tenant {
   billingEvents     BillingEvent[]
   billingPeriods    BillingPeriod[]
   inventorySessions InventorySession[]
+  disposalEvidence  DisposalEvidence[]
 
   @@map("tenants")
 }
@@ -311,6 +312,7 @@ model User {
   closedBillingPeriods   BillingPeriod[] @relation("BillingPeriodCloser")
   invoicedBillingPeriods BillingPeriod[] @relation("BillingPeriodInvoicer")
   inventoryResolutionEvents InventoryResolutionEvent[]
+  disposalEvidence    DisposalEvidence[]
 
   @@index([tenantId])
   @@index([email])
@@ -596,6 +598,25 @@ model Attachment {
   @@index([documentId])
   @@index([boxId])
   @@map("attachments")
+}
+
+model DisposalEvidence {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  batchId        String   @db.Uuid
+  fileName       String   @db.VarChar(500)
+  storageKey     String   @db.VarChar(1000)
+  mimeType       String   @db.VarChar(30)
+  fileSize       Int
+  checksumSha256 String   @db.VarChar(64)
+  uploadedById   String   @db.Uuid
+  uploadedAt     DateTime @default(now())
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  uploadedBy User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, batchId, checksumSha256])
+  @@map("disposal_evidence")
 }
 
 model HRFolder {

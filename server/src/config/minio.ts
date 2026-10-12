@@ -33,6 +33,12 @@ export async function getPresignedUrl(key: string, expiresIn = 900): Promise<str
   return getSignedUrl(s3Client, command, { expiresIn });
 }
 
+export async function downloadFile(key: string): Promise<Buffer> {
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: config.minio.bucket, Key: key }));
+  if (!response.Body) throw new Error('Plik nie jest dostępny w magazynie obiektowym');
+  return Buffer.from(await response.Body.transformToByteArray());
+}
+
 export async function deleteFile(key: string): Promise<void> {
   await s3Client.send(new DeleteObjectCommand({
     Bucket: config.minio.bucket,
