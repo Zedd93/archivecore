@@ -54,6 +54,7 @@ export default function WarehousePage() {
     return_order: t('orders.typeReturn'),
     transfer: t('orders.typeTransfer'),
     disposal: t('orders.typeDestruction'),
+    scan: t('orders.typeScan'),
   };
 
   return <div className="max-w-5xl space-y-5">

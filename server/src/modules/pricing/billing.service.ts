@@ -48,6 +48,7 @@ function getOrderItemLabel(item: any) {
 
 function getDeliveryServiceCode(orderType: string, item: any): PricingServiceCode | null {
   const isBox = Boolean(item.boxId);
+  if (orderType === 'scan') return 'scan_page';
   if (orderType === 'checkout') return isBox ? 'retrieval_box' : 'retrieval_folder';
   if (orderType === 'return_order') return isBox ? 'return_box' : 'return_folder';
   if (orderType === 'disposal' && isBox) return 'destruction_box';
@@ -92,7 +93,8 @@ export class BillingService {
       if (!catalogEntry) return [];
 
       const rate = rates.get(serviceCode);
-      const quantity = new Prisma.Decimal(1);
+      const quantity = new Prisma.Decimal(order.orderType === 'scan' ? item.scanFile?.pageCount ?? 0 : 1);
+      if (quantity.lte(0)) return [];
 
       return [{
         tenantId: order.tenantId,

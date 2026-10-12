@@ -4,6 +4,7 @@ import { canMarkReadyAfterPicking, isValidTransition } from './order-state-machi
 import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS, generateFolderQrData } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
+import { scanOrderVisibility } from './scan-access';
 
 function calculateSlaDeadline(priority: string): Date {
   const slaMap: Record<string, number> = {
@@ -340,8 +341,9 @@ export class OrderService {
     throw Object.assign(new Error('Nie udało się nadać unikalnego numeru zlecenia. Spróbuj ponownie za chwilę.'), { statusCode: 409 });
   }
 
-  async list(tenantId: string, filters: any, skip: number, take: number) {
+  async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
     const where: Prisma.OrderWhereInput = { tenantId };
+    if (department) where.AND = [scanOrderVisibility(department)];
 
     if (filters.status) where.status = filters.status as OrderStatus;
     if (filters.orderType) where.orderType = filters.orderType as OrderType;
@@ -374,9 +376,9 @@ export class OrderService {
     return { data, total };
   }
 
-  async getById(id: string, tenantId: string) {
+  async getById(id: string, tenantId: string, department?: string) {
     const order = await prisma.order.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(department ? { AND: [scanOrderVisibility(department)] } : {}) },
       include: {
         requester: { select: { id: true, firstName: true, lastName: true, email: true } },
         approver: { select: { id: true, firstName: true, lastName: true } },
@@ -407,6 +409,7 @@ export class OrderService {
             },
             hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true, box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
             picker: { select: { id: true, firstName: true, lastName: true } },
+            scanFile: { select: { id: true, fileName: true, pageCount: true, fileSize: true, uploadedAt: true } },
           },
         },
         custodyEvents: {
@@ -432,6 +435,9 @@ export class OrderService {
     if (!['completed', 'cancelled'].includes(order.status)) {
       throw Object.assign(new Error('Można usuwać tylko zlecenia zakończone albo anulowane'), { statusCode: 400 });
     }
+    if (await prisma.orderScanFile.count({ where: { tenantId, orderItem: { orderId: id } } })) {
+      throw Object.assign(new Error('Zlecenie zawiera skany i musi pozostać w historii'), { statusCode: 409 });
+    }
 
     await prisma.$transaction([
       prisma.custodyEvent.updateMany({
@@ -445,6 +451,9 @@ export class OrderService {
   }
 
   async create(data: any, tenantId: string, userId: string, department?: string) {
+    if (data.orderType === 'scan' && data.items.some((item: any) => item.boxId || item.boxNumber || item.hrFolderId)) {
+      throw Object.assign(new Error('Zlecenie skanu może zawierać tylko teczki, pozycje spisu lub dokumenty'), { statusCode: 400 });
+    }
     const slaDeadline = calculateSlaDeadline(data.priority || 'normal');
     const resolvedItems = await this.resolveOrderItems(data.items, tenantId, department);
     const order = await this.createOrderWithUniqueNumber(data, tenantId, userId, resolvedItems, slaDeadline);
@@ -453,9 +462,12 @@ export class OrderService {
   }
 
   async addItem(orderId: string, tenantId: string, item: any, department?: string) {
-    const order = await this.getById(orderId, tenantId);
+    const order = await this.getById(orderId, tenantId, department);
     if (['ready', 'delivered', 'completed', 'cancelled'].includes(order.status)) {
       throw Object.assign(new Error('Nie można dodawać pozycji do gotowego, wydanego, zakończonego albo anulowanego zlecenia'), { statusCode: 400 });
+    }
+    if (order.orderType === 'scan' && (item.boxId || item.boxNumber || item.hrFolderId)) {
+      throw Object.assign(new Error('Do zlecenia skanu można dodać tylko teczkę, pozycję spisu lub dokument'), { statusCode: 400 });
     }
 
     const resolvedItem = await this.resolveOrderItem(item, tenantId, department);
@@ -494,6 +506,10 @@ export class OrderService {
 
   async updateStatus(id: string, tenantId: string, newStatus: OrderStatus, userId: string, notes?: string) {
     const order = await this.getById(id, tenantId);
+
+    if (order.orderType === 'scan' && order.status === 'delivered' && newStatus === 'in_progress') {
+      throw Object.assign(new Error('Udostępnionego zlecenia skanu nie można ponownie otworzyć'), { statusCode: 409 });
+    }
 
     if (order.orderType === 'disposal' && newStatus !== 'cancelled' && newStatus !== 'rejected') {
       await this.assertDisposalNotHeld(order, tenantId);
@@ -542,6 +558,9 @@ export class OrderService {
 
   async markReady(id: string, tenantId: string, userId: string) {
     const order = await this.getById(id, tenantId);
+    if (order.orderType === 'scan' && (order.items.length === 0 || order.items.some((item) => !item.scanFile))) {
+      throw Object.assign(new Error('Dodaj skan PDF do każdej pozycji przed oznaczeniem zlecenia jako gotowe'), { statusCode: 409 });
+    }
     if (order.status === 'in_progress'
       && !canMarkReadyAfterPicking(order.orderType, order.items.map((item) => item.itemStatus))) {
       throw Object.assign(new Error('Najpierw potwierdź pobranie wszystkich pozycji zlecenia'), { statusCode: 400 });
@@ -561,7 +580,7 @@ export class OrderService {
 
     const deliveredAt = new Date();
     const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
-    const boxIds = order.items
+    const boxIds = (order.orderType === 'scan' ? [] : order.items)
       .map((item: any) => this.getOrderItemBoxId(item))
       .filter((boxId: string | null): boxId is string => Boolean(boxId));
     const boxStatus = order.orderType === 'checkout'

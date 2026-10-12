@@ -3,13 +3,15 @@ import { orderService } from './order.service';
 import { custodyService } from './custody.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { orderScanService } from './order-scan.service';
+import { z } from 'zod';
 
 export class OrderController {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { skip, take, page, limit } = parsePagination(req.query as any);
-      const { data, total } = await orderService.list(req.tenantId, req.query, skip, take);
+      const { data, total } = await orderService.list(req.tenantId, req.query, skip, take, req.accessDepartment || undefined);
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }
@@ -17,8 +19,34 @@ export class OrderController {
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.getById(req.params.id, req.tenantId);
+      const order = await orderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, order);
+    } catch (err) { next(err); }
+  }
+
+  async uploadScan(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success || !z.string().uuid().safeParse(req.params.itemId).success) {
+        return errorResponse(res, 'Nieprawidłowy identyfikator pozycji', 400);
+      }
+      if (!req.file) return errorResponse(res, 'Dołącz skan w formacie PDF do 25 MB', 400);
+      return successResponse(res, await orderScanService.upload(req.params.id, req.params.itemId, req.tenantId, req.user!.userId, req.file, req.accessDepartment || undefined), 201);
+    } catch (err) { next(err); }
+  }
+
+  async downloadScan(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success || !z.string().uuid().safeParse(req.params.itemId).success) {
+        return errorResponse(res, 'Nieprawidłowy identyfikator pozycji', 400);
+      }
+      const scan = await orderScanService.download(req.params.id, req.params.itemId, req.tenantId, req.accessDepartment || undefined);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="archivecore-skan-${req.params.itemId}.pdf"`);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(scan.buffer);
     } catch (err) { next(err); }
   }
 
@@ -49,6 +77,7 @@ export class OrderController {
   async submit(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (req.accessDepartment) await orderService.getById(req.params.id, req.tenantId, req.accessDepartment);
       const order = await orderService.submit(req.params.id, req.tenantId, req.user!.userId);
       return successResponse(res, order);
     } catch (err) { next(err); }
@@ -105,6 +134,7 @@ export class OrderController {
   async cancel(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (req.accessDepartment) await orderService.getById(req.params.id, req.tenantId, req.accessDepartment);
       const order = await orderService.cancel(req.params.id, req.tenantId, req.user!.userId, req.body.notes);
       return successResponse(res, order);
     } catch (err) { next(err); }

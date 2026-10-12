@@ -49,6 +49,9 @@ jobs:
       - name: Verify disposal photo evidence
         run: npm run test:disposal-evidence
 
+      - name: Verify scan-on-demand orders
+        run: npm run test:order-scans
+
       - name: Verify personnel record retention dates
         run: npm run test:hr-retention
 

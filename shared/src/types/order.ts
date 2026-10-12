@@ -1,4 +1,4 @@
-export type OrderType = 'checkout' | 'return_order' | 'transfer' | 'disposal';
+export type OrderType = 'checkout' | 'return_order' | 'transfer' | 'disposal' | 'scan';
 export type OrderStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'in_progress' | 'ready' | 'delivered' | 'completed' | 'cancelled';
 export type OrderPriority = 'normal' | 'high' | 'urgent';
 export type OrderItemStatus = 'pending' | 'picked' | 'delivered' | 'returned' | 'issue';
@@ -42,6 +42,7 @@ export interface IOrderItem {
   pickedAt: string | null;
   deliveredAt: string | null;
   pickedById: string | null;
+  scanFile?: { id: string; fileName: string; pageCount: number; fileSize: number; uploadedAt: string } | null;
 }
 
 export interface ICreateOrder {

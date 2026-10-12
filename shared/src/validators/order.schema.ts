@@ -12,11 +12,15 @@ const orderItemSchema = z.object({
 });
 
 export const createOrderSchema = z.object({
-  orderType: z.enum(['checkout', 'return_order', 'transfer', 'disposal']),
+  orderType: z.enum(['checkout', 'return_order', 'transfer', 'disposal', 'scan']),
   priority: z.enum(['normal', 'high', 'urgent']).default('normal'),
   expectedReturnAt: z.string().min(1).optional(),
   notes: z.string().optional(),
   items: z.array(orderItemSchema).min(1, 'Zlecenie musi zawierać co najmniej jedną pozycję'),
+}).superRefine((value, context) => {
+  if (value.orderType === 'scan' && value.items.some((item) => item.boxId || item.boxNumber || item.hrFolderId)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['items'], message: 'Zlecenie skanu może zawierać tylko teczki, pozycje spisu lub dokumenty' });
+  }
 });
 
 export const addOrderItemSchema = orderItemSchema;

@@ -63,6 +63,7 @@ export const ORDER_TYPE_LABELS: Record<string, string> = {
   return_order: 'Zwrot',
   transfer: 'Przesunięcie',
   disposal: 'Brakowanie',
+  scan: 'Skan na żądanie',
 };
 
 // ======= Priority Labels =======

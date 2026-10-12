@@ -31,6 +31,7 @@ export default function OrderListPage() {
   const { hasRole } = useAuth();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [createType, setCreateType] = useState('checkout');
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
@@ -41,13 +42,14 @@ export default function OrderListPage() {
   const deleteOrder = useDelete('/orders', ['orders'], t('orders.deleted'));
   const { exportData, isExporting } = useExport({ endpoint: '/export/orders', defaultFilename: 'zlecenia.xlsx' });
   const canDeleteOrders = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
-  const selectedItemCount = selectedBoxes.length + selectedFolders.length + selectedDocuments.length;
+  const selectedItemCount = (createType === 'scan' ? 0 : selectedBoxes.length) + selectedFolders.length + selectedDocuments.length;
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'),
     return_order: t('orders.typeReturn'),
     transfer: t('orders.typeTransfer'),
     disposal: t('orders.typeDestruction'),
+    scan: t('orders.typeScan'),
   };
 
   const columns: Column<any>[] = [
@@ -138,7 +140,7 @@ export default function OrderListPage() {
         priority: fd.get('priority') || 'normal',
         notes: fd.get('notes') || undefined,
         items: [
-          ...selectedBoxes.map((box) => ({ boxId: box.id })),
+          ...(createType === 'scan' ? [] : selectedBoxes.map((box) => ({ boxId: box.id }))),
           ...selectedFolders.map((folder) => ({ folderId: folder.id })),
           ...selectedDocuments.map((doc) => (
             doc.source === 'transfer_list_item'
@@ -158,6 +160,7 @@ export default function OrderListPage() {
     setSelectedBoxes([]);
     setSelectedFolders([]);
     setSelectedDocuments([]);
+    setCreateType('checkout');
   };
 
   return (
@@ -210,6 +213,7 @@ export default function OrderListPage() {
             <option value="return_order">{t('orders.typeReturn')}</option>
             <option value="transfer">{t('orders.typeTransfer')}</option>
             <option value="disposal">{t('orders.typeDestruction')}</option>
+            <option value="scan">{t('orders.typeScan')}</option>
           </select>
         </div>
       </div>
@@ -229,11 +233,12 @@ export default function OrderListPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="order-create-type" className="label-text">{t('orders.createModal.type')}</label>
-              <select id="order-create-type" name="orderType" className="input-field" required>
+              <select id="order-create-type" name="orderType" className="input-field" value={createType} onChange={(event) => { setCreateType(event.target.value); if (event.target.value === 'scan') setSelectedBoxes([]); }} required>
                 <option value="checkout">{t('orders.typeIssue')}</option>
                 <option value="return_order">{t('orders.typeReturn')}</option>
                 <option value="transfer">{t('orders.typeTransfer')}</option>
                 <option value="disposal">{t('orders.typeDestruction')}</option>
+                <option value="scan">{t('orders.typeScan')}</option>
               </select>
             </div>
             <div>
@@ -245,14 +250,15 @@ export default function OrderListPage() {
               </select>
             </div>
           </div>
-          <div>
+          {createType === 'scan' && <p className="text-sm text-gray-600">{t('orders.createModal.scanHint')}</p>}
+          {createType !== 'scan' && <div>
             <label className="label-text">{t('orders.createModal.boxIds')}</label>
             <BoxPicker
               value={selectedBoxes}
               onChange={setSelectedBoxes}
               placeholder={t('orders.createModal.boxIdsPlaceholder')}
             />
-          </div>
+          </div>}
           <div>
             <label className="label-text">{t('orders.createModal.folders')}</label>
             <FolderPicker

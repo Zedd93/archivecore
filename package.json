@@ -33,6 +33,7 @@
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
     "test:legal-hold": "node --import tsx --test server/scripts/test-legal-hold.mjs",
     "test:disposal-evidence": "node --test server/scripts/test-disposal-evidence.mjs",
+    "test:order-scans": "node --import tsx --test server/scripts/test-order-scans.mjs",
     "test:hr-retention": "node --import tsx --test server/scripts/test-hr-retention.mjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",

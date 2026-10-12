@@ -16,10 +16,10 @@ import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
-import { getApiErrorMessage } from '@/utils/apiError';
+import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 import { matchOrderItemQr } from '@/utils/orderPicking';
 import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
-import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX, Upload, Download } from 'lucide-react';
 
 // Status flow steps
 const STATUS_STEPS = ['draft', 'submitted', 'approved', 'in_progress', 'ready', 'delivered', 'completed'];
@@ -62,12 +62,16 @@ export default function OrderDetailPage() {
   const { feedback: scanFeedback, soundEnabled, startCameraSound, toggleSound, showFeedback: showScanFeedback } = useScanFeedback(isScanning);
   const [manualCode, setManualCode] = useState('');
   const [pickingItemId, setPickingItemId] = useState<string | null>(null);
+  const [scanItemId, setScanItemId] = useState<string | null>(null);
+  const [scanFile, setScanFile] = useState<File | null>(null);
+  const [uploadingScan, setUploadingScan] = useState(false);
+  const [downloadingScan, setDownloadingScan] = useState<string | null>(null);
   const pickBusyRef = useRef(false);
   const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'), return_order: t('orders.typeReturn'),
-    transfer: t('orders.typeTransfer'), disposal: t('orders.typeDestruction'),
+    transfer: t('orders.typeTransfer'), disposal: t('orders.typeDestruction'), scan: t('orders.typeScan'),
   };
 
   const STEP_LABELS: Record<string, string> = {
@@ -86,6 +90,7 @@ export default function OrderDetailPage() {
   const canPick = order.orderType === 'checkout' && order.status === 'in_progress' && hasPermission('order.process');
   const handledCount = order.items?.filter((item: any) => ['picked', 'delivered', 'returned'].includes(item.itemStatus)).length ?? 0;
   const remainingCount = (order.items?.length ?? 0) - handledCount;
+  const missingScanCount = order.orderType === 'scan' ? order.items.filter((item: any) => !item.scanFile).length : 0;
   const displayItems = canPick ? sortOrderItemsByPickRoute(order.items || []) : order.items || [];
 
   const allowCameraRetry = (code: string) => {
@@ -178,7 +183,7 @@ export default function OrderDetailPage() {
   const handleAddItems = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const items = [
-      ...selectedBoxes.map((box) => ({ boxId: box.id })),
+      ...(order.orderType === 'scan' ? [] : selectedBoxes.map((box) => ({ boxId: box.id }))),
       ...selectedFolders.map((folder) => ({ folderId: folder.id })),
       ...selectedDocuments.map((doc) => (
         doc.source === 'transfer_list_item'
@@ -203,6 +208,49 @@ export default function OrderDetailPage() {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
     } finally {
       setAddingItems(false);
+    }
+  };
+
+  const handleScanUpload = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id || !scanItemId || !scanFile || uploadingScan) return;
+    if (scanFile.type !== 'application/pdf' || scanFile.size > 25 * 1024 * 1024) {
+      toast.error(t('orders.detail.scanUploadError'));
+      return;
+    }
+    setUploadingScan(true);
+    try {
+      const form = new FormData();
+      form.append('file', scanFile);
+      await api.post(`/orders/${id}/items/${scanItemId}/scan`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await queryClient.invalidateQueries({ queryKey: ['order', id] });
+      setScanItemId(null);
+      setScanFile(null);
+      toast.success(t('orders.detail.scanSaved'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('orders.detail.scanUploadError')));
+    } finally {
+      setUploadingScan(false);
+    }
+  };
+
+  const downloadScan = async (itemId: string) => {
+    if (!id || downloadingScan) return;
+    setDownloadingScan(itemId);
+    try {
+      const { data } = await api.get(`/orders/${id}/items/${itemId}/scan`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `archivecore-skan-${itemId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(await getApiErrorMessageAsync(error, t('orders.detail.scanDownloadError')));
+    } finally {
+      setDownloadingScan(null);
     }
   };
 
@@ -277,13 +325,13 @@ export default function OrderDetailPage() {
             </button>
           )}
           {order.status === 'in_progress' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending || (order.orderType === 'checkout' && (order.items.length === 0 || remainingCount > 0))}>
+            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending || (order.orderType === 'checkout' && (order.items.length === 0 || remainingCount > 0)) || (order.orderType === 'scan' && (order.items.length === 0 || missingScanCount > 0))}>
               <Package size={16} /> {t('orders.detail.markReady')}
             </button>
           )}
           {order.status === 'ready' && hasPermission('order.process') && (
             <button onClick={() => handleAction('deliver')} className="btn-primary" disabled={patchOrder.isPending}>
-              <Truck size={16} /> {t('orders.detail.deliver')}
+              <Truck size={16} /> {t(order.orderType === 'scan' ? 'orders.detail.scanDelivered' : 'orders.detail.deliver')}
             </button>
           )}
           {order.status === 'delivered' && hasPermission('order.complete') && (
@@ -298,6 +346,10 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {order.orderType === 'scan' && order.status === 'in_progress' && missingScanCount > 0 && (
+        <p role="status" className="text-sm text-amber-700">{t('orders.detail.scanReadyHint')}</p>
+      )}
 
       {canPick && (
         <div className="card space-y-4">
@@ -418,6 +470,18 @@ export default function OrderDetailPage() {
                           {t('orders.detail.undoPick')}
                         </button>
                       )}
+                      {order.orderType === 'scan' && item.scanFile && (
+                        <span className="text-xs text-gray-600 break-all">{item.scanFile.fileName} · {t('orders.detail.scanPages')}: {item.scanFile.pageCount}</span>
+                      )}
+                      {order.orderType === 'scan' && !item.scanFile && order.status === 'in_progress' && hasPermission('order.process') && (
+                        <button type="button" className="btn-secondary text-xs" onClick={() => setScanItemId(item.id)}><Upload size={14} />{t('orders.detail.scanUpload')}</button>
+                      )}
+                      {order.orderType === 'scan' && item.scanFile && ['delivered', 'completed'].includes(order.status) && (
+                        <button type="button" className="btn-secondary text-xs" disabled={downloadingScan === item.id} onClick={() => downloadScan(item.id)}><Download size={14} />{t('orders.detail.scanDownload')}</button>
+                      )}
+                      {order.orderType === 'scan' && item.scanFile && !['delivered', 'completed'].includes(order.status) && (
+                        <span className="text-xs text-gray-500">{t('orders.detail.scanAvailableAfterDelivery')}</span>
+                      )}
                     </div>
                   </div>
                 </Fragment>;
@@ -497,14 +561,14 @@ export default function OrderDetailPage() {
         size="lg"
       >
         <form onSubmit={handleAddItems} className="space-y-4">
-          <div>
+          {order.orderType !== 'scan' && <div>
             <label className="label-text">{t('orders.createModal.boxIds')}</label>
             <BoxPicker
               value={selectedBoxes}
               onChange={setSelectedBoxes}
               placeholder={t('orders.createModal.boxIdsPlaceholder')}
             />
-          </div>
+          </div>}
           <div>
             <label className="label-text">{t('orders.createModal.folders')}</label>
             <FolderPicker
@@ -532,12 +596,23 @@ export default function OrderDetailPage() {
             </button>
             <button
               type="submit"
-              disabled={addingItems || (selectedBoxes.length + selectedFolders.length + selectedDocuments.length === 0)}
+              disabled={addingItems || ((order.orderType === 'scan' ? 0 : selectedBoxes.length) + selectedFolders.length + selectedDocuments.length === 0)}
               className="btn-primary"
             >
               {addingItems ? t('common.saving', 'Zapisywanie...') : t('orders.detail.addItem', 'Dodaj pozycję')}
             </button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={Boolean(scanItemId)} onClose={() => { if (!uploadingScan) { setScanItemId(null); setScanFile(null); } }} title={t('orders.detail.scanUpload')} size="md">
+        <form onSubmit={handleScanUpload} className="space-y-4">
+          <div>
+            <label htmlFor="order-scan-file" className="label-text">{t('orders.detail.scanFile')}</label>
+            <input id="order-scan-file" type="file" accept="application/pdf" className="input-field" required onChange={(event) => setScanFile(event.target.files?.[0] || null)} />
+          </div>
+          <p className="text-xs text-gray-500">{t('orders.detail.scanPageHint')}</p>
+          <button type="submit" className="btn-primary" disabled={!scanFile || uploadingScan}>{uploadingScan ? t('common.saving') : t('orders.detail.scanSave')}</button>
         </form>
       </Modal>
     </div>

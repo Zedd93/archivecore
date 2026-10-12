@@ -108,6 +108,7 @@ enum OrderType {
   return_order
   transfer
   disposal
+  scan
 }
 
 enum OrderStatus {
@@ -227,6 +228,7 @@ model Tenant {
   billingPeriods    BillingPeriod[]
   inventorySessions InventorySession[]
   disposalEvidence  DisposalEvidence[]
+  scanFiles         OrderScanFile[]
 
   @@map("tenants")
 }
@@ -313,6 +315,7 @@ model User {
   invoicedBillingPeriods BillingPeriod[] @relation("BillingPeriodInvoicer")
   inventoryResolutionEvents InventoryResolutionEvent[]
   disposalEvidence    DisposalEvidence[]
+  uploadedScanFiles   OrderScanFile[]
 
   @@index([tenantId])
   @@index([email])
@@ -752,12 +755,33 @@ model OrderItem {
   hrFolder         HRFolder?         @relation(fields: [hrFolderId], references: [id])
   picker           User?             @relation("ItemPicker", fields: [pickedById], references: [id])
   billingEvents    BillingEvent[]
+  scanFile          OrderScanFile?
 
   @@index([orderId])
   @@index([boxId])
   @@index([documentId])
   @@index([transferListItemId])
   @@map("order_items")
+}
+
+model OrderScanFile {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  orderItemId    String   @unique @db.Uuid
+  storageKey     String   @db.VarChar(1000)
+  fileName       String   @db.VarChar(500)
+  fileSize       Int
+  checksumSha256 String   @db.VarChar(64)
+  pageCount      Int
+  uploadedById   String   @db.Uuid
+  uploadedAt     DateTime @default(now())
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orderItem  OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  uploadedBy User      @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@map("order_scan_files")
 }
 
 model CustodyEvent {
