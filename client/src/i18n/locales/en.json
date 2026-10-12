@@ -55,7 +55,8 @@
     "fileExported": "File exported",
     "exportError": "Export error",
     "exportDataError": "Data export error",
-    "genericError": "An error occurred"
+    "genericError": "An error occurred",
+    "offlineWarning": "Connection lost. Warehouse operations are not saved offline; check the network before scanning again."
   },
 
   "auth": {

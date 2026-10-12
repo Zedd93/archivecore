@@ -1,5 +1,6 @@
-const CACHE_NAME = 'archivecore-v6';
+const CACHE_NAME = 'archivecore-v7';
 const STATIC_ASSETS = [
+  '/offline.html',
   '/manifest.json',
   '/robots.txt',
   '/icons/icon.svg',
@@ -23,7 +24,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
+          .filter((key) => key.startsWith('archivecore-') && key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       );
     })
@@ -37,12 +38,13 @@ self.addEventListener('fetch', (event) => {
 
   // Skip non-GET and API requests
   if (request.method !== 'GET') return;
-  if (request.url.includes('/api/')) return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   // For navigation requests — always prefer the network so the app shell updates after deploys.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request).catch(async () => (await caches.match('/offline.html')) || Response.error())
     );
     return;
   }

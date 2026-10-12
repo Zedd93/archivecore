@@ -46,6 +46,9 @@ jobs:
       - name: Verify scan import approval
         run: npm run test:scan-import
 
+      - name: Verify offline PWA fallback
+        run: npm run test:offline-shell
+
       - name: Verify legal hold and disposal safeguards
         run: npm run test:legal-hold
 

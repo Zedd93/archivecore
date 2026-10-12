@@ -26,7 +26,7 @@ Multi-tenant archive management system for organizations. Manage physical docume
 - Full-text search across all entities
 - QR code label generation (single & bulk A4)
 - Export to CSV/XLSX, PDF reports
-- PWA with offline support
+- Installable PWA with an offline status page; warehouse writes require a live server connection
 - Keyboard shortcuts (press `?` to see all)
 - Audit log for all operations
 - Tenant-scoped read-only partner API ([integration guide](docs/partner-api.md))

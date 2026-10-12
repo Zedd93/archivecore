@@ -10,6 +10,7 @@ export default function AppLayout() {
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [online, setOnline] = useState(() => navigator.onLine);
   const shortcutList = useMemo(() => getShortcutList(t), [t]);
 
   // Register global keyboard shortcuts
@@ -22,11 +23,24 @@ export default function AppLayout() {
     return () => window.removeEventListener('show-shortcuts', handler);
   }, []);
 
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         <Header onMenuToggle={() => setSidebarOpen(true)} />
+        {!online && <div role="status" aria-live="polite" className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-sm font-medium text-amber-950">
+          {t('common.offlineWarning')}
+        </div>}
         <main role="main" className="flex-1 overflow-auto p-4 lg:p-6 bg-gray-50">
           <Outlet />
         </main>

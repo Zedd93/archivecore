@@ -55,7 +55,8 @@
     "fileExported": "Plik wyeksportowany",
     "exportError": "Błąd eksportu",
     "exportDataError": "Błąd eksportu danych",
-    "genericError": "Wystąpił błąd"
+    "genericError": "Wystąpił błąd",
+    "offlineWarning": "Brak połączenia. Operacje magazynowe nie są zapisywane offline; sprawdź sieć przed kolejnym skanem."
   },
 
   "auth": {
