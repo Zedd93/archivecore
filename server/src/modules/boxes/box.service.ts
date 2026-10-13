@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 import { billingService } from '../pricing/billing.service';
+import { executeWarehouseOperation } from './warehouse-operation.service';
 
 function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxOrderByWithRelationInput {
   switch (sortBy) {
@@ -431,16 +432,14 @@ export class BoxService {
     });
   }
 
-  async bulkMove(ids: string[], tenantId: string, locationId: string, userId: string, notes?: string, department?: string) {
-    await this.validateBoxLocation(locationId, tenantId);
-
+  async bulkMove(ids: string[], tenantId: string, locationId: string, userId: string, notes?: string, department?: string, operationId?: string) {
     const uniqueIds = [...new Set(ids)];
     const where = {
       id: { in: uniqueIds }, tenantId, deletedAt: null, status: { not: 'disposed' as const },
       ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
     };
 
-    return prisma.$transaction(async (tx) => {
+    return executeWarehouseOperation({ operationId, tenantId, userId, operationType: 'move', ids, locationId, notes, department }, async (tx) => {
       const boxes = await tx.box.findMany({ where, select: { id: true, locationId: true } });
       if (boxes.length !== uniqueIds.length) {
         throw Object.assign(new Error('Nie znaleziono wszystkich wybranych kartonów'), { statusCode: 404 });
@@ -491,15 +490,14 @@ export class BoxService {
       });
 
       return { updated: boxes.length, moved: movedBoxes.length };
-    });
+    }, () => this.validateBoxLocation(locationId, tenantId));
   }
 
-  async bulkReceive(ids: string[], tenantId: string, locationId: string, userId: string, notes?: string, department?: string) {
-    await this.validateBoxLocation(locationId, tenantId);
+  async bulkReceive(ids: string[], tenantId: string, locationId: string, userId: string, notes?: string, department?: string, operationId?: string) {
     const uniqueIds = [...new Set(ids)];
     const occurredAt = new Date();
 
-    return prisma.$transaction(async (tx) => {
+    return executeWarehouseOperation({ operationId, tenantId, userId, operationType: 'receive', ids, locationId, notes, department }, async (tx) => {
       const boxes = await tx.box.findMany({
         where: {
           id: { in: uniqueIds }, tenantId, deletedAt: null,
@@ -535,7 +533,7 @@ export class BoxService {
       });
       await tx.billingEvent.createMany({ data: billingEvents });
       return { received: boxes.length };
-    });
+    }, () => this.validateBoxLocation(locationId, tenantId));
   }
 
   async bulkDelete(ids: string[], tenantId: string, department?: string) {

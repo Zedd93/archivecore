@@ -131,7 +131,9 @@ export function auditLog(entityType: string, action: string) {
 
     res.json = function (body: any) {
       // Log audit asynchronously (don't block response)
-      if (res.statusCode >= 200 && res.statusCode < 300 && req.user) {
+      const repeatedWarehouseOperation = (action === 'box.bulk_move' || action === 'box.bulk_receive')
+        && body?.data?.replayed === true;
+      if (res.statusCode >= 200 && res.statusCode < 300 && req.user && !repeatedWarehouseOperation) {
         const entityId = getEntityId(req, body);
 
         prisma.auditLog.create({

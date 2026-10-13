@@ -11,12 +11,15 @@ import BoxPicker from '@/components/ui/BoxPicker';
 import LocationPicker from '@/components/ui/LocationPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
+import PendingWarehouseSubmission from '@/components/ui/PendingWarehouseSubmission';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/hooks/useConfirm';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { SerialScanQueue } from '@/utils/serialScanQueue';
 import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
+import { useWarehouseSubmission } from '@/hooks/useWarehouseSubmission';
+import type { WarehouseSubmission } from '@/utils/warehouseSubmission';
 
 interface ReceiveBox {
   id: string;
@@ -39,6 +42,7 @@ export default function WarehouseReceivePage() {
   const { confirm, ConfirmDialogElement } = useConfirm();
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'receive');
+  const submission = useWarehouseSubmission(user?.id || '', activeTenantId, 'receive');
   const canReceive = hasPermission('box.move') && hasPermission('box.read') && hasPermission('location.read');
   const [boxes, setBoxes] = useState<ReceiveBox[]>([]);
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -147,23 +151,17 @@ export default function WarehouseReceivePage() {
     scanQueueRef.current?.enqueue(code);
   };
 
-  const receive = async () => {
-    if (!offlineScans.online || !offlineScans.allVerified || !destination || boxes.length === 0 || busyRef.current || scanQueueRef.current?.isBusy) return;
-    const ids = boxes.map((box) => box.id);
+  const sendReceipt = async (entry: WarehouseSubmission) => {
     busyRef.current = true;
     setIsScanning(false);
-    const approved = await confirm({
-      title: t('warehouseReceive.confirmTitle'),
-      message: t('warehouseReceive.confirmMessage', { count: ids.length, location: destination.fullPath }),
-      confirmLabel: t('warehouseReceive.receive'),
-      variant: 'warning',
-    });
-    if (!approved) { busyRef.current = false; return; }
     setIsReceiving(true);
     try {
-      const { data } = await api.post('/boxes/bulk-receive', { ids, locationId: destination.id, notes: notes.trim() || undefined });
-      if (data.data?.received !== ids.length) throw new Error(t('warehouseReceive.incomplete'));
-      toast.success(t('warehouseReceive.success', { count: ids.length }));
+      const { data } = await api.post('/boxes/bulk-receive', {
+        ids: entry.ids, locationId: entry.locationId, notes: entry.notes, operationId: entry.operationId,
+      });
+      if (data.data?.received !== entry.ids.length) throw new Error(t('warehouseReceive.incomplete'));
+      submission.clear(entry.operationId);
+      toast.success(t('warehouseReceive.success', { count: entry.ids.length }));
       offlineScans.clear();
       selectedBoxIdsRef.current.clear();
       setBoxes([]);
@@ -180,6 +178,34 @@ export default function WarehouseReceivePage() {
     } finally {
       setIsReceiving(false);
       busyRef.current = false;
+    }
+  };
+
+  const receive = async () => {
+    if (!offlineScans.online || !offlineScans.allVerified || submission.pending || !destination || boxes.length === 0 || busyRef.current || scanQueueRef.current?.isBusy) return;
+    const ids = boxes.map((box) => box.id);
+    busyRef.current = true;
+    setIsScanning(false);
+    const approved = await confirm({
+      title: t('warehouseReceive.confirmTitle'),
+      message: t('warehouseReceive.confirmMessage', { count: ids.length, location: destination.fullPath }),
+      confirmLabel: t('warehouseReceive.receive'),
+      variant: 'warning',
+    });
+    if (!approved) { busyRef.current = false; return; }
+    const entry = submission.start({ ids, locationId: destination.id, locationLabel: destination.fullPath, notes: notes.trim() || undefined });
+    if (!entry) {
+      toast.error(t('warehouseSubmission.saveError'));
+      busyRef.current = false;
+      return;
+    }
+    await sendReceipt(entry);
+  };
+
+  const discardPending = async () => {
+    if (!submission.pending || isReceiving) return;
+    if (await confirm({ title: t('warehouseSubmission.discardTitle'), message: t('warehouseSubmission.discardWarning'), confirmLabel: t('warehouseSubmission.discard'), variant: 'warning' })) {
+      submission.clear(submission.pending.operationId);
     }
   };
 
@@ -213,6 +239,9 @@ export default function WarehouseReceivePage() {
     </section>
     <OfflineScanPanel codes={offlineScans.codes} verifiedCodes={offlineScans.verifiedCodes} online={offlineScans.online} syncing={offlineScans.syncing}
       onRemove={offlineScans.remove} onSync={() => { if (!busyRef.current && !scanQueueRef.current?.isBusy) void offlineScans.verify(processCode); }} />
+    <PendingWarehouseSubmission pending={submission.pending} busy={isReceiving} online={offlineScans.online}
+      onRetry={() => { if (submission.pending && !busyRef.current) void sendReceipt(submission.pending); }}
+      onDiscard={() => { void discardPending(); }} />
     <section className="card space-y-3">
       <h2 className="font-semibold">{t('warehouseReceive.boxes', { count: boxes.length })}</h2>
       <BoxPicker value={boxes} onChange={(next) => { selectedBoxIdsRef.current = new Set(next.map((box) => box.id)); setBoxes(next); }} tenantId={activeTenantId} unlocatedOnly placeholder={t('warehouseReceive.findBox')} showSelectedChips={false} />
@@ -230,7 +259,7 @@ export default function WarehouseReceivePage() {
       <label htmlFor="receive-notes" className="label-text">{t('warehouseReceive.notes')}</label>
       <textarea id="receive-notes" className="input-field w-full" rows={2} maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} />
     </section>
-    <button type="button" className="btn-primary w-full" disabled={!offlineScans.online || !offlineScans.allVerified || offlineScans.syncing || !destination || boxes.length === 0 || isReceiving || isResolving || scanQueueRef.current?.isBusy} onClick={() => { void receive(); }}>
+    <button type="button" className="btn-primary w-full" disabled={!offlineScans.online || !offlineScans.allVerified || offlineScans.syncing || !!submission.pending || !destination || boxes.length === 0 || isReceiving || isResolving || scanQueueRef.current?.isBusy} onClick={() => { void receive(); }}>
       {isReceiving ? <Loader2 size={18} className="animate-spin" /> : <PackageCheck size={18} />}{t('warehouseReceive.receiveCount', { count: boxes.length })}
     </button>
     {ConfirmDialogElement}

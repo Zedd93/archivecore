@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api, { AUTH_SESSION_EXPIRED_EVENT, setAccessToken } from '@/services/api';
 import { clearWarehouseScans } from '@/utils/offlineWarehouseScans';
+import { clearAllWarehouseSubmissions } from '@/utils/warehouseSubmission';
 
 interface User {
   id: string;
@@ -127,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(null);
     setUser(null);
     clearWarehouseScans();
+    clearAllWarehouseSubmissions();
     localStorage.removeItem('tenantId');
   };
 

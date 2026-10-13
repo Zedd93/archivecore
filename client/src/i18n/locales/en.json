@@ -1433,6 +1433,15 @@
     "noPermission": "You do not have permission to work in the warehouse."
   },
 
+  "warehouseSubmission": {
+    "title": "Operation awaiting server confirmation",
+    "description": "{{count}} boxes, destination: {{location}}. After a connection loss, the result is unknown. Resume the same operation to check it without charging again.",
+    "retry": "Resume and check result",
+    "discard": "Discard pending operation",
+    "discardTitle": "Discard the pending operation?",
+    "discardWarning": "Check the boxes first. The operation may already be saved on the server; discarding only removes the local recovery record and does not undo it.",
+    "saveError": "Could not safely save the operation on this device. Free storage and try again."
+  },
   "offlineScans": {
     "title": "Scans awaiting verification ({{count}})",
     "description": "Scans are saved only on this device. Verify them with the server after reconnecting. Receiving or moving happens only after separate confirmation.",

@@ -116,6 +116,8 @@ function setup({ boxes = [{ id: boxId, boxNumber: 'K-2026-000001', status: 'acti
 
 test('receipt validates box IDs, destination ID and notes', () => {
   assert.equal(bulkBoxReceiveSchema.safeParse({ ids: [boxId], locationId }).success, true);
+  assert.equal(bulkBoxReceiveSchema.safeParse({ ids: [boxId], locationId, operationId: '1ccdc011-533f-4728-8f82-cd548a2637f0' }).success, true);
+  assert.equal(bulkBoxReceiveSchema.safeParse({ ids: [boxId], locationId, operationId: 'not-a-uuid' }).success, false);
   assert.equal(bulkBoxReceiveSchema.safeParse({ ids: [], locationId }).success, false);
   assert.equal(bulkBoxReceiveSchema.safeParse({ ids: [boxId], locationId: 'from-typed-text' }).success, false);
   assert.equal(bulkBoxReceiveSchema.safeParse({ ids: [boxId], locationId, notes: 'x'.repeat(1001) }).success, false);

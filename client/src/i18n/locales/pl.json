@@ -1433,6 +1433,15 @@
     "noPermission": "Nie masz uprawnień do pracy w magazynie."
   },
 
+  "warehouseSubmission": {
+    "title": "Operacja czeka na potwierdzenie serwera",
+    "description": "{{count}} kartonów, miejsce: {{location}}. Po utracie połączenia nie wiadomo jeszcze, czy zapis się udał. Wznów tę samą operację, aby sprawdzić wynik bez ponownego naliczenia.",
+    "retry": "Wznów i sprawdź wynik",
+    "discard": "Odrzuć oczekującą operację",
+    "discardTitle": "Odrzucić oczekującą operację?",
+    "discardWarning": "Najpierw sprawdź stan kartonów. Operacja mogła już zostać zapisana na serwerze; odrzucenie usuwa tylko lokalną możliwość wznowienia i nie cofa zmian.",
+    "saveError": "Nie udało się bezpiecznie zapisać operacji na tym urządzeniu. Spróbuj ponownie po zwolnieniu miejsca."
+  },
   "offlineScans": {
     "title": "Skany oczekujące na sprawdzenie ({{count}})",
     "description": "Skany zapisano tylko na tym urządzeniu. Po powrocie połączenia sprawdź je na serwerze. Przyjęcie lub przeniesienie nastąpi dopiero po osobnym potwierdzeniu.",

@@ -231,6 +231,7 @@ model Tenant {
   scanFiles         OrderScanFile[]
   integrationKeys   IntegrationKey[]
   webhookEndpoints  WebhookEndpoint[]
+  warehouseOperations WarehouseOperation[]
 
   @@map("tenants")
 }
@@ -320,6 +321,7 @@ model User {
   uploadedScanFiles   OrderScanFile[]
   createdIntegrationKeys IntegrationKey[]
   createdWebhookEndpoints WebhookEndpoint[]
+  warehouseOperations WarehouseOperation[]
 
   @@index([tenantId])
   @@index([email])
@@ -844,6 +846,22 @@ model OrderScanFile {
 
   @@index([tenantId])
   @@map("order_scan_files")
+}
+
+model WarehouseOperation {
+  id            String   @id @db.Uuid
+  tenantId      String   @db.Uuid
+  userId        String   @db.Uuid
+  operationType String   @db.VarChar(20)
+  requestHash   String   @db.VarChar(64)
+  response      Json?
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@map("warehouse_operations")
 }
 
 model CustodyEvent {

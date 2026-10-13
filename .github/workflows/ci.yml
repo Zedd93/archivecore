@@ -52,6 +52,12 @@ jobs:
       - name: Verify offline warehouse scan drafts
         run: npm run test:offline-warehouse-scans
 
+      - name: Verify resumable warehouse submissions
+        run: npm run test:warehouse-submission
+
+      - name: Verify warehouse operation idempotency
+        run: npm run test:warehouse-idempotency
+
       - name: Verify legal hold and disposal safeguards
         run: npm run test:legal-hold
 
