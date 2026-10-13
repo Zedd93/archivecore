@@ -50,7 +50,7 @@ export default function OrderDetailPage() {
   const queryClient = useQueryClient();
   const { data: order, isLoading } = useDetail('order', '/orders', id);
   const patchOrder = usePatch(
-    ['order', 'orders', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
+    ['order', 'orders', 'warehouse-tasks', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
     t('orders.detail.statusChanged')
   );
   const [showAddItem, setShowAddItem] = useState(false);

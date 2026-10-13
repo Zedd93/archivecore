@@ -631,6 +631,9 @@ export class OrderService {
     const boxIds = (order.orderType === 'scan' ? [] : order.items)
       .map((item: any) => this.getOrderItemBoxId(item))
       .filter((boxId: string | null): boxId is string => Boolean(boxId));
+    const wholeBoxIds = order.items
+      .map((item: any) => item.boxId)
+      .filter((boxId: string | null): boxId is string => Boolean(boxId));
     const boxStatus = order.orderType === 'checkout'
       ? 'checked_out'
       : order.orderType === 'return_order'
@@ -666,9 +669,9 @@ export class OrderService {
         });
       }
 
-      if (boxIds.length > 0 && boxStatus) {
+      if (wholeBoxIds.length > 0 && boxStatus) {
         await tx.box.updateMany({
-          where: { id: { in: boxIds }, tenantId, deletedAt: null },
+          where: { id: { in: wholeBoxIds }, tenantId, deletedAt: null },
           data: { status: boxStatus },
         });
       }
@@ -767,24 +770,17 @@ export class OrderService {
         statusChanged = updated.count === 1;
         if (statusChanged) await webhookService.enqueueOrderStatus(tx, order, order.status, 'completed');
       }
-      if (boxId) {
+      if (item.boxId && boxId) {
         const stillCheckedOut = await tx.orderItem.count({
           where: {
             id: { not: itemId },
+            boxId,
             itemStatus: OrderItemStatus.delivered,
             order: {
               tenantId,
               orderType: 'checkout',
               status: { in: ['delivered', 'completed'] },
             },
-            OR: [
-              { boxId },
-              { folder: { boxId } },
-              { document: { boxId } },
-              { document: { folder: { boxId } } },
-              { transferListItem: { boxId } },
-              { hrFolder: { boxId } },
-            ],
           },
         });
         if (stillCheckedOut === 0) {
