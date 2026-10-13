@@ -452,6 +452,9 @@ export class OrderService {
             toUser: { select: { firstName: true, lastName: true } },
           },
         },
+        handoverProof: {
+          include: { recordedBy: { select: { firstName: true, lastName: true } } },
+        },
       },
     });
     if (!order) throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 });
@@ -616,8 +619,16 @@ export class OrderService {
     return this.updateStatus(id, tenantId, 'ready', userId);
   }
 
-  async deliver(id: string, tenantId: string, userId: string) {
+  async deliver(id: string, tenantId: string, userId: string, proof?: {
+    recipientName: string;
+    latitude?: number;
+    longitude?: number;
+    accuracyMeters?: number;
+  }) {
     const order = await this.getById(id, tenantId);
+    if (proof && !['checkout', 'return_order'].includes(order.orderType)) {
+      throw Object.assign(new Error('Potwierdzenie odbioru jest dostępne tylko dla wydań i zwrotów'), { statusCode: 400 });
+    }
     if (order.orderType === 'disposal') await this.assertDisposalNotHeld(order, tenantId);
     if (!isValidTransition(order.status as OrderStatus, 'delivered')) {
       throw Object.assign(
@@ -656,6 +667,20 @@ export class OrderService {
           deliveredAt,
         },
       });
+
+      if (proof) {
+        await tx.orderHandoverProof.create({
+          data: {
+            orderId: id,
+            recordedById: userId,
+            recipientName: proof.recipientName,
+            latitude: proof.latitude,
+            longitude: proof.longitude,
+            accuracyMeters: proof.accuracyMeters,
+            recordedAt: deliveredAt,
+          },
+        });
+      }
 
       if (boxIds.length > 0) {
         await tx.custodyEvent.createMany({

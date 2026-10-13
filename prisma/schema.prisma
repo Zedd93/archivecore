@@ -322,6 +322,7 @@ model User {
   createdIntegrationKeys IntegrationKey[]
   createdWebhookEndpoints WebhookEndpoint[]
   warehouseOperations WarehouseOperation[]
+  recordedHandoverProofs OrderHandoverProof[]
 
   @@index([tenantId])
   @@index([email])
@@ -790,6 +791,7 @@ model Order {
   items         OrderItem[]
   custodyEvents CustodyEvent[]
   billingEvents BillingEvent[]
+  handoverProof OrderHandoverProof?
 
   @@index([tenantId, status])
   @@index([orderNumber])
@@ -888,6 +890,22 @@ model CustodyEvent {
   @@index([boxId])
   @@index([eventAt])
   @@map("custody_events")
+}
+
+model OrderHandoverProof {
+  orderId        String   @id @db.Uuid
+  recordedById   String   @db.Uuid
+  recipientName  String   @db.VarChar(120)
+  latitude       Float?
+  longitude      Float?
+  accuracyMeters Float?
+  recordedAt     DateTime @default(now())
+
+  order      Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recordedBy User  @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([recordedById])
+  @@map("order_handover_proofs")
 }
 
 model BillingEvent {

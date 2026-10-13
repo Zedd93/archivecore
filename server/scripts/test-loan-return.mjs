@@ -134,7 +134,7 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
     { orderType: 'checkout', item: { id: itemId, itemStatus: 'picked', boxId }, expectedBoxStatus: 'checked_out' },
     { orderType: 'return_order', item: { id: itemId, itemStatus: 'pending', boxId }, expectedBoxStatus: 'active' },
   ]) {
-    const calls = { custody: [], boxUpdates: [] };
+    const calls = { custody: [], boxUpdates: [], proofs: [] };
     const order = {
       id: orderId, tenantId, orderType, status: 'ready',
       orderNumber: 'Z-202610-00001', requestedBy: userId, items: [item],
@@ -143,6 +143,7 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
       order: { update: async () => order },
       orderItem: { updateMany: async () => ({ count: 1 }) },
       custodyEvent: { createMany: async ({ data }) => { calls.custody.push(...data); } },
+      orderHandoverProof: { create: async ({ data }) => { calls.proofs.push(data); } },
       box: { updateMany: async (args) => { calls.boxUpdates.push(args); return { count: 1 }; } },
       webhookEndpoint: { findMany: async () => [] },
     };
@@ -153,9 +154,20 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
       mock.method(notificationService, 'notifyTenantUsers', async () => undefined),
     ];
     try {
-      await orderService.deliver(orderId, tenantId, userId);
+      const proof = orderType === 'checkout' && item.folderId
+        ? { recipientName: 'Anna Kowalska', latitude: 50.1, longitude: 18.6, accuracyMeters: 12 }
+        : undefined;
+      await orderService.deliver(orderId, tenantId, userId, proof);
       assert.equal(calls.custody.length, 1);
       assert.equal(calls.custody[0].boxId, boxId);
+      assert.equal(calls.proofs.length, proof ? 1 : 0);
+      if (proof) {
+        assert.equal(calls.proofs[0].orderId, orderId);
+        assert.equal(calls.proofs[0].recordedById, userId);
+        assert.equal(calls.proofs[0].recipientName, proof.recipientName);
+        assert.equal(calls.proofs[0].latitude, proof.latitude);
+        assert.ok(calls.proofs[0].recordedAt instanceof Date);
+      }
       assert.equal(calls.boxUpdates.length, expectedBoxStatus ? 1 : 0);
       if (expectedBoxStatus) assert.equal(calls.boxUpdates[0].data.status, expectedBoxStatus);
     } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }

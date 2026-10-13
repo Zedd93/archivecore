@@ -41,6 +41,20 @@ export const updateOrderItemStatusSchema = z.object({
   status: z.enum(['pending', 'picked']),
 });
 
+export const deliverOrderSchema = z.object({
+  proof: z.object({
+    recipientName: z.string().trim().min(2).max(120),
+    latitude: z.number().finite().min(-90).max(90).optional(),
+    longitude: z.number().finite().min(-180).max(180).optional(),
+    accuracyMeters: z.number().finite().min(0).max(100000).optional(),
+  }).superRefine((proof, context) => {
+    const location = [proof.latitude, proof.longitude, proof.accuracyMeters];
+    if (location.some((value) => value !== undefined) && location.some((value) => value === undefined)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Podaj komplet współrzędnych oraz dokładność', path: ['latitude'] });
+    }
+  }).optional(),
+});
+
 export const createCustodyEventSchema = z.object({
   boxId: z.string().uuid(),
   eventType: z.enum(['handover', 'receipt', 'return_event', 'transfer']),

@@ -22,7 +22,7 @@ import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 import { matchOrderItemQr } from '@/utils/orderPicking';
 import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
 import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
-import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX, Upload, Download } from 'lucide-react';
+import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX, Upload, Download, MapPin } from 'lucide-react';
 
 // Status flow steps
 const STATUS_STEPS = ['draft', 'submitted', 'approved', 'in_progress', 'ready', 'delivered', 'completed'];
@@ -71,6 +71,11 @@ export default function OrderDetailPage() {
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [uploadingScan, setUploadingScan] = useState(false);
   const [downloadingScan, setDownloadingScan] = useState<string | null>(null);
+  const [showHandover, setShowHandover] = useState(false);
+  const [recipientName, setRecipientName] = useState('');
+  const [handoverLocation, setHandoverLocation] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const locationRequestRef = useRef(0);
   const pickBusyRef = useRef(false);
   const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
 
@@ -220,11 +225,54 @@ export default function OrderDetailPage() {
     processPickCode(code);
   };
 
-  const handleAction = async (action: string) => {
-    await patchOrder.mutateAsync({ url: `/orders/${id}/${action}` });
+  const handleAction = async (action: string, proof?: { recipientName: string; latitude?: number; longitude?: number; accuracyMeters?: number }) => {
+    await patchOrder.mutateAsync({ url: `/orders/${id}/${action}`, ...(proof ? { proof } : {}) });
     await queryClient.invalidateQueries({ queryKey: ['order', id] });
     await queryClient.invalidateQueries({ queryKey: ['box'] });
     await queryClient.invalidateQueries({ queryKey: ['boxes'] });
+  };
+
+  const closeHandover = () => {
+    locationRequestRef.current += 1;
+    setIsLocating(false);
+    setShowHandover(false);
+    setRecipientName('');
+    setHandoverLocation(null);
+  };
+
+  const requestHandoverLocation = () => {
+    if (!navigator.geolocation) { toast.error(t('orders.detail.locationUnavailable')); return; }
+    const requestId = ++locationRequestRef.current;
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (requestId !== locationRequestRef.current) return;
+        setHandoverLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+        });
+        setIsLocating(false);
+      },
+      () => {
+        if (requestId !== locationRequestRef.current) return;
+        setIsLocating(false);
+        toast.error(t('orders.detail.locationUnavailable'));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  };
+
+  const confirmHandover = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = recipientName.trim();
+    if (name.length < 2 || patchOrder.isPending) return;
+    try {
+      await handleAction('deliver', { recipientName: name, ...(handoverLocation || {}) });
+      closeHandover();
+    } catch {
+      // The mutation displays the server error; keep the form open for retry.
+    }
   };
 
   const canAddItems = hasPermission('order.create') || hasPermission('order.process');
@@ -388,7 +436,15 @@ export default function OrderDetailPage() {
             </button>
           )}
           {order.status === 'ready' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('deliver')} className="btn-primary" disabled={patchOrder.isPending}>
+            <button onClick={() => {
+              if (['checkout', 'return_order'].includes(order.orderType)) {
+                locationRequestRef.current += 1;
+                setRecipientName('');
+                setHandoverLocation(null);
+                setIsLocating(false);
+                setShowHandover(true);
+              } else void handleAction('deliver');
+            }} className="btn-primary" disabled={patchOrder.isPending}>
               <Truck size={16} /> {t(order.orderType === 'scan' ? 'orders.detail.scanDelivered' : 'orders.detail.deliver')}
             </button>
           )}
@@ -604,6 +660,19 @@ export default function OrderDetailPage() {
             </div>
           )}
 
+          {order.handoverProof && (
+            <div className="card space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700">{t('orders.detail.handoverProof')}</h3>
+              <p className="text-sm">{t('orders.detail.recipientName')}: <strong>{order.handoverProof.recipientName}</strong></p>
+              <p className="text-sm text-gray-600">{t('orders.detail.recordedAt')}: {new Date(order.handoverProof.recordedAt).toLocaleString()}</p>
+              <p className="text-sm text-gray-600">{t('orders.detail.recordedBy')}: {order.handoverProof.recordedBy.firstName} {order.handoverProof.recordedBy.lastName}</p>
+              {order.handoverProof.latitude != null && order.handoverProof.longitude != null && order.handoverProof.accuracyMeters != null && (
+                <p className="text-sm text-gray-600">{t('orders.detail.handoverLocation')}: {order.handoverProof.latitude.toFixed(5)}, {order.handoverProof.longitude.toFixed(5)} (±{Math.round(order.handoverProof.accuracyMeters)} m)</p>
+              )}
+              <p className="text-xs text-gray-500">{t('orders.detail.handoverProofHint')}</p>
+            </div>
+          )}
+
           {/* Activity Timeline */}
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('boxes.changeHistory')}</h3>
@@ -611,6 +680,34 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      <Modal isOpen={showHandover} onClose={() => { if (!patchOrder.isPending) closeHandover(); }} title={t('orders.detail.handoverTitle')}>
+        <form onSubmit={(event) => { void confirmHandover(event); }} className="space-y-4">
+          <p className="text-sm text-gray-600">{t('orders.detail.handoverIntro')}</p>
+          <div>
+            <label htmlFor="handover-recipient" className="label-text">{t('orders.detail.recipientName')}</label>
+            <input id="handover-recipient" className="input-field" required minLength={2} maxLength={120}
+              value={recipientName} onChange={(event) => setRecipientName(event.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <button type="button" className="btn-secondary" disabled={isLocating || patchOrder.isPending} onClick={requestHandoverLocation}>
+              {isLocating ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
+              {t('orders.detail.captureLocation')}
+            </button>
+            {handoverLocation && <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span>{handoverLocation.latitude.toFixed(5)}, {handoverLocation.longitude.toFixed(5)} (±{Math.round(handoverLocation.accuracyMeters)} m)</span>
+              <button type="button" className="text-primary-700 underline" onClick={() => setHandoverLocation(null)}>{t('orders.detail.removeLocation')}</button>
+            </div>}
+            <p className="text-xs text-gray-500">{t('orders.detail.locationOptional')}</p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="btn-secondary" disabled={patchOrder.isPending} onClick={closeHandover}>{t('common.cancel')}</button>
+            <button type="submit" className="btn-primary" disabled={patchOrder.isPending || recipientName.trim().length < 2}>
+              {patchOrder.isPending && <Loader2 size={16} className="animate-spin" />}{t('orders.detail.confirmHandover')}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         isOpen={showAddItem}

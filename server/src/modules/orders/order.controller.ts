@@ -126,7 +126,7 @@ export class OrderController {
   async deliver(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.deliver(req.params.id, req.tenantId, req.user!.userId);
+      const order = await orderService.deliver(req.params.id, req.tenantId, req.user!.userId, req.body.proof);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }

@@ -5,7 +5,7 @@ import { tenantContext } from '../../middleware/tenant';
 import { requirePermission, requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, RoleCode, createOrderSchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema } from '@archivecore/shared';
+import { Permissions, RoleCode, createOrderSchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema, deliverOrderSchema } from '@archivecore/shared';
 import multer from 'multer';
 
 const router = Router();
@@ -45,7 +45,7 @@ router.patch('/:id/approve', ...auth, requirePermission(Permissions.ORDER_APPROV
 router.patch('/:id/reject', ...auth, requirePermission(Permissions.ORDER_APPROVE), validate(rejectOrderSchema), auditLog('order', 'order.reject'), (req, res, next) => orderController.reject(req, res, next));
 router.patch('/:id/process', ...auth, requirePermission(Permissions.ORDER_PROCESS), auditLog('order', 'order.process'), (req, res, next) => orderController.startProcessing(req, res, next));
 router.patch('/:id/ready', ...auth, requirePermission(Permissions.ORDER_PROCESS), auditLog('order', 'order.ready'), (req, res, next) => orderController.markReady(req, res, next));
-router.patch('/:id/deliver', ...auth, requirePermission(Permissions.ORDER_PROCESS), auditLog('order', 'order.deliver'), (req, res, next) => orderController.deliver(req, res, next));
+router.patch('/:id/deliver', ...auth, requirePermission(Permissions.ORDER_PROCESS), validate(deliverOrderSchema), auditLog('order', 'order.deliver'), (req, res, next) => orderController.deliver(req, res, next));
 router.patch('/:id/complete', ...auth, requirePermission(Permissions.ORDER_COMPLETE), auditLog('order', 'order.complete'), (req, res, next) => orderController.complete(req, res, next));
 router.patch('/:id/cancel', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(cancelOrderSchema), auditLog('order', 'order.cancel'), (req, res, next) => orderController.cancel(req, res, next));
 

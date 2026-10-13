@@ -10,7 +10,7 @@ const { generateQrData, generateFolderQrData } = qr;
 const { matchOrderItemQr } = require('../../client/src/utils/orderPicking.ts');
 const { getOrderItemPickLocation, sortOrderItemsByPickRoute } = require('../../client/src/utils/orderPickRoute.ts');
 const { canMarkReadyAfterPicking } = stateMachine;
-const { updateOrderItemStatusSchema } = schemas;
+const { updateOrderItemStatusSchema, deliverOrderSchema } = schemas;
 
 const boxId = 'f411a4d4-904a-4779-b697-5df8ba29a976';
 const folderId = '9ff32a6e-818e-42ec-b35b-cd9c038758d7';
@@ -48,6 +48,15 @@ test('item status endpoint accepts only pick and undo-pick', () => {
   assert.equal(updateOrderItemStatusSchema.safeParse({ status: 'pending' }).success, true);
   assert.equal(updateOrderItemStatusSchema.safeParse({ status: 'delivered' }).success, false);
   assert.equal(updateOrderItemStatusSchema.safeParse({ status: 'returned' }).success, false);
+});
+
+test('handover proof validates recipient and complete optional coordinates', () => {
+  assert.equal(deliverOrderSchema.safeParse({}).success, true);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: ' Anna Kowalska ' } }).data?.proof?.recipientName, 'Anna Kowalska');
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'A' } }).success, false);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 50.1 } }).success, false);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 50.1, longitude: 18.6, accuracyMeters: 12 } }).success, true);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 91, longitude: 18.6, accuracyMeters: 12 } }).success, false);
 });
 
 test('pick route sorts locations and box numbers naturally, leaving unlocated items last', () => {
