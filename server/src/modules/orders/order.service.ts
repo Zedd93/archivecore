@@ -536,6 +536,18 @@ export class OrderService {
           items: true,
         },
       });
+      if (newStatus === OrderStatus.completed) {
+        await tx.orderItem.updateMany({
+          where: {
+            orderId: id,
+            itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
+          },
+          data: {
+            itemStatus: OrderItemStatus.delivered,
+            deliveredAt: changed.completedAt ?? new Date(),
+          },
+        });
+      }
       await webhookService.enqueueOrderStatus(tx, changed, order.status, newStatus);
       return changed;
     });
@@ -645,19 +657,6 @@ export class OrderService {
 
   async complete(id: string, tenantId: string, userId: string) {
     await this.updateStatus(id, tenantId, 'completed', userId);
-
-    // Mark all pending/picked items as delivered
-    await prisma.orderItem.updateMany({
-      where: {
-        orderId: id,
-        itemStatus: { in: [OrderItemStatus.pending, OrderItemStatus.picked] },
-      },
-      data: {
-        itemStatus: OrderItemStatus.delivered,
-        deliveredAt: new Date(),
-      },
-    });
-
     return this.getById(id, tenantId);
   }
 

@@ -92,6 +92,43 @@ test('ordinary status transitions store webhook events in the order transaction'
   }
 });
 
+test('completing an order updates pending items and queues the webhook in one transaction', async () => {
+  const originalTransaction = prisma.$transaction;
+  const originalItemUpdate = prisma.orderItem.updateMany;
+  const service = new OrderService();
+  const order = { id: 'order-1', tenantId: 'tenant-a', orderNumber: 'Z-1', orderType: 'scan', status: 'delivered', requestedBy: 'user-a', items: [{ id: 'item-1', itemStatus: 'pending' }] };
+  const events = [];
+  service.getById = async () => order;
+  service.notifyOrderStatus = async () => { events.push('notify'); };
+  prisma.orderItem.updateMany = async () => { throw new Error('item update must be transactional'); };
+  prisma.$transaction = async (callback) => callback({
+    order: { update: async ({ data }) => {
+      events.push('order');
+      return { ...order, status: data.status, completedAt: data.completedAt };
+    } },
+    orderItem: { updateMany: async ({ where, data }) => {
+      events.push('items');
+      assert.deepEqual(where, { orderId: order.id, itemStatus: { in: ['pending', 'picked'] } });
+      assert.equal(data.itemStatus, 'delivered');
+      assert.ok(data.deliveredAt instanceof Date);
+      return { count: 1 };
+    } },
+    webhookEndpoint: { findMany: async () => [{ id: 'endpoint-a' }] },
+    webhookDelivery: { createMany: async ({ data }) => {
+      events.push('webhook');
+      assert.equal(JSON.parse(data[0].payloadText).data.status, 'completed');
+      return { count: 1 };
+    } },
+  });
+  try {
+    await service.complete(order.id, order.tenantId, order.requestedBy);
+    assert.deepEqual(events, ['order', 'items', 'webhook', 'notify']);
+  } finally {
+    prisma.$transaction = originalTransaction;
+    prisma.orderItem.updateMany = originalItemUpdate;
+  }
+});
+
 test('disabled recipient is not contacted and retry schedule is bounded', async () => {
   assert.deepEqual([1, 2, 3, 4, 5].map(retryDelayMs), [60_000, 300_000, 1_800_000, 7_200_000, 7_200_000]);
   const originalFind = prisma.webhookDelivery.findMany;
