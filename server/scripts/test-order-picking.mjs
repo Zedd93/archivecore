@@ -51,12 +51,15 @@ test('item status endpoint accepts only pick and undo-pick', () => {
 });
 
 test('handover proof validates recipient and complete optional coordinates', () => {
+  const signatureData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4AWP8DwQMQMDEAAUAPfgEADYYS7QAAAAASUVORK5CYII=';
   assert.equal(deliverOrderSchema.safeParse({}).success, true);
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: ' Anna Kowalska ' } }).data?.proof?.recipientName, 'Anna Kowalska');
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'A' } }).success, false);
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 50.1 } }).success, false);
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 50.1, longitude: 18.6, accuracyMeters: 12 } }).success, true);
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 91, longitude: 18.6, accuracyMeters: 12 } }).success, false);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', signatureData } }).success, true);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', signatureData: 'data:image/svg+xml;base64,PHN2Zz4=' } }).success, false);
 });
 
 test('pick route sorts locations and box numbers naturally, leaving unlocated items last', () => {

@@ -39,6 +39,10 @@ const USER_SAFE_SELECT = {
   updatedAt: true,
 };
 
+export function sanitizeAuditValues(data: unknown) {
+  return JSON.parse(JSON.stringify(data, (key, value) => key === 'signatureData' ? '[redacted]' : value));
+}
+
 function getEntityId(req: Request, body?: any): string | undefined {
   return body?.data?.id
     || req.params.id
@@ -143,8 +147,8 @@ export function auditLog(entityType: string, action: string) {
             action,
             entityType,
             entityId: entityId || undefined,
-            oldValues,
-            newValues: body?.data ? JSON.parse(JSON.stringify(body.data)) : undefined,
+            oldValues: oldValues ? sanitizeAuditValues(oldValues) : undefined,
+            newValues: body?.data ? sanitizeAuditValues(body.data) : undefined,
             ipAddress: getClientIp(req),
             userAgent: req.headers['user-agent']?.substring(0, 500),
           },

@@ -9,12 +9,14 @@ const { prisma } = require('../dist/config/database.js');
 const { orderService } = require('../dist/modules/orders/order.service.js');
 const { billingService } = require('../dist/modules/pricing/billing.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
+const { sanitizeAuditValues } = require('../dist/middleware/audit.js');
 
 const orderId = '8a4b7d9a-89e2-4f5f-9c75-cf3f37e1543e';
 const itemId = '4f71e99f-b69a-4ff3-95f9-507f75f6242f';
 const tenantId = 'f411a4d4-904a-4779-b697-5df8ba29a976';
 const boxId = '9ff32a6e-818e-42ec-b35b-cd9c038758d7';
 const userId = 'bc97d781-4c88-43ba-8090-01e7adfa0714';
+const signatureData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4AWP8DwQMQMDEAAUAPfgEADYYS7QAAAAASUVORK5CYII=';
 
 test('QR matches the exact loaned entity and preserves multiple matches for selection', () => {
   const boxCode = generateQrData('DOX', 'K-2026-000001');
@@ -155,7 +157,7 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
     ];
     try {
       const proof = orderType === 'checkout' && item.folderId
-        ? { recipientName: 'Anna Kowalska', latitude: 50.1, longitude: 18.6, accuracyMeters: 12 }
+        ? { recipientName: 'Anna Kowalska', signatureData, latitude: 50.1, longitude: 18.6, accuracyMeters: 12 }
         : undefined;
       await orderService.deliver(orderId, tenantId, userId, proof);
       assert.equal(calls.custody.length, 1);
@@ -165,6 +167,7 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
         assert.equal(calls.proofs[0].orderId, orderId);
         assert.equal(calls.proofs[0].recordedById, userId);
         assert.equal(calls.proofs[0].recipientName, proof.recipientName);
+        assert.equal(calls.proofs[0].signatureData, signatureData);
         assert.equal(calls.proofs[0].latitude, proof.latitude);
         assert.ok(calls.proofs[0].recordedAt instanceof Date);
       }
@@ -172,4 +175,20 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
       if (expectedBoxStatus) assert.equal(calls.boxUpdates[0].data.status, expectedBoxStatus);
     } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
   }
+});
+
+test('invalid signature cannot deliver an order', async () => {
+  const order = { id: orderId, tenantId, orderType: 'checkout', status: 'ready', items: [] };
+  const getById = mock.method(orderService, 'getById', async () => order);
+  try {
+    await assert.rejects(orderService.deliver(orderId, tenantId, userId, {
+      recipientName: 'Anna Kowalska', signatureData: 'data:image/png;base64,bm90IGEgcG5n',
+    }), /Podpis/);
+  } finally { getById.mock.restore(); }
+});
+
+test('audit records the handover without copying the signature image', () => {
+  const values = sanitizeAuditValues({ handoverProof: { recipientName: 'Anna Kowalska', signatureData } });
+  assert.equal(values.handoverProof.recipientName, 'Anna Kowalska');
+  assert.equal(values.handoverProof.signatureData, '[redacted]');
 });

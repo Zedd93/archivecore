@@ -16,6 +16,7 @@ import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
+import SignaturePad from '@/components/ui/SignaturePad';
 import axios from 'axios';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
@@ -73,6 +74,7 @@ export default function OrderDetailPage() {
   const [downloadingScan, setDownloadingScan] = useState<string | null>(null);
   const [showHandover, setShowHandover] = useState(false);
   const [recipientName, setRecipientName] = useState('');
+  const [signatureData, setSignatureData] = useState<string | null>(null);
   const [handoverLocation, setHandoverLocation] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const locationRequestRef = useRef(0);
@@ -225,7 +227,7 @@ export default function OrderDetailPage() {
     processPickCode(code);
   };
 
-  const handleAction = async (action: string, proof?: { recipientName: string; latitude?: number; longitude?: number; accuracyMeters?: number }) => {
+  const handleAction = async (action: string, proof?: { recipientName: string; signatureData?: string; latitude?: number; longitude?: number; accuracyMeters?: number }) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}`, ...(proof ? { proof } : {}) });
     await queryClient.invalidateQueries({ queryKey: ['order', id] });
     await queryClient.invalidateQueries({ queryKey: ['box'] });
@@ -237,6 +239,7 @@ export default function OrderDetailPage() {
     setIsLocating(false);
     setShowHandover(false);
     setRecipientName('');
+    setSignatureData(null);
     setHandoverLocation(null);
   };
 
@@ -267,8 +270,9 @@ export default function OrderDetailPage() {
     event.preventDefault();
     const name = recipientName.trim();
     if (name.length < 2 || patchOrder.isPending) return;
+    if (signatureData && signatureData.length > 160_000) { toast.error(t('orders.detail.signatureTooLarge')); return; }
     try {
-      await handleAction('deliver', { recipientName: name, ...(handoverLocation || {}) });
+      await handleAction('deliver', { recipientName: name, ...(signatureData ? { signatureData } : {}), ...(handoverLocation || {}) });
       closeHandover();
     } catch {
       // The mutation displays the server error; keep the form open for retry.
@@ -440,6 +444,7 @@ export default function OrderDetailPage() {
               if (['checkout', 'return_order'].includes(order.orderType)) {
                 locationRequestRef.current += 1;
                 setRecipientName('');
+                setSignatureData(null);
                 setHandoverLocation(null);
                 setIsLocating(false);
                 setShowHandover(true);
@@ -669,6 +674,10 @@ export default function OrderDetailPage() {
               {order.handoverProof.latitude != null && order.handoverProof.longitude != null && order.handoverProof.accuracyMeters != null && (
                 <p className="text-sm text-gray-600">{t('orders.detail.handoverLocation')}: {order.handoverProof.latitude.toFixed(5)}, {order.handoverProof.longitude.toFixed(5)} (±{Math.round(order.handoverProof.accuracyMeters)} m)</p>
               )}
+              {order.handoverProof.signatureData && <div>
+                <p className="text-sm text-gray-600 mb-1">{t('orders.detail.signature')}</p>
+                <img src={order.handoverProof.signatureData} alt={t('orders.detail.signatureImage')} className="max-w-full max-h-36 rounded border border-gray-200 bg-white" />
+              </div>}
               <p className="text-xs text-gray-500">{t('orders.detail.handoverProofHint')}</p>
             </div>
           )}
@@ -689,6 +698,7 @@ export default function OrderDetailPage() {
             <input id="handover-recipient" className="input-field" required minLength={2} maxLength={120}
               value={recipientName} onChange={(event) => setRecipientName(event.target.value)} />
           </div>
+          <SignaturePad onChange={setSignatureData} disabled={patchOrder.isPending} />
           <div className="space-y-2">
             <button type="button" className="btn-secondary" disabled={isLocating || patchOrder.isPending} onClick={requestHandoverLocation}>
               {isLocating ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}

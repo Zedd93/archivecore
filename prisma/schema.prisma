@@ -896,6 +896,7 @@ model OrderHandoverProof {
   orderId        String   @id @db.Uuid
   recordedById   String   @db.Uuid
   recipientName  String   @db.VarChar(120)
+  signatureData  String?  @db.Text
   latitude       Float?
   longitude      Float?
   accuracyMeters Float?

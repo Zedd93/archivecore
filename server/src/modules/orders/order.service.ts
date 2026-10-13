@@ -6,6 +6,29 @@ import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
 import { scanOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
+import PDFDocument from 'pdfkit';
+
+function validateHandoverSignature(data?: string) {
+  if (!data) return;
+  if (data.length > 170_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+    throw Object.assign(new Error('Podpis musi być obrazem PNG do 120 KB'), { statusCode: 400 });
+  }
+  const encoded = data.slice('data:image/png;base64,'.length);
+  const image = Buffer.from(encoded, 'base64');
+  if (image.length === 0 || image.length > 120_000
+    || !image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    throw Object.assign(new Error('Podpis musi być obrazem PNG do 120 KB'), { statusCode: 400 });
+  }
+  try {
+    const document = new PDFDocument({ autoFirstPage: false }) as unknown as {
+      openImage(data: Buffer): { width: number; height: number };
+    };
+    const decoded = document.openImage(image);
+    if (decoded.width < 1 || decoded.height < 1 || decoded.width > 1200 || decoded.height > 400) throw new Error('Image dimensions');
+  } catch {
+    throw Object.assign(new Error('Podpis jest uszkodzony lub ma nieprawidłowe wymiary'), { statusCode: 400 });
+  }
+}
 
 function calculateSlaDeadline(priority: string): Date {
   const slaMap: Record<string, number> = {
@@ -621,6 +644,7 @@ export class OrderService {
 
   async deliver(id: string, tenantId: string, userId: string, proof?: {
     recipientName: string;
+    signatureData?: string;
     latitude?: number;
     longitude?: number;
     accuracyMeters?: number;
@@ -629,6 +653,7 @@ export class OrderService {
     if (proof && !['checkout', 'return_order'].includes(order.orderType)) {
       throw Object.assign(new Error('Potwierdzenie odbioru jest dostępne tylko dla wydań i zwrotów'), { statusCode: 400 });
     }
+    validateHandoverSignature(proof?.signatureData);
     if (order.orderType === 'disposal') await this.assertDisposalNotHeld(order, tenantId);
     if (!isValidTransition(order.status as OrderStatus, 'delivered')) {
       throw Object.assign(
@@ -674,6 +699,7 @@ export class OrderService {
             orderId: id,
             recordedById: userId,
             recipientName: proof.recipientName,
+            signatureData: proof.signatureData,
             latitude: proof.latitude,
             longitude: proof.longitude,
             accuracyMeters: proof.accuracyMeters,
