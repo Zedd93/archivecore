@@ -61,6 +61,9 @@ jobs:
       - name: Verify location capacity suggestions
         run: npm run test:location-capacity
 
+      - name: Verify archive health checks
+        run: npm run test:storage-health
+
       - name: Verify partner API access
         run: npm run test:integrations
 

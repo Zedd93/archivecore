@@ -1,10 +1,21 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import api from '@/services/api';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
 import toast from 'react-hot-toast';
-import { BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
+import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
+
+interface StorageHealth {
+  unlocated: { total: number; boxes: Array<{ id: string; boxNumber: string }> };
+  overCapacity: { total: number; locations: Array<{ id: string; fullPath: string; occupied: number; capacity: number }> };
+  tenantMismatch: {
+    total: number;
+    boxes: Array<{ id: string; boxNumber: string }>;
+    folders: Array<{ id: string; folderNumber: string }>;
+  };
+}
 
 const currentMonth = () => {
   const now = new Date();
@@ -87,6 +98,11 @@ export default function ReportsPage() {
     queryFn: async () => { const { data } = await api.get('/reports/locations/occupancy'); return data.data; },
   });
 
+  const { data: storageHealth, isLoading: healthLoading, isError: healthError, refetch: refetchHealth } = useQuery<StorageHealth>({
+    queryKey: ['report-storage-health'],
+    queryFn: async () => { const { data } = await api.get('/reports/storage-health'); return data.data; },
+  });
+
   const isLoading = l1 || l2 || lDocTypes || l3 || l4 || l5 || lHrStatus || l6;
 
   const STATUS_COLORS: Record<string, string> = {
@@ -131,6 +147,40 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-bold text-gray-900">{t('reports.title')}</h1>
         <p className="text-sm text-gray-500">{t('reports.subtitle')}</p>
       </div>
+
+      <section className="card space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><AlertTriangle size={20} className="text-amber-600" />{t('reports.storageHealthTitle')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('reports.storageHealthDescription')}</p>
+        </div>
+        {healthLoading ? <p className="text-sm text-gray-500">{t('common.loading')}</p> : healthError ? (
+          <button type="button" className="btn-secondary" onClick={() => { void refetchHealth(); }}>{t('common.tryAgain')}</button>
+        ) : storageHealth && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+              <div className="text-sm text-gray-600">{t('reports.unlocatedBoxes')}</div>
+              <div className="text-2xl font-bold">{storageHealth.unlocated.total}</div>
+              {storageHealth.unlocated.boxes.map((box) => <Link key={box.id} to={`/boxes/${box.id}`} className="block text-sm text-primary-700 hover:underline break-words">{box.boxNumber}</Link>)}
+            </div>
+            <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+              <div className="text-sm text-gray-600">{t('reports.overCapacity')}</div>
+              <div className="text-2xl font-bold">{storageHealth.overCapacity.total}</div>
+              {storageHealth.overCapacity.locations.map((location) => (
+                <div key={location.id} className="text-sm break-words">
+                  <Link to="/locations" className="text-primary-700 hover:underline">{location.fullPath}</Link>
+                  <span className="text-gray-500"> · {location.occupied}/{location.capacity}</span>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+              <div className="text-sm text-gray-600">{t('reports.tenantMismatch')}</div>
+              <div className="text-2xl font-bold">{storageHealth.tenantMismatch.total}</div>
+              {storageHealth.tenantMismatch.boxes.map((box) => <Link key={box.id} to={`/boxes/${box.id}`} className="block text-sm text-primary-700 hover:underline break-words">{t('reports.boxLabel', { number: box.boxNumber })}</Link>)}
+              {storageHealth.tenantMismatch.folders.map((folder) => <Link key={folder.id} to={`/folders/${folder.id}`} className="block text-sm text-primary-700 hover:underline break-words">{t('reports.folderLabel', { number: folder.folderNumber })}</Link>)}
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="card">
         <h2 className="text-lg font-semibold text-gray-900">{t('reports.monthlyTitle')}</h2>

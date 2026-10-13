@@ -943,6 +943,13 @@
   "reports": {
     "title": "Reports",
     "subtitle": "Archive statistics and analytics",
+    "storageHealthTitle": "Archive health check",
+    "storageHealthDescription": "Current issues for the selected client. Capacity is checked for locations assigned to that client; this report does not change data.",
+    "unlocatedBoxes": "Active boxes without a location",
+    "overCapacity": "Locations over capacity",
+    "tenantMismatch": "Inconsistent client assignment",
+    "boxLabel": "Box {{number}}",
+    "folderLabel": "Folder {{number}}",
     "monthlyTitle": "Monthly client report",
     "monthlyDescription": "PDF with selected-month activity, current holdings, and upcoming retention deadlines. Costs are visible only to authorized users.",
     "monthlyMonth": "Month",

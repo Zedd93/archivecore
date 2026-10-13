@@ -15,6 +15,7 @@ router.get('/boxes/doc-type', ...auth, requirePermission(Permissions.REPORT_VIEW
 router.get('/orders/status', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getOrdersByStatus(req, res, next));
 router.get('/orders/monthly', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getOrdersByMonth(req, res, next));
 router.get('/locations/occupancy', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getLocationOccupancy(req, res, next));
+router.get('/storage-health', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getStorageHealth(req, res, next));
 router.get('/hr/departments', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getHRFoldersByDepartment(req, res, next));
 router.get('/hr/status', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getHRFoldersByStatus(req, res, next));
 router.get('/retention', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getRetentionSummary(req, res, next));

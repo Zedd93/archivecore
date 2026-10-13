@@ -69,6 +69,14 @@ export class ReportController {
     } catch (err) { next(err); }
   }
 
+  async getStorageHealth(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const data = await reportService.getStorageHealth(req.tenantId);
+      return successResponse(res, data);
+    } catch (err) { next(err); }
+  }
+
   async getHRFoldersByDepartment(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

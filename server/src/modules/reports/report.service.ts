@@ -5,6 +5,7 @@ import {
   EMPLOYMENT_STATUS_LABELS,
   ORDER_STATUS_LABELS,
 } from '@archivecore/shared';
+import { findOverCapacityLocations } from './storage-health';
 
 export interface DashboardKPIs {
   totalBoxes: number;
@@ -221,6 +222,58 @@ export class ReportService {
         };
       })
       .sort((a, b) => a.fullPath.localeCompare(b.fullPath, 'pl', { numeric: true }));
+  }
+
+  async getStorageHealth(tenantId: string) {
+    type BoxIssue = { id: string; boxNumber: string; total: number };
+    type FolderIssue = { id: string; folderNumber: string; total: number };
+    const [unlocated, foreignLocation, foreignBoxFolders, locations] = await Promise.all([
+      prisma.$queryRaw<BoxIssue[]>`
+        SELECT b."id", b."boxNumber", COUNT(*) OVER ()::int AS "total"
+        FROM "boxes" b
+        WHERE b."tenantId" = ${tenantId}::uuid AND b."deletedAt" IS NULL
+          AND b."status" = 'active' AND b."locationId" IS NULL
+        ORDER BY b."boxNumber", b."id" LIMIT 10
+      `,
+      prisma.$queryRaw<BoxIssue[]>`
+        SELECT b."id", b."boxNumber", COUNT(*) OVER ()::int AS "total"
+        FROM "boxes" b
+        JOIN "locations" l ON l."id" = b."locationId"
+        WHERE b."tenantId" = ${tenantId}::uuid AND b."deletedAt" IS NULL
+          AND b."status" <> 'disposed'
+          AND l."tenantId" IS NOT NULL AND l."tenantId" <> b."tenantId"
+        ORDER BY b."boxNumber", b."id" LIMIT 10
+      `,
+      prisma.$queryRaw<FolderIssue[]>`
+        SELECT f."id", f."folderNumber", COUNT(*) OVER ()::int AS "total"
+        FROM "folders" f
+        JOIN "boxes" b ON b."id" = f."boxId"
+        WHERE f."tenantId" = ${tenantId}::uuid AND b."tenantId" <> f."tenantId"
+        ORDER BY f."folderNumber", f."id" LIMIT 10
+      `,
+      prisma.location.findMany({
+        where: { tenantId },
+        select: { id: true, parentId: true, fullPath: true, capacity: true, isActive: true },
+      }),
+    ]);
+
+    const counts = locations.length > 0 ? await prisma.box.groupBy({
+      by: ['locationId'],
+      where: { locationId: { in: locations.map((location) => location.id) }, deletedAt: null, status: { not: 'disposed' } },
+      _count: { _all: true },
+    }) : [];
+    const directCounts = new Map(counts.filter((row) => row.locationId).map((row) => [row.locationId!, row._count._all]));
+    const overCapacity = findOverCapacityLocations(locations, directCounts);
+
+    return {
+      unlocated: { total: unlocated[0]?.total ?? 0, boxes: unlocated.map(({ id, boxNumber }) => ({ id, boxNumber })) },
+      overCapacity: { total: overCapacity.length, locations: overCapacity.slice(0, 10) },
+      tenantMismatch: {
+        total: (foreignLocation[0]?.total ?? 0) + (foreignBoxFolders[0]?.total ?? 0),
+        boxes: foreignLocation.map(({ id, boxNumber }) => ({ id, boxNumber })),
+        folders: foreignBoxFolders.map(({ id, folderNumber }) => ({ id, folderNumber })),
+      },
+    };
   }
 
   async getHRFoldersByDepartment(tenantId: string) {
