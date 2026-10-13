@@ -8,11 +8,66 @@ const { BoxService, buildBoxWhereSql } = require('../dist/modules/boxes/box.serv
 const { billingService } = require('../dist/modules/pricing/billing.service.js');
 const { Prisma } = require('@prisma/client');
 const { bulkBoxReceiveSchema } = require('../../shared/src/validators/box.schema.ts');
+const { SerialScanQueue } = require('../../client/src/utils/serialScanQueue.ts');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
 const locationId = '08675a3a-8a69-477a-82f1-b52d74b97bde';
 const userId = '39b9500e-71b6-4fc4-bf3a-9a0a5f4b698b';
+
+test('serial scans wait for the previous lookup and ignore duplicate queued codes', async () => {
+  let releaseFirst;
+  const firstLookup = new Promise((resolve) => { releaseFirst = resolve; });
+  const processed = [];
+  const queue = new SerialScanQueue(async (code) => {
+    processed.push(code);
+    if (code === 'A') await firstLookup;
+  }, (error) => { throw error; });
+
+  assert.equal(queue.enqueue(' A '), true);
+  assert.equal(queue.enqueue('B'), true);
+  assert.equal(queue.enqueue('B'), false);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(processed, ['A']);
+  assert.equal(queue.enqueue('A'), false);
+  releaseFirst();
+  await queue.whenIdle();
+  assert.deepEqual(processed, ['A', 'B']);
+  assert.equal(queue.isBusy, false);
+});
+
+test('serial scan reset drops old queued codes but accepts scans for the new tenant', async () => {
+  let releaseFirst;
+  const firstLookup = new Promise((resolve) => { releaseFirst = resolve; });
+  const processed = [];
+  const queue = new SerialScanQueue(async (code) => {
+    processed.push(code);
+    if (code === 'A') await firstLookup;
+  }, (error) => { throw error; });
+
+  queue.enqueue('A');
+  await new Promise((resolve) => setImmediate(resolve));
+  queue.enqueue('B');
+  queue.clear();
+  queue.enqueue('C');
+  releaseFirst();
+  await queue.whenIdle();
+  assert.deepEqual(processed, ['A', 'C']);
+});
+
+test('one failed serial lookup does not block the following scans', async () => {
+  const processed = [];
+  const errors = [];
+  const queue = new SerialScanQueue(async (code) => {
+    processed.push(code);
+    if (code === 'A') throw new Error('Lookup failed');
+  }, (error) => errors.push(error.message));
+  queue.enqueue('A');
+  queue.enqueue('B');
+  await queue.whenIdle();
+  assert.deepEqual(processed, ['A', 'B']);
+  assert.deepEqual(errors, ['Lookup failed']);
+});
 
 function setup({ boxes = [{ id: boxId, boxNumber: 'K-2026-000001', status: 'active', locationId: null }], previousReceipts = [], updateCount = 1, billingError = false } = {}) {
   const service = new BoxService();

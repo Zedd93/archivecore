@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/hooks/useConfirm';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { SerialScanQueue } from '@/utils/serialScanQueue';
 
 interface MoveBox {
   id: string;
@@ -41,11 +42,22 @@ export default function WarehouseMovePage() {
   const [isMoving, setIsMoving] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const scanBusyRef = useRef(false);
+  const selectedBoxIdsRef = useRef(new Set<string>());
   const tenantRef = useRef(activeTenantId);
   const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
+  const processCodeRef = useRef<(code: string) => Promise<void>>(async () => {});
+  const scanErrorRef = useRef<(error: unknown) => void>(() => {});
+  const scanQueueRef = useRef<SerialScanQueue | null>(null);
+  scanQueueRef.current ??= new SerialScanQueue(
+    (code) => processCodeRef.current(code),
+    (error) => scanErrorRef.current(error),
+  );
+  scanErrorRef.current = (error) => showFeedback('error', getApiErrorMessage(error, t('common.genericError')));
 
   useEffect(() => {
     tenantRef.current = activeTenantId;
+    scanQueueRef.current?.clear();
+    selectedBoxIdsRef.current.clear();
     setBoxes([]);
     setDestination(null);
     setIsScanning(false);
@@ -97,10 +109,11 @@ export default function WarehouseMovePage() {
         allowCameraRetry(code);
         return;
       }
-      if (boxes.some((item) => item.id === box.id)) {
+      if (selectedBoxIdsRef.current.has(box.id)) {
         showFeedback('duplicate', t('warehouseMove.alreadyAdded'));
         return;
       }
+      selectedBoxIdsRef.current.add(box.id);
       setBoxes((current) => current.some((item) => item.id === box.id) ? current : [...current, box]);
       showFeedback('success', t('warehouseMove.boxAdded', { number: box.boxNumber }));
     } catch (error) {
@@ -113,16 +126,17 @@ export default function WarehouseMovePage() {
       setIsResolving(false);
     }
   };
+  processCodeRef.current = processCode;
 
   const handleCameraCode = (rawCode: string) => {
     const code = rawCode.trim();
-    if (scanBusyRef.current || !code || (lastCameraCodeRef.current.code === code && Date.now() < lastCameraCodeRef.current.retryAt)) return;
+    if (!code || (scanBusyRef.current && !scanQueueRef.current?.isBusy) || (lastCameraCodeRef.current.code === code && Date.now() < lastCameraCodeRef.current.retryAt)) return;
     lastCameraCodeRef.current = { code, retryAt: Number.POSITIVE_INFINITY };
-    void processCode(code);
+    scanQueueRef.current?.enqueue(code);
   };
 
   const handleMove = async () => {
-    if (!destination || boxes.length === 0 || isMoving) return;
+    if (!destination || boxes.length === 0 || isMoving || scanBusyRef.current || scanQueueRef.current?.isBusy) return;
     scanBusyRef.current = true;
     setIsScanning(false);
     const ids = boxes.map((box) => box.id);
@@ -144,6 +158,7 @@ export default function WarehouseMovePage() {
       toast.success(data.data.moved === 0
         ? t('warehouseMove.alreadyThere')
         : t('warehouseMove.moveSuccess', { count: data.data.moved }));
+      selectedBoxIdsRef.current.clear();
       setBoxes([]);
       setDestination(null);
       await Promise.all([
@@ -194,7 +209,7 @@ export default function WarehouseMovePage() {
         {scanFeedback && <div role="status" aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm font-semibold break-words ${scanFeedbackStyles[scanFeedback.kind]}`}>
           {t(`warehouseMove.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
         </div>}
-        <form onSubmit={(event) => { event.preventDefault(); if (isResolving) return; void processCode(manualCode); setManualCode(''); }}>
+        <form onSubmit={(event) => { event.preventDefault(); if (isResolving || scanBusyRef.current) return; scanQueueRef.current?.enqueue(manualCode); setManualCode(''); }}>
           <label htmlFor="warehouse-code" className="label-text">{t('warehouseMove.manualCode')}</label>
           <div className="flex flex-col sm:flex-row gap-2">
             <input id="warehouse-code" className="input-field font-mono" value={manualCode} onChange={(event) => setManualCode(event.target.value)} placeholder="AC:... / ACLOC:..." />
@@ -205,7 +220,7 @@ export default function WarehouseMovePage() {
 
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{t('warehouseMove.boxes', { count: boxes.length })}</h2>
-        <BoxPicker value={boxes} onChange={setBoxes} tenantId={activeTenantId} placeholder={t('warehouseMove.findBox')} showLocation showSelectedChips={false} />
+        <BoxPicker value={boxes} onChange={(next) => { selectedBoxIdsRef.current = new Set(next.map((box) => box.id)); setBoxes(next); }} tenantId={activeTenantId} placeholder={t('warehouseMove.findBox')} showLocation showSelectedChips={false} />
         {boxes.length === 0 ? <p className="text-sm text-gray-500">{t('warehouseMove.noBoxes')}</p> : (
           <ul className="divide-y divide-gray-100">
             {boxes.map((box) => (
@@ -215,7 +230,7 @@ export default function WarehouseMovePage() {
                   {box.title && <p className="text-sm text-gray-800 break-words">{box.title}</p>}
                   <p className="text-xs text-gray-500 break-words">{box.location?.fullPath || t('warehouseMove.noLocation')}</p>
                 </div>
-                <button type="button" className="p-2 text-gray-500 hover:text-red-600" onClick={() => setBoxes((current) => current.filter((item) => item.id !== box.id))} aria-label={`${t('common.remove')} ${box.boxNumber}`}><X size={18} /></button>
+                <button type="button" className="p-2 text-gray-500 hover:text-red-600" onClick={() => { selectedBoxIdsRef.current.delete(box.id); setBoxes((current) => current.filter((item) => item.id !== box.id)); }} aria-label={`${t('common.remove')} ${box.boxNumber}`}><X size={18} /></button>
               </li>
             ))}
           </ul>
@@ -237,7 +252,7 @@ export default function WarehouseMovePage() {
         <p className="text-sm text-gray-600 break-words">{destination?.fullPath || t('warehouseMove.noDestination')}</p>
       </section>
 
-      <button type="button" className="btn-primary w-full flex items-center justify-center gap-2" disabled={boxes.length === 0 || !destination || isMoving || isResolving} onClick={() => { void handleMove(); }}>
+      <button type="button" className="btn-primary w-full flex items-center justify-center gap-2" disabled={boxes.length === 0 || !destination || isMoving || isResolving || scanQueueRef.current?.isBusy} onClick={() => { void handleMove(); }}>
         {isMoving ? <Loader2 size={18} className="animate-spin" /> : <MoveRight size={18} />}
         {t('warehouseMove.moveCount', { count: boxes.length })}
       </button>

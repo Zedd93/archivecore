@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/hooks/useConfirm';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { SerialScanQueue } from '@/utils/serialScanQueue';
 
 interface ReceiveBox {
   id: string;
@@ -44,11 +45,22 @@ export default function WarehouseReceivePage() {
   const [isResolving, setIsResolving] = useState(false);
   const [isReceiving, setIsReceiving] = useState(false);
   const busyRef = useRef(false);
+  const selectedBoxIdsRef = useRef(new Set<string>());
   const tenantRef = useRef(activeTenantId);
   const lastCameraRef = useRef({ code: '', retryAt: 0 });
+  const processCodeRef = useRef<(code: string) => Promise<void>>(async () => {});
+  const scanErrorRef = useRef<(error: unknown) => void>(() => {});
+  const scanQueueRef = useRef<SerialScanQueue | null>(null);
+  scanQueueRef.current ??= new SerialScanQueue(
+    (code) => processCodeRef.current(code),
+    (error) => scanErrorRef.current(error),
+  );
+  scanErrorRef.current = (error) => showFeedback('error', getApiErrorMessage(error, t('common.genericError')));
 
   useEffect(() => {
     tenantRef.current = activeTenantId;
+    scanQueueRef.current?.clear();
+    selectedBoxIdsRef.current.clear();
     setBoxes([]);
     setDestination(null);
     setIsScanning(false);
@@ -86,7 +98,8 @@ export default function WarehouseReceivePage() {
       if (tenantRef.current !== activeTenantId) return;
       const box = (data.data as ReceiveBox[] | undefined)?.find((item) => item.qrCode === code && item.locationId === null && item.tenantId === activeTenantId);
       if (!box) { showFeedback('error', t('warehouseReceive.boxNotFound')); allowCameraRetry(code); return; }
-      if (boxes.some((item) => item.id === box.id)) { showFeedback('duplicate', t('warehouseReceive.duplicate')); return; }
+      if (selectedBoxIdsRef.current.has(box.id)) { showFeedback('duplicate', t('warehouseReceive.duplicate')); return; }
+      selectedBoxIdsRef.current.add(box.id);
       setBoxes((current) => current.some((item) => item.id === box.id) ? current : [...current, box]);
       showFeedback('success', t('warehouseReceive.boxAdded', { number: box.boxNumber }));
     } catch (error) {
@@ -99,16 +112,17 @@ export default function WarehouseReceivePage() {
       setIsResolving(false);
     }
   };
+  processCodeRef.current = processCode;
 
   const handleCameraCode = (rawCode: string) => {
     const code = rawCode.trim();
-    if (!code || busyRef.current || (lastCameraRef.current.code === code && Date.now() < lastCameraRef.current.retryAt)) return;
+    if (!code || (busyRef.current && !scanQueueRef.current?.isBusy) || (lastCameraRef.current.code === code && Date.now() < lastCameraRef.current.retryAt)) return;
     lastCameraRef.current = { code, retryAt: Number.POSITIVE_INFINITY };
-    void processCode(code);
+    scanQueueRef.current?.enqueue(code);
   };
 
   const receive = async () => {
-    if (!destination || boxes.length === 0 || busyRef.current) return;
+    if (!destination || boxes.length === 0 || busyRef.current || scanQueueRef.current?.isBusy) return;
     const ids = boxes.map((box) => box.id);
     busyRef.current = true;
     setIsScanning(false);
@@ -124,6 +138,7 @@ export default function WarehouseReceivePage() {
       const { data } = await api.post('/boxes/bulk-receive', { ids, locationId: destination.id, notes: notes.trim() || undefined });
       if (data.data?.received !== ids.length) throw new Error(t('warehouseReceive.incomplete'));
       toast.success(t('warehouseReceive.success', { count: ids.length }));
+      selectedBoxIdsRef.current.clear();
       setBoxes([]);
       setDestination(null);
       setNotes('');
@@ -161,7 +176,7 @@ export default function WarehouseReceivePage() {
       {scanFeedback && <div role="status" aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm font-semibold break-words ${scanFeedbackStyles[scanFeedback.kind]}`}>
         {t(`warehouseReceive.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
       </div>}
-      <form onSubmit={(event) => { event.preventDefault(); if (!isResolving) { void processCode(manualCode); setManualCode(''); } }}>
+      <form onSubmit={(event) => { event.preventDefault(); if (!isResolving && !busyRef.current) { scanQueueRef.current?.enqueue(manualCode); setManualCode(''); } }}>
         <label htmlFor="receive-code" className="label-text">{t('warehouseReceive.manualCode')}</label>
         <div className="flex flex-col sm:flex-row gap-2">
           <input id="receive-code" className="input-field font-mono" value={manualCode} onChange={(event) => setManualCode(event.target.value)} placeholder="AC:... / ACLOC:..." />
@@ -171,11 +186,11 @@ export default function WarehouseReceivePage() {
     </section>
     <section className="card space-y-3">
       <h2 className="font-semibold">{t('warehouseReceive.boxes', { count: boxes.length })}</h2>
-      <BoxPicker value={boxes} onChange={setBoxes} tenantId={activeTenantId} unlocatedOnly placeholder={t('warehouseReceive.findBox')} showSelectedChips={false} />
+      <BoxPicker value={boxes} onChange={(next) => { selectedBoxIdsRef.current = new Set(next.map((box) => box.id)); setBoxes(next); }} tenantId={activeTenantId} unlocatedOnly placeholder={t('warehouseReceive.findBox')} showSelectedChips={false} />
       {boxes.length === 0 ? <p className="text-sm text-gray-500">{t('warehouseReceive.noBoxes')}</p> : <ul className="divide-y divide-gray-100">
         {boxes.map((box) => <li key={box.id} className="py-2 flex items-start justify-between gap-3 text-sm">
           <div className="min-w-0"><Link to={`/boxes/${box.id}`} className="font-medium text-primary-700 hover:underline">{box.boxNumber}</Link><p className="break-words">{box.title}</p></div>
-          <button type="button" className="p-2 text-gray-500 hover:text-red-600" onClick={() => setBoxes((current) => current.filter((item) => item.id !== box.id))} aria-label={`${t('common.remove')} ${box.boxNumber}`}><X size={18} /></button>
+          <button type="button" className="p-2 text-gray-500 hover:text-red-600" onClick={() => { selectedBoxIdsRef.current.delete(box.id); setBoxes((current) => current.filter((item) => item.id !== box.id)); }} aria-label={`${t('common.remove')} ${box.boxNumber}`}><X size={18} /></button>
         </li>)}
       </ul>}
     </section>
@@ -186,7 +201,7 @@ export default function WarehouseReceivePage() {
       <label htmlFor="receive-notes" className="label-text">{t('warehouseReceive.notes')}</label>
       <textarea id="receive-notes" className="input-field w-full" rows={2} maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} />
     </section>
-    <button type="button" className="btn-primary w-full" disabled={!destination || boxes.length === 0 || isReceiving || isResolving} onClick={() => { void receive(); }}>
+    <button type="button" className="btn-primary w-full" disabled={!destination || boxes.length === 0 || isReceiving || isResolving || scanQueueRef.current?.isBusy} onClick={() => { void receive(); }}>
       {isReceiving ? <Loader2 size={18} className="animate-spin" /> : <PackageCheck size={18} />}{t('warehouseReceive.receiveCount', { count: boxes.length })}
     </button>
     {ConfirmDialogElement}
