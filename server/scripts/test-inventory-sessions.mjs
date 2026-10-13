@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const { generateQrData } = require('../../shared/src/utils/qr.ts');
 const { prisma } = require('../dist/config/database.js');
 const { InventoryService, inventoryDiscrepancies, resolvedInventoryDiscrepancies } = require('../dist/modules/inventory/inventory.service.js');
+const { SerialScanQueue } = require('../../client/src/utils/serialScanQueue.ts');
 
 const sessionId = '52b90a57-849b-4d21-b62f-08cdfebcf383';
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
@@ -13,6 +14,33 @@ const userId = '39b9500e-71b6-4fc4-bf3a-9a0a5f4b698b';
 const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
 const scanId = 'ad1b10ae-cb3a-40eb-96ab-5ba4f8c66f39';
 const code = generateQrData('DOX', 'K-2026-000001');
+
+test('serial inventory scans use the session opened by an earlier location scan', async () => {
+  let releaseLocation;
+  const locationLookup = new Promise((resolve) => { releaseLocation = resolve; });
+  let activeSession = 'old-session';
+  const saved = [];
+  const queue = new SerialScanQueue(async (value) => {
+    if (value === 'location:new') {
+      await locationLookup;
+      activeSession = 'new-session';
+      return;
+    }
+    saved.push({ session: activeSession, code: value });
+  }, (error) => { throw error; });
+
+  queue.enqueue('location:new');
+  await new Promise((resolve) => setImmediate(resolve));
+  queue.enqueue('box:1');
+  queue.enqueue('box:2');
+  assert.deepEqual(saved, []);
+  releaseLocation();
+  await queue.whenIdle();
+  assert.deepEqual(saved, [
+    { session: 'new-session', code: 'box:1' },
+    { session: 'new-session', code: 'box:2' },
+  ]);
+});
 
 function setup({ status = 'in_progress', boxExists = true, duplicate = false, latestScanId = scanId } = {}) {
   const calls = { created: [], voided: [], finished: [] };

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { escapeInventoryCsvCell, reconcileInventory, type InventoryBox } from '@/utils/inventory';
+import { SerialScanQueue } from '@/utils/serialScanQueue';
 
 interface Snapshot {
   location: { id: string; fullPath: string };
@@ -69,6 +70,7 @@ export default function InventoryPage() {
   const [session, setSession] = useState<InventorySession | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [isQueueBusy, setIsQueueBusy] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState('');
@@ -76,9 +78,37 @@ export default function InventoryPage() {
   const { feedback: scanFeedback, soundEnabled, startCameraSound, toggleSound, showFeedback: showScanFeedback, clearFeedback } = useScanFeedback(isScanning);
   const busyRef = useRef(false);
   const lastCameraCodeRef = useRef('');
+  const sessionRef = useRef<InventorySession | null>(null);
+  const tenantRef = useRef(activeTenantId);
+  const processCodeRef = useRef<(code: string) => Promise<void>>(async () => {});
+  const scanErrorRef = useRef<(error: unknown) => void>(() => {});
+  const scanQueueRef = useRef<SerialScanQueue | null>(null);
+  const queueIdleWatcherRef = useRef(false);
+  scanQueueRef.current ??= new SerialScanQueue(
+    (code) => processCodeRef.current(code),
+    (error) => scanErrorRef.current(error),
+  );
+  tenantRef.current = activeTenantId;
+  scanErrorRef.current = (error) => showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
   const snapshot = session?.snapshot || null;
   const scanned = session?.scanned || [];
   const isFinished = session?.status === 'completed';
+
+  useEffect(() => {
+    scanQueueRef.current?.clear();
+    sessionRef.current = null;
+    setSession(null);
+    setIsScanning(false);
+    setManualCode('');
+    setHistoryPage(1);
+    lastCameraCodeRef.current = '';
+    clearFeedback();
+  }, [activeTenantId, clearFeedback]);
+
+  const applySession = (next: InventorySession) => {
+    sessionRef.current = next;
+    setSession(next);
+  };
 
   const { data: history, isLoading: isHistoryLoading, isError: isHistoryError, refetch: refetchHistory } = useQuery<SessionHistory>({
     queryKey: ['inventory-sessions', activeTenantId, historyPage],
@@ -90,26 +120,29 @@ export default function InventoryPage() {
   });
   const recentSessions = history?.sessions || [];
 
-  const startSnapshot = async (locationId: string, force = false) => {
-    if (!locationId || busyRef.current) return false;
-    if (!force && session?.status === 'in_progress' && snapshot?.location.id === locationId) return true;
-    if (session?.status === 'in_progress' && scanned.length > 0
+  const startSnapshot = async (locationId: string, force = false, fromQueuedScan = false) => {
+    if (!locationId || busyRef.current || (!fromQueuedScan && scanQueueRef.current?.isBusy)) return false;
+    const currentSession = sessionRef.current;
+    if (!force && currentSession?.status === 'in_progress' && currentSession.snapshot.location.id === locationId) return true;
+    if (currentSession?.status === 'in_progress' && currentSession.scanned.length > 0
       && !window.confirm(t('inventory.replaceConfirm'))) return false;
     busyRef.current = true;
     setIsBusy(true);
     try {
       const { data } = await api.post('/inventory/sessions', { locationId });
-      setSession(data.data);
+      if (tenantRef.current !== activeTenantId) return false;
+      applySession(data.data);
       setSelectedDiscrepancy('');
       setResolutionNote('');
       setManualCode('');
       clearFeedback();
       setHistoryPage(1);
       await queryClient.invalidateQueries({ queryKey: ['inventory-sessions', activeTenantId] });
+      if (tenantRef.current !== activeTenantId) return false;
       toast.success(t('inventory.started'));
       return true;
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) toast.error(getApiErrorMessage(error, t('common.genericError')));
       return false;
     } finally {
       busyRef.current = false;
@@ -118,20 +151,21 @@ export default function InventoryPage() {
   };
 
   const openSession = async (id: string) => {
-    if (busyRef.current) return;
+    if (busyRef.current || scanQueueRef.current?.isBusy) return;
     busyRef.current = true;
     setIsBusy(true);
     setIsScanning(false);
     try {
       const { data } = await api.get(`/inventory/sessions/${encodeURIComponent(id)}`);
-      setSession(data.data);
+      if (tenantRef.current !== activeTenantId) return;
+      applySession(data.data);
       setSelectedDiscrepancy('');
       setResolutionNote('');
       setManualCode('');
       clearFeedback();
       lastCameraCodeRef.current = '';
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) toast.error(getApiErrorMessage(error, t('common.genericError')));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -144,52 +178,68 @@ export default function InventoryPage() {
     const locationQr = parseLocationQrData(code);
     if (locationQr) {
       if (!locationQr.isValid) { showScanFeedback('error', t('inventory.invalidCode')); return; }
-      if (await startSnapshot(locationQr.locationId)) showScanFeedback('success', t('inventory.locationScanned'));
+      if (await startSnapshot(locationQr.locationId, false, true)) showScanFeedback('success', t('inventory.locationScanned'));
       return;
     }
-    if (isFinished) { showScanFeedback('error', t('inventory.finishedHint')); return; }
+    const currentSession = sessionRef.current;
+    if (currentSession?.status === 'completed') { showScanFeedback('error', t('inventory.finishedHint')); return; }
     if (!parseQrData(code)?.isValid) { showScanFeedback('error', t('inventory.invalidCode')); return; }
-    if (!snapshot || !session) { showScanFeedback('error', t('inventory.chooseLocationFirst')); return; }
-    const existing = scanned.find((box) => box.qrCode === code);
+    if (!currentSession) { showScanFeedback('error', t('inventory.chooseLocationFirst')); return; }
+    const existing = currentSession.scanned.find((box) => box.qrCode === code);
     if (existing) { showScanFeedback('duplicate', t('inventory.duplicateBox', { number: existing.boxNumber })); return; }
 
     busyRef.current = true;
     setIsBusy(true);
     try {
-      const { data } = await api.post(`/inventory/sessions/${session.id}/scans`, { code });
+      const { data } = await api.post(`/inventory/sessions/${currentSession.id}/scans`, { code });
+      if (tenantRef.current !== activeTenantId || sessionRef.current?.id !== currentSession.id) return;
       const updated = data.data as InventorySession;
-      setSession(updated);
+      applySession(updated);
       const box = updated.scanned.find((item) => item.qrCode === code);
       if (!box) throw new Error(t('common.genericError'));
-      const isExpected = snapshot.expected.some((item) => item.id === box.id);
+      const isExpected = currentSession.snapshot.expected.some((item) => item.id === box.id);
       showScanFeedback(isExpected ? 'success' : 'warning', t(isExpected ? 'inventory.scannedBox' : 'inventory.discrepancyBox', { number: box.boxNumber }));
     } catch (error) {
-      showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
     }
   };
+  processCodeRef.current = processCode;
+
+  const enqueueCode = (code: string) => {
+    const queue = scanQueueRef.current;
+    if (!queue?.enqueue(code)) return false;
+    setIsQueueBusy(true);
+    if (!queueIdleWatcherRef.current) {
+      queueIdleWatcherRef.current = true;
+      void queue.whenIdle().then(() => {
+        queueIdleWatcherRef.current = false;
+        setIsQueueBusy(false);
+      });
+    }
+    return true;
+  };
 
   const handleCameraCode = (code: string) => {
     const trimmed = code.trim();
-    if (!trimmed || busyRef.current || lastCameraCodeRef.current === trimmed) return;
-    lastCameraCodeRef.current = trimmed;
-    void processCode(trimmed);
+    if (!trimmed || (busyRef.current && !scanQueueRef.current?.isBusy) || lastCameraCodeRef.current === trimmed) return;
+    if (enqueueCode(trimmed)) lastCameraCodeRef.current = trimmed;
   };
 
   const result = snapshot ? reconcileInventory(snapshot.location.id, snapshot.expected, scanned) : null;
 
   const undoLast = async () => {
-    if (!session || scanned.length === 0 || busyRef.current) return;
+    if (!session || scanned.length === 0 || busyRef.current || scanQueueRef.current?.isBusy) return;
     busyRef.current = true;
     setIsBusy(true);
     try {
       const last = scanned[scanned.length - 1];
       const { data } = await api.post(`/inventory/sessions/${session.id}/scans/${last.scanId}/void`);
-      setSession(data.data);
+      if (tenantRef.current === activeTenantId) applySession(data.data);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) toast.error(getApiErrorMessage(error, t('common.genericError')));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -197,18 +247,20 @@ export default function InventoryPage() {
   };
 
   const finishSession = async () => {
-    if (!session || !result || busyRef.current) return;
+    if (!session || !result || busyRef.current || scanQueueRef.current?.isBusy) return;
     if (result.missing.length > 0 && !window.confirm(t('inventory.finishConfirm', { count: result.missing.length }))) return;
     busyRef.current = true;
     setIsBusy(true);
     setIsScanning(false);
     try {
       const { data } = await api.post(`/inventory/sessions/${session.id}/finish`);
-      setSession(data.data);
+      if (tenantRef.current !== activeTenantId) return;
+      applySession(data.data);
       await queryClient.invalidateQueries({ queryKey: ['inventory-sessions', activeTenantId] });
+      if (tenantRef.current !== activeTenantId) return;
       toast.success(t('inventory.finished'));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) toast.error(getApiErrorMessage(error, t('common.genericError')));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -224,12 +276,13 @@ export default function InventoryPage() {
       const { data } = await api.post(`/inventory/sessions/${session.id}/discrepancies/${item.boxId}/${item.kind}/resolution`, {
         action, note: resolutionNote.trim(),
       });
-      setSession(data.data);
+      if (tenantRef.current !== activeTenantId) return;
+      applySession(data.data);
       setSelectedDiscrepancy('');
       setResolutionNote('');
       toast.success(t('inventory.resolutionSaved'));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) toast.error(getApiErrorMessage(error, t('common.genericError')));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -302,7 +355,7 @@ export default function InventoryPage() {
           <ul className="divide-y divide-gray-100 max-h-60 overflow-y-auto">
             {recentSessions.map((item) => (
               <li key={item.id}>
-                <button type="button" className={`w-full py-2 text-left text-sm hover:text-primary-700 ${session?.id === item.id ? 'font-semibold text-primary-700' : ''}`} disabled={isBusy} onClick={() => { void openSession(item.id); }}>
+                <button type="button" className={`w-full py-2 text-left text-sm hover:text-primary-700 ${session?.id === item.id ? 'font-semibold text-primary-700' : ''}`} disabled={isBusy || isQueueBusy} onClick={() => { void openSession(item.id); }}>
                   <span className="block break-words">{item.locationPath}</span>
                   <span className="text-xs text-gray-500">{new Date(item.startedAt).toLocaleString()} · {t(`inventory.status.${item.status}`)}</span>
                 </button>
@@ -347,11 +400,11 @@ export default function InventoryPage() {
             {t(`inventory.scanResult.${scanFeedback.kind}`)}: {scanFeedback.message}
           </div>
         )}
-        <form onSubmit={(event) => { event.preventDefault(); void processCode(manualCode); setManualCode(''); }}>
+        <form onSubmit={(event) => { event.preventDefault(); if (busyRef.current && !scanQueueRef.current?.isBusy) return; if (enqueueCode(manualCode)) setManualCode(''); }}>
           <label htmlFor="inventory-code" className="label-text">{t('inventory.manualCode')}</label>
           <div className="flex flex-col sm:flex-row gap-2">
             <input id="inventory-code" className="input-field font-mono" value={manualCode} onChange={(event) => setManualCode(event.target.value)} placeholder="ACLOC:... / AC:..." />
-            <button type="submit" className="btn-secondary shrink-0" disabled={!manualCode.trim() || isBusy}>{isBusy ? <Loader2 size={16} className="animate-spin" /> : null}{t('inventory.addCode')}</button>
+            <button type="submit" className="btn-secondary shrink-0" disabled={!manualCode.trim() || (isBusy && !isQueueBusy)}>{isBusy ? <Loader2 size={16} className="animate-spin" /> : null}{t('inventory.addCode')}</button>
           </div>
         </form>
         {!snapshot && <p className="text-sm text-gray-600">{t('inventory.chooseLocationFirst')}</p>}
@@ -364,10 +417,10 @@ export default function InventoryPage() {
             ))}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
-            {!isFinished ? <button type="button" className="btn-primary" disabled={isBusy} onClick={() => { void finishSession(); }}><Check size={16} />{t('inventory.finish')}</button> : <button type="button" className="btn-secondary" onClick={downloadReport}><Download size={16} />{t('inventory.download')}</button>}
-            <button type="button" className="btn-secondary" disabled={isBusy || !session} onClick={() => { if (session) void openSession(session.id); }}><RotateCcw size={16} />{t('inventory.refresh')}</button>
-            <button type="button" className="btn-secondary" disabled={isBusy} onClick={() => { void startSnapshot(snapshot.location.id, true); }}><RotateCcw size={16} />{t('inventory.restart')}</button>
-            {!isFinished && <button type="button" className="btn-secondary" onClick={() => { void undoLast(); }} disabled={scanned.length === 0 || isBusy}><X size={16} />{t('inventory.undoLast')}</button>}
+            {!isFinished ? <button type="button" className="btn-primary" disabled={isBusy || isQueueBusy} onClick={() => { void finishSession(); }}><Check size={16} />{t('inventory.finish')}</button> : <button type="button" className="btn-secondary" onClick={downloadReport}><Download size={16} />{t('inventory.download')}</button>}
+            <button type="button" className="btn-secondary" disabled={isBusy || isQueueBusy || !session} onClick={() => { if (session) void openSession(session.id); }}><RotateCcw size={16} />{t('inventory.refresh')}</button>
+            <button type="button" className="btn-secondary" disabled={isBusy || isQueueBusy} onClick={() => { void startSnapshot(snapshot.location.id, true); }}><RotateCcw size={16} />{t('inventory.restart')}</button>
+            {!isFinished && <button type="button" className="btn-secondary" onClick={() => { void undoLast(); }} disabled={scanned.length === 0 || isBusy || isQueueBusy}><X size={16} />{t('inventory.undoLast')}</button>}
           </div>
           <p className="text-sm text-amber-700">{t(isFinished ? 'inventory.finishedWarning' : 'inventory.draftWarning')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
