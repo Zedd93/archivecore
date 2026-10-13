@@ -56,7 +56,7 @@
     "exportError": "Export error",
     "exportDataError": "Data export error",
     "genericError": "An error occurred",
-    "offlineWarning": "Connection lost. Warehouse operations are not saved offline; check the network before scanning again."
+    "offlineWarning": "Connection lost. You can save QR scans in an open receive or move page; verify them and confirm the operation after reconnecting."
   },
 
   "auth": {
@@ -1433,6 +1433,16 @@
     "noPermission": "You do not have permission to work in the warehouse."
   },
 
+  "offlineScans": {
+    "title": "Scans awaiting verification ({{count}})",
+    "description": "Scans are saved only on this device. Verify them with the server after reconnecting. Receiving or moving happens only after separate confirmation.",
+    "added": "Scan saved for later verification",
+    "duplicate": "This scan is already awaiting verification",
+    "unavailable": "Could not save this scan on the device (limit 200 or storage unavailable)",
+    "verify": "Verify pending scans",
+    "verified": "Verified with the server",
+    "remove": "Remove pending scan {{code}}"
+  },
   "warehouseReceive": {
     "title": "Receive boxes by QR",
     "subtitle": "Scan boxes without a recorded location, choose a shelf and confirm intake. The operation records custody and a billing event.",

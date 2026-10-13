@@ -56,7 +56,7 @@
     "exportError": "Błąd eksportu",
     "exportDataError": "Błąd eksportu danych",
     "genericError": "Wystąpił błąd",
-    "offlineWarning": "Brak połączenia. Operacje magazynowe nie są zapisywane offline; sprawdź sieć przed kolejnym skanem."
+    "offlineWarning": "Brak połączenia. W otwartym widoku przyjęcia lub przenoszenia możesz zapisać skany QR; po odzyskaniu sieci zweryfikuj je i potwierdź operację."
   },
 
   "auth": {
@@ -1433,6 +1433,16 @@
     "noPermission": "Nie masz uprawnień do pracy w magazynie."
   },
 
+  "offlineScans": {
+    "title": "Skany oczekujące na sprawdzenie ({{count}})",
+    "description": "Skany zapisano tylko na tym urządzeniu. Po powrocie połączenia sprawdź je na serwerze. Przyjęcie lub przeniesienie nastąpi dopiero po osobnym potwierdzeniu.",
+    "added": "Zapisano skan do późniejszego sprawdzenia",
+    "duplicate": "Ten skan już oczekuje na sprawdzenie",
+    "unavailable": "Nie udało się zapisać skanu na urządzeniu (limit 200 lub brak miejsca)",
+    "verify": "Sprawdź oczekujące skany",
+    "verified": "Sprawdzono na serwerze",
+    "remove": "Usuń oczekujący skan {{code}}"
+  },
   "warehouseReceive": {
     "title": "Przyjęcie kartonów przez QR",
     "subtitle": "Zeskanuj kartony jeszcze nieprzypisane do lokalizacji, wybierz półkę i potwierdź przyjęcie. Operacja zapisuje historię oraz pozycję rozliczeniową.",

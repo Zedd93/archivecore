@@ -49,6 +49,9 @@ jobs:
       - name: Verify offline PWA fallback
         run: npm run test:offline-shell
 
+      - name: Verify offline warehouse scan drafts
+        run: npm run test:offline-warehouse-scans
+
       - name: Verify legal hold and disposal safeguards
         run: npm run test:legal-hold
 

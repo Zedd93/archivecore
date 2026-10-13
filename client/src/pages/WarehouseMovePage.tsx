@@ -5,15 +5,18 @@ import { Link } from 'react-router-dom';
 import { Camera, Loader2, MapPin, MoveRight, Volume2, VolumeX, X } from 'lucide-react';
 import { parseLocationQrData, parseQrData } from '@archivecore/shared';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import api from '@/services/api';
 import BoxPicker from '@/components/ui/BoxPicker';
 import LocationPicker from '@/components/ui/LocationPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
+import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/hooks/useConfirm';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { SerialScanQueue } from '@/utils/serialScanQueue';
+import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
 
 interface MoveBox {
   id: string;
@@ -33,6 +36,7 @@ export default function WarehouseMovePage() {
   const queryClient = useQueryClient();
   const { confirm, ConfirmDialogElement } = useConfirm();
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'move');
   const canMove = hasPermission('box.move') && hasPermission('box.read') && hasPermission('location.read');
   const [boxes, setBoxes] = useState<MoveBox[]>([]);
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -45,11 +49,11 @@ export default function WarehouseMovePage() {
   const selectedBoxIdsRef = useRef(new Set<string>());
   const tenantRef = useRef(activeTenantId);
   const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
-  const processCodeRef = useRef<(code: string) => Promise<void>>(async () => {});
+  const processCodeRef = useRef<(code: string) => Promise<boolean>>(async () => false);
   const scanErrorRef = useRef<(error: unknown) => void>(() => {});
   const scanQueueRef = useRef<SerialScanQueue | null>(null);
   scanQueueRef.current ??= new SerialScanQueue(
-    (code) => processCodeRef.current(code),
+    async (code) => { await processCodeRef.current(code); },
     (error) => scanErrorRef.current(error),
   );
   scanErrorRef.current = (error) => showFeedback('error', getApiErrorMessage(error, t('common.genericError')));
@@ -69,9 +73,25 @@ export default function WarehouseMovePage() {
     if (lastCameraCodeRef.current.code === code) lastCameraCodeRef.current.retryAt = Date.now() + 5000;
   };
 
-  const processCode = async (rawCode: string) => {
+  const stageCode = (code: string): boolean => {
+    if (!parseLocationQrData(code)?.isValid && !parseQrData(code)?.isValid) {
+      showFeedback('error', t('warehouseMove.invalidCode'));
+      allowCameraRetry(code);
+      return false;
+    }
+    const result = offlineScans.stage(code);
+    showFeedback(result === 'unavailable' ? 'error' : 'warning', t(`offlineScans.${result}`));
+    if (result === 'unavailable') allowCameraRetry(code);
+    return result !== 'unavailable';
+  };
+
+  const processCode = async (rawCode: string): Promise<boolean> => {
     const code = rawCode.trim();
-    if (!code || scanBusyRef.current || !activeTenantId) return;
+    if (!code || scanBusyRef.current || !activeTenantId) return false;
+    if (!navigator.onLine) {
+      stageCode(code);
+      return false;
+    }
     scanBusyRef.current = true;
     setIsResolving(true);
     try {
@@ -80,47 +100,53 @@ export default function WarehouseMovePage() {
         if (!locationQr.isValid) {
           showFeedback('error', t('warehouseMove.invalidCode'));
           allowCameraRetry(code);
-          return;
+          return false;
         }
         const { data } = await api.get(`/locations/${encodeURIComponent(locationQr.locationId)}`);
         const location = data.data;
-        if (tenantRef.current !== activeTenantId) return;
+        if (tenantRef.current !== activeTenantId) return false;
         if (location?.id !== locationQr.locationId || !location.isActive || !['shelf', 'level', 'slot'].includes(location.type)) {
           showFeedback('error', t('warehouseMove.invalidDestination'));
           allowCameraRetry(code);
-          return;
+          return false;
         }
         setDestination({ id: location.id, fullPath: location.fullPath });
         showFeedback('success', t('warehouseMove.locationScanned', { path: location.fullPath }));
-        return;
+        return true;
       }
 
       const boxQr = parseQrData(code);
       if (!boxQr?.isValid) {
         showFeedback('error', t('warehouseMove.invalidCode'));
         allowCameraRetry(code);
-        return;
+        return false;
       }
       const { data } = await api.get('/boxes', { params: { search: code, limit: 10 } });
-      if (tenantRef.current !== activeTenantId) return;
+      if (tenantRef.current !== activeTenantId) return false;
       const box = (data.data as Array<MoveBox & { qrCode: string }> | undefined)?.find((item) => item.qrCode === code);
       if (!box) {
         showFeedback('error', t('warehouseMove.boxNotFound'));
         allowCameraRetry(code);
-        return;
+        return false;
       }
       if (selectedBoxIdsRef.current.has(box.id)) {
         showFeedback('duplicate', t('warehouseMove.alreadyAdded'));
-        return;
+        return true;
       }
       selectedBoxIdsRef.current.add(box.id);
       setBoxes((current) => current.some((item) => item.id === box.id) ? current : [...current, box]);
       showFeedback('success', t('warehouseMove.boxAdded', { number: box.boxNumber }));
+      return true;
     } catch (error) {
       if (tenantRef.current === activeTenantId) {
+        if (!navigator.onLine || (axios.isAxiosError(error) && !error.response && error.code !== 'ERR_CANCELED')) {
+          stageCode(code);
+          return false;
+        }
         showFeedback('error', getApiErrorMessage(error, t('common.genericError')));
         allowCameraRetry(code);
       }
+      return false;
     } finally {
       scanBusyRef.current = false;
       setIsResolving(false);
@@ -136,7 +162,7 @@ export default function WarehouseMovePage() {
   };
 
   const handleMove = async () => {
-    if (!destination || boxes.length === 0 || isMoving || scanBusyRef.current || scanQueueRef.current?.isBusy) return;
+    if (!offlineScans.online || !offlineScans.allVerified || !destination || boxes.length === 0 || isMoving || scanBusyRef.current || scanQueueRef.current?.isBusy) return;
     scanBusyRef.current = true;
     setIsScanning(false);
     const ids = boxes.map((box) => box.id);
@@ -158,6 +184,7 @@ export default function WarehouseMovePage() {
       toast.success(data.data.moved === 0
         ? t('warehouseMove.alreadyThere')
         : t('warehouseMove.moveSuccess', { count: data.data.moved }));
+      offlineScans.clear();
       selectedBoxIdsRef.current.clear();
       setBoxes([]);
       setDestination(null);
@@ -218,6 +245,9 @@ export default function WarehouseMovePage() {
         </form>
       </section>
 
+      <OfflineScanPanel codes={offlineScans.codes} verifiedCodes={offlineScans.verifiedCodes} online={offlineScans.online} syncing={offlineScans.syncing}
+        onRemove={offlineScans.remove} onSync={() => { if (!scanBusyRef.current && !scanQueueRef.current?.isBusy) void offlineScans.verify(processCode); }} />
+
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{t('warehouseMove.boxes', { count: boxes.length })}</h2>
         <BoxPicker value={boxes} onChange={(next) => { selectedBoxIdsRef.current = new Set(next.map((box) => box.id)); setBoxes(next); }} tenantId={activeTenantId} placeholder={t('warehouseMove.findBox')} showLocation showSelectedChips={false} />
@@ -252,7 +282,7 @@ export default function WarehouseMovePage() {
         <p className="text-sm text-gray-600 break-words">{destination?.fullPath || t('warehouseMove.noDestination')}</p>
       </section>
 
-      <button type="button" className="btn-primary w-full flex items-center justify-center gap-2" disabled={boxes.length === 0 || !destination || isMoving || isResolving || scanQueueRef.current?.isBusy} onClick={() => { void handleMove(); }}>
+      <button type="button" className="btn-primary w-full flex items-center justify-center gap-2" disabled={!offlineScans.online || !offlineScans.allVerified || offlineScans.syncing || boxes.length === 0 || !destination || isMoving || isResolving || scanQueueRef.current?.isBusy} onClick={() => { void handleMove(); }}>
         {isMoving ? <Loader2 size={18} className="animate-spin" /> : <MoveRight size={18} />}
         {t('warehouseMove.moveCount', { count: boxes.length })}
       </button>
