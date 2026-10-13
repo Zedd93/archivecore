@@ -41,6 +41,7 @@
     "test:warehouse-idempotency": "node --import tsx --test server/scripts/test-warehouse-idempotency.mjs",
     "test:legal-hold": "node --import tsx --test server/scripts/test-legal-hold.mjs",
     "test:disposal-evidence": "node --test server/scripts/test-disposal-evidence.mjs",
+    "test:order-handover-photos": "node --test server/scripts/test-order-handover-photos.mjs",
     "test:order-scans": "node --import tsx --test server/scripts/test-order-scans.mjs",
     "test:location-capacity": "node --import tsx --test server/scripts/test-location-capacity.mjs",
     "test:storage-health": "node --import tsx --test server/scripts/test-storage-health.mjs",

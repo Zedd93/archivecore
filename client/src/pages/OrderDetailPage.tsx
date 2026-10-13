@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { Fragment, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +48,17 @@ interface OrderPickScanItem {
 
 type BoxCondition = '' | 'intact' | 'damaged' | 'unverified';
 type HandoverBoxCheck = { condition: BoxCondition; sealNumber: string; conditionNote: string };
+type HandoverPhoto = {
+  id: string;
+  boxId: string | null;
+  box: { boxNumber: string } | null;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  checksumSha256: string;
+  uploadedAt: string;
+  uploadedBy: { firstName: string; lastName: string };
+};
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -58,6 +69,11 @@ export default function OrderDetailPage() {
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'issue', id || '');
   const { data: order, isLoading } = useDetail('order', '/orders', id);
+  const { data: handoverPhotos = [], isLoading: photosLoading, isError: photosError } = useQuery<HandoverPhoto[]>({
+    queryKey: ['order-handover-photos', activeTenantId, id],
+    queryFn: async () => { const { data } = await api.get(`/orders/${id}/handover/photos`); return data.data; },
+    enabled: Boolean(id && order?.handoverProof),
+  });
   const patchOrder = usePatch(
     ['order', 'orders', 'warehouse-tasks', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
     t('orders.detail.statusChanged')
@@ -76,6 +92,11 @@ export default function OrderDetailPage() {
   const [uploadingScan, setUploadingScan] = useState(false);
   const [downloadingScan, setDownloadingScan] = useState<string | null>(null);
   const [showHandover, setShowHandover] = useState(false);
+  const [handoverPhotoFile, setHandoverPhotoFile] = useState<File | null>(null);
+  const [handoverPhotoBoxId, setHandoverPhotoBoxId] = useState('');
+  const [uploadingHandoverPhoto, setUploadingHandoverPhoto] = useState(false);
+  const [downloadingHandoverPhoto, setDownloadingHandoverPhoto] = useState<string | null>(null);
+  const handoverPhotoInputRef = useRef<HTMLInputElement>(null);
   const [recipientName, setRecipientName] = useState('');
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [handoverLocation, setHandoverLocation] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
@@ -386,6 +407,51 @@ export default function OrderDetailPage() {
       toast.error(await getApiErrorMessageAsync(error, t('orders.detail.scanDownloadError')));
     } finally {
       setDownloadingScan(null);
+    }
+  };
+
+  const uploadHandoverPhoto = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id || !handoverPhotoFile || uploadingHandoverPhoto) return;
+    if (!['image/jpeg', 'image/png'].includes(handoverPhotoFile.type) || handoverPhotoFile.size > 5 * 1024 * 1024) {
+      toast.error(t('orders.detail.handoverPhotoInvalid'));
+      return;
+    }
+    setUploadingHandoverPhoto(true);
+    try {
+      const payload = new FormData();
+      payload.append('file', handoverPhotoFile);
+      if (handoverPhotoBoxId) payload.append('boxId', handoverPhotoBoxId);
+      await api.post(`/orders/${id}/handover/photos`, payload);
+      setHandoverPhotoFile(null);
+      if (handoverPhotoInputRef.current) handoverPhotoInputRef.current.value = '';
+      setHandoverPhotoBoxId('');
+      await queryClient.invalidateQueries({ queryKey: ['order-handover-photos', activeTenantId, id] });
+      toast.success(t('orders.detail.handoverPhotoUploaded'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('orders.detail.handoverPhotoUploadError')));
+    } finally {
+      setUploadingHandoverPhoto(false);
+    }
+  };
+
+  const downloadHandoverPhoto = async (photo: HandoverPhoto) => {
+    if (!id || downloadingHandoverPhoto) return;
+    setDownloadingHandoverPhoto(photo.id);
+    try {
+      const { data } = await api.get(`/orders/${id}/handover/photos/${photo.id}/file`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `archivecore-przekazanie-${photo.id}.${photo.mimeType === 'image/png' ? 'png' : 'jpg'}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(await getApiErrorMessageAsync(error, t('orders.detail.handoverPhotoDownloadError')));
+    } finally {
+      setDownloadingHandoverPhoto(null);
     }
   };
 
@@ -716,6 +782,31 @@ export default function OrderDetailPage() {
                 </div>)}
               </div>}
               <p className="text-xs text-gray-500">{t('orders.detail.handoverProofHint')}</p>
+              <div className="border-t border-gray-200 pt-3 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">{t('orders.detail.handoverPhotos')} ({handoverPhotos.length})</h4>
+                {photosLoading && <p className="text-sm text-gray-500">{t('common.loading')}</p>}
+                {photosError && <p className="text-sm text-red-600">{t('orders.detail.handoverPhotoLoadError')}</p>}
+                {handoverPhotos.map((photo) => <div key={photo.id} className="rounded border border-gray-200 p-2 text-sm space-y-1">
+                  <p className="break-all font-medium">{photo.fileName}</p>
+                  <p className="text-gray-600">{photo.box?.boxNumber || t('orders.detail.wholeHandover')} · {new Date(photo.uploadedAt).toLocaleString()} · {photo.uploadedBy.firstName} {photo.uploadedBy.lastName}</p>
+                  <button type="button" className="btn-secondary text-xs" disabled={Boolean(downloadingHandoverPhoto)} onClick={() => { void downloadHandoverPhoto(photo); }}>
+                    <Download size={14} /> {t('orders.detail.handoverPhotoDownload')}
+                  </button>
+                </div>)}
+                {hasPermission('order.process') && handoverPhotos.length < 10 && <form onSubmit={(event) => { void uploadHandoverPhoto(event); }} className="space-y-2">
+                  <label className="block text-sm font-medium">{t('orders.detail.handoverPhotoUpload')}
+                    <input ref={handoverPhotoInputRef} type="file" accept="image/jpeg,image/png" className="mt-1 block w-full text-sm" onChange={(event) => setHandoverPhotoFile(event.target.files?.[0] || null)} />
+                  </label>
+                  {(order.handoverProof.boxChecks?.length || 0) > 0 && <label className="block text-sm">{t('orders.detail.handoverPhotoTarget')}
+                    <select className="input mt-1 w-full" value={handoverPhotoBoxId} onChange={(event) => setHandoverPhotoBoxId(event.target.value)}>
+                      <option value="">{t('orders.detail.wholeHandover')}</option>
+                      {order.handoverProof.boxChecks.map((check: any) => <option key={check.boxId} value={check.boxId}>{check.box.boxNumber}</option>)}
+                    </select>
+                  </label>}
+                  <button type="submit" className="btn-primary" disabled={!handoverPhotoFile || uploadingHandoverPhoto}>{uploadingHandoverPhoto && <Loader2 size={16} className="animate-spin" />}{t('orders.detail.handoverPhotoUploadButton')}</button>
+                  <p className="text-xs text-gray-500">{t('orders.detail.handoverPhotoHint')}</p>
+                </form>}
+              </div>
             </div>
           )}
 

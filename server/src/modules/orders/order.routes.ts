@@ -23,6 +23,15 @@ const uploadScanFile = (req: Parameters<ReturnType<typeof scanUpload.single>>[0]
     next(error);
   });
 };
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadHandoverPhoto = (req: Parameters<ReturnType<typeof photoUpload.single>>[0], res: Parameters<ReturnType<typeof photoUpload.single>>[1], next: Parameters<ReturnType<typeof photoUpload.single>>[2]) => {
+  photoUpload.single('file')(req, res, (error) => {
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      return next(Object.assign(new Error('Zdjęcie nie może przekraczać 5 MB'), { statusCode: 413 }));
+    }
+    next(error);
+  });
+};
 
 // List & read
 router.get('/', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.list(req, res, next));
@@ -32,12 +41,15 @@ router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), 
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));
 router.get('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.downloadScan(req, res, next));
 router.get('/:id/custody', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getCustodyByOrder(req, res, next));
+router.get('/:id/handover/photos', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.listHandoverPhotos(req, res, next));
+router.get('/:id/handover/photos/:photoId/file', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.downloadHandoverPhoto(req, res, next));
 router.delete('/:id', ...auth, requirePermission(Permissions.ORDER_COMPLETE), requireRole(RoleCode.SUPER_ADMIN, RoleCode.DOXART_ADMIN), auditLog('order', 'order.delete'), (req, res, next) => orderController.delete(req, res, next));
 
 // Create
 router.post('/', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(createOrderSchema), auditLog('order', 'order.create'), (req, res, next) => orderController.create(req, res, next));
 router.post('/:id/items', ...auth, requirePermission(Permissions.ORDER_CREATE, Permissions.ORDER_PROCESS), validate(addOrderItemSchema), auditLog('order_item', 'order_item.create'), (req, res, next) => orderController.addItem(req, res, next));
 router.post('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_PROCESS), uploadScanFile, auditLog('order_scan_file', 'order_scan.upload'), (req, res, next) => orderController.uploadScan(req, res, next));
+router.post('/:id/handover/photos', ...auth, requirePermission(Permissions.ORDER_PROCESS), uploadHandoverPhoto, auditLog('order_handover_photo', 'order.handover_photo.upload'), (req, res, next) => orderController.uploadHandoverPhoto(req, res, next));
 
 // Status transitions
 router.patch('/:id/submit', ...auth, requirePermission(Permissions.ORDER_CREATE), auditLog('order', 'order.submit'), (req, res, next) => orderController.submit(req, res, next));

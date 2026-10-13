@@ -4,6 +4,7 @@ import { custodyService } from './custody.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
 import { orderScanService } from './order-scan.service';
+import { orderHandoverPhotoService } from './order-handover-photo.service';
 import { z } from 'zod';
 
 export class OrderController {
@@ -55,6 +56,43 @@ export class OrderController {
       res.setHeader('Cache-Control', 'private, no-store');
       res.setHeader('X-Content-Type-Options', 'nosniff');
       return res.send(scan.buffer);
+    } catch (err) { next(err); }
+  }
+
+  async listHandoverPhotos(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      await orderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      return successResponse(res, await orderHandoverPhotoService.list(req.tenantId, req.params.id));
+    } catch (err) { next(err); }
+  }
+
+  async uploadHandoverPhoto(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      const boxId = typeof req.body?.boxId === 'string' && req.body.boxId ? req.body.boxId : undefined;
+      if (boxId && !z.string().uuid().safeParse(boxId).success) return errorResponse(res, 'Nieprawidłowy identyfikator kartonu', 400);
+      if (!req.file) return errorResponse(res, 'Dołącz zdjęcie JPEG lub PNG do 5 MB', 400);
+      await orderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      return successResponse(res, await orderHandoverPhotoService.upload(req.tenantId, req.params.id, req.user!.userId, req.file, boxId), 201);
+    } catch (err) { next(err); }
+  }
+
+  async downloadHandoverPhoto(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success || !z.string().uuid().safeParse(req.params.photoId).success) {
+        return errorResponse(res, 'Nieprawidłowy identyfikator zdjęcia', 400);
+      }
+      await orderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      const photo = await orderHandoverPhotoService.download(req.tenantId, req.params.id, req.params.photoId);
+      res.setHeader('Content-Type', photo.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="archivecore-przekazanie-${req.params.photoId}.${photo.mimeType === 'image/png' ? 'png' : 'jpg'}"`);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(photo.buffer);
     } catch (err) { next(err); }
   }
 

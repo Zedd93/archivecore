@@ -64,6 +64,9 @@ jobs:
       - name: Verify disposal photo evidence
         run: npm run test:disposal-evidence
 
+      - name: Verify handover photo evidence
+        run: npm run test:order-handover-photos
+
       - name: Verify scan-on-demand orders
         run: npm run test:order-scans
 

@@ -499,6 +499,9 @@ export class OrderService {
     if (await prisma.orderScanFile.count({ where: { tenantId, orderItem: { orderId: id } } })) {
       throw Object.assign(new Error('Zlecenie zawiera skany i musi pozostać w historii'), { statusCode: 409 });
     }
+    if (await prisma.orderHandoverPhoto.count({ where: { tenantId, orderId: id } })) {
+      throw Object.assign(new Error('Zlecenie zawiera zdjęcia przekazania i musi pozostać w historii'), { statusCode: 409 });
+    }
 
     await prisma.$transaction([
       prisma.custodyEvent.updateMany({

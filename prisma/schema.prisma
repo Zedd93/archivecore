@@ -228,6 +228,7 @@ model Tenant {
   billingPeriods    BillingPeriod[]
   inventorySessions InventorySession[]
   disposalEvidence  DisposalEvidence[]
+  handoverPhotos    OrderHandoverPhoto[]
   scanFiles         OrderScanFile[]
   integrationKeys   IntegrationKey[]
   webhookEndpoints  WebhookEndpoint[]
@@ -323,6 +324,7 @@ model User {
   createdWebhookEndpoints WebhookEndpoint[]
   warehouseOperations WarehouseOperation[]
   recordedHandoverProofs OrderHandoverProof[]
+  uploadedHandoverPhotos OrderHandoverPhoto[]
 
   @@index([tenantId])
   @@index([email])
@@ -515,6 +517,7 @@ model Box {
   labels            Label[]
   transferListItems TransferListItem[]
   handoverChecks   OrderHandoverBox[]
+  handoverPhotos   OrderHandoverPhoto[]
 
   @@index([tenantId, status])
   @@index([tenantId, deletedAt])
@@ -906,6 +909,7 @@ model OrderHandoverProof {
   order      Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   recordedBy User  @relation(fields: [recordedById], references: [id], onDelete: Restrict)
   boxChecks  OrderHandoverBox[]
+  photos     OrderHandoverPhoto[]
 
   @@index([recordedById])
   @@map("order_handover_proofs")
@@ -924,6 +928,30 @@ model OrderHandoverBox {
   @@id([orderId, boxId])
   @@index([boxId])
   @@map("order_handover_boxes")
+}
+
+model OrderHandoverPhoto {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  orderId        String   @db.Uuid
+  boxId          String?  @db.Uuid
+  storageKey     String   @db.VarChar(1000)
+  fileName       String   @db.VarChar(500)
+  mimeType       String   @db.VarChar(50)
+  fileSize       Int
+  checksumSha256 String   @db.VarChar(64)
+  uploadedById   String   @db.Uuid
+  uploadedAt     DateTime @default(now())
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  proof      OrderHandoverProof @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  box        Box?               @relation(fields: [boxId], references: [id], onDelete: Restrict)
+  uploadedBy User               @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, checksumSha256])
+  @@index([tenantId, orderId])
+  @@index([boxId])
+  @@map("order_handover_photos")
 }
 
 model BillingEvent {
