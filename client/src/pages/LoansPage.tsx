@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -11,8 +11,10 @@ import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
+import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { matchActiveLoansByQr } from '@/utils/loanReturn';
+import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
 import toast from 'react-hot-toast';
 import { ArchiveRestore, Box, Camera, FileText, Loader2, Plus, RotateCcw, X } from 'lucide-react';
 
@@ -71,7 +73,9 @@ export default function LoansPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'return');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
@@ -86,8 +90,17 @@ export default function LoansPage() {
   const [selectedLoanId, setSelectedLoanId] = useState('');
   const lastCameraCodeRef = useRef('');
 
+  useEffect(() => {
+    setShowReturnScanner(false);
+    setIsScanning(false);
+    setScannedCode('');
+    setSelectedLoanId('');
+    setManualCode('');
+    lastCameraCodeRef.current = '';
+  }, [activeTenantId]);
+
   const { data: activeLoans = [], isLoading, refetch } = useQuery<ActiveLoan[]>({
-    queryKey: ['active-loans'],
+    queryKey: ['active-loans', activeTenantId],
     queryFn: async () => {
       const { data } = await api.get('/orders/loans/active');
       return data.data || [];
@@ -163,6 +176,17 @@ export default function LoansPage() {
 
   const handleScanCode = (rawCode: string) => {
     if (returnLoan.isPending) return;
+    if (!navigator.onLine) {
+      if (matchActiveLoansByQr([], rawCode).kind === 'invalid') {
+        toast.error(t('loans.invalidReturnCode'));
+        return;
+      }
+      const saved = offlineScans.stage(rawCode.trim());
+      if (saved === 'unavailable') toast.error(t('offlineScans.unavailable'));
+      else toast(t(`offlineScans.${saved}`));
+      setIsScanning(false);
+      return;
+    }
     const match = matchActiveLoansByQr(activeLoans, rawCode);
     if (match.kind === 'invalid') {
       toast.error(t('loans.invalidReturnCode'));
@@ -193,6 +217,10 @@ export default function LoansPage() {
   };
 
   const confirmScannedReturn = async () => {
+    if (!offlineScans.online || (offlineScans.codes.includes(scannedCode) && !offlineScans.verifiedCodes.includes(scannedCode))) {
+      toast.error(t('loans.verifyOfflineReturnFirst'));
+      return;
+    }
     const loan = activeLoans.find((item) => item.id === selectedLoanId && item.qrCode === scannedCode);
     if (!loan) {
       toast.error(t('loans.staleScan'));
@@ -200,11 +228,48 @@ export default function LoansPage() {
     }
     try {
       await returnLoan.mutateAsync(loan);
+      offlineScans.remove(scannedCode);
       setScannedCode('');
       setSelectedLoanId('');
       setManualCode('');
     } catch {
       // The mutation shows the API error.
+    }
+  };
+
+  const fetchReturnMatches = async (code: string) => {
+    const { data } = await api.get('/orders/loans/active');
+    const fresh = (data.data || []) as ActiveLoan[];
+    queryClient.setQueryData(['active-loans', activeTenantId], fresh);
+    return matchActiveLoansByQr(fresh, code);
+  };
+
+  const verifyReturnScans = async () => {
+    await offlineScans.verify(async (code) => {
+      try {
+        const match = await fetchReturnMatches(code);
+        if (match.kind === 'match') return true;
+        toast.error(t(match.kind === 'invalid' ? 'loans.invalidReturnCode' : 'loans.noActiveMatch'));
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, t('common.genericError')));
+      }
+      return false;
+    });
+  };
+
+  const selectReturnScan = async (code: string) => {
+    try {
+      const match = await fetchReturnMatches(code);
+      if (match.kind !== 'match') {
+        toast.error(t('loans.noActiveMatch'));
+        return;
+      }
+      setShowReturnScanner(true);
+      setIsScanning(false);
+      setScannedCode(code);
+      setSelectedLoanId(match.loans.length === 1 ? match.loans[0].id : '');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
     }
   };
 
@@ -354,7 +419,7 @@ export default function LoansPage() {
                   </span>
                 </label>
               ))}
-              <button type="button" className="btn-primary w-full sm:w-auto" disabled={!selectedLoanId || returnLoan.isPending} onClick={() => { void confirmScannedReturn(); }}>
+              <button type="button" className="btn-primary w-full sm:w-auto" disabled={!offlineScans.online || !selectedLoanId || returnLoan.isPending || (offlineScans.codes.includes(scannedCode) && !offlineScans.verifiedCodes.includes(scannedCode))} onClick={() => { void confirmScannedReturn(); }}>
                 {returnLoan.isPending ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
                 {t('loans.confirmScannedReturn')}
               </button>
@@ -362,6 +427,9 @@ export default function LoansPage() {
           )}
         </section>
       )}
+
+      <OfflineScanPanel codes={offlineScans.codes} verifiedCodes={offlineScans.verifiedCodes} online={offlineScans.online} syncing={offlineScans.syncing}
+        onRemove={offlineScans.remove} onSync={() => { void verifyReturnScans(); }} onSelect={(code) => { void selectReturnScan(code); }} />
 
       <div className="card">
         <DataTable

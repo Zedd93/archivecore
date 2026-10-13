@@ -15,10 +15,13 @@ import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
+import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
+import axios from 'axios';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 import { matchOrderItemQr } from '@/utils/orderPicking';
 import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
+import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
 import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX, Upload, Download } from 'lucide-react';
 
 // Status flow steps
@@ -46,8 +49,10 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const queryClient = useQueryClient();
+  const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'issue', id || '');
   const { data: order, isLoading } = useDetail('order', '/orders', id);
   const patchOrder = usePatch(
     ['order', 'orders', 'warehouse-tasks', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
@@ -112,8 +117,13 @@ export default function OrderDetailPage() {
     } catch (error) {
       const message = getApiErrorMessage(error, t('common.genericError'));
       if (scannedLabel) {
-        showScanFeedback('error', message);
-        if (scannedCode) allowCameraRetry(scannedCode);
+        if (scannedCode && status === 'picked' && (!navigator.onLine || (axios.isAxiosError(error) && !error.response && error.code !== 'ERR_CANCELED'))) {
+          const saved = offlineScans.stage(scannedCode);
+          showScanFeedback(saved === 'unavailable' ? 'error' : 'warning', t(`offlineScans.${saved}`));
+        } else {
+          showScanFeedback('error', message);
+          if (scannedCode) allowCameraRetry(scannedCode);
+        }
       } else {
         toast.error(message);
       }
@@ -125,7 +135,7 @@ export default function OrderDetailPage() {
   };
 
   const processPickCode = (rawCode: string) => {
-    if (!canPick || pickBusyRef.current) return;
+    if (!canPick || pickBusyRef.current || offlineScans.syncing) return;
     const match = matchOrderItemQr<OrderPickScanItem>(order.items, rawCode);
     if (match.kind === 'invalid') {
       showScanFeedback('error', t('orders.detail.invalidPickCode'));
@@ -155,7 +165,52 @@ export default function OrderDetailPage() {
     const label = item.box?.boxNumber || item.folder?.folderNumber || item.transferListItem?.folderSignature
       || item.document?.title || [item.hrFolder?.employeeFirstName, item.hrFolder?.employeeLastName].filter(Boolean).join(' ')
       || t('orders.detail.pickedSuccess');
+    if (!navigator.onLine) {
+      const saved = offlineScans.stage(rawCode.trim());
+      showScanFeedback(saved === 'unavailable' ? 'error' : 'warning', t(`offlineScans.${saved}`));
+      if (saved === 'unavailable') allowCameraRetry(rawCode);
+      return;
+    }
     void updatePick(item.id, 'picked', label, rawCode);
+  };
+
+  const syncOfflinePicks = async () => {
+    if (!id || pickBusyRef.current || !canPick) return;
+    pickBusyRef.current = true;
+    try {
+      await offlineScans.verify(async (code) => {
+        try {
+          const { data } = await api.get(`/orders/${id}`);
+          const latest = data.data;
+          if (latest.orderType !== 'checkout' || latest.status !== 'in_progress') {
+            showScanFeedback('error', t('orders.detail.cannotPickItem'));
+            return false;
+          }
+          const match = matchOrderItemQr<OrderPickScanItem>(latest.items, code);
+          if (match.kind !== 'match') {
+            showScanFeedback('error', t('orders.detail.codeNotInOrder'));
+            return false;
+          }
+          if (match.item.itemStatus === 'pending') {
+            setPickingItemId(match.item.id);
+            await api.patch(`/orders/${id}/items/${match.item.id}/status`, { status: 'picked' });
+          } else if (match.item.itemStatus !== 'picked') {
+            showScanFeedback('error', t('orders.detail.cannotPickItem'));
+            return false;
+          }
+          offlineScans.remove(code);
+          await queryClient.invalidateQueries({ queryKey: ['order', id] });
+          showScanFeedback('success', t('orders.detail.pickedSuccess'));
+        } catch (error) {
+          showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+        } finally {
+          setPickingItemId(null);
+        }
+        return false;
+      });
+    } finally {
+      pickBusyRef.current = false;
+    }
   };
 
   const handleCameraCode = (rawCode: string) => {
@@ -272,6 +327,9 @@ export default function OrderDetailPage() {
       </div>
 
       {/* Progress Stepper */}
+      <OfflineScanPanel codes={offlineScans.codes} verifiedCodes={offlineScans.verifiedCodes} online={offlineScans.online} syncing={offlineScans.syncing}
+        onRemove={offlineScans.remove} onSync={() => { void syncOfflinePicks(); }} savesOnSync />
+
       {!isCancelled && !isRejected && (
         <div className="card">
           <div className="flex items-center justify-between">
@@ -325,7 +383,7 @@ export default function OrderDetailPage() {
             </button>
           )}
           {order.status === 'in_progress' && hasPermission('order.process') && (
-            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending || (order.orderType === 'checkout' && (order.items.length === 0 || remainingCount > 0)) || (order.orderType === 'scan' && (order.items.length === 0 || missingScanCount > 0))}>
+            <button onClick={() => handleAction('ready')} className="btn-primary" disabled={patchOrder.isPending || offlineScans.codes.length > 0 || (order.orderType === 'checkout' && (order.items.length === 0 || remainingCount > 0)) || (order.orderType === 'scan' && (order.items.length === 0 || missingScanCount > 0))}>
               <Package size={16} /> {t('orders.detail.markReady')}
             </button>
           )}

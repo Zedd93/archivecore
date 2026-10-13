@@ -5,8 +5,10 @@ interface StoredScans {
   codes: string[];
 }
 
-export function warehouseScanKey(userId: string, tenantId: string, operation: 'move' | 'receive') {
-  return `${PREFIX}${userId}:${tenantId}:${operation}`;
+export type WarehouseScanOperation = 'move' | 'receive' | 'issue' | 'return' | 'inventory';
+
+export function warehouseScanKey(userId: string, tenantId: string, operation: WarehouseScanOperation, scopeId = '') {
+  return `${PREFIX}${userId}:${tenantId}:${operation}${scopeId ? `:${scopeId}` : ''}`;
 }
 
 export function readWarehouseScans(key: string): string[] {

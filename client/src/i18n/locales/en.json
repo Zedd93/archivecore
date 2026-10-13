@@ -56,7 +56,7 @@
     "exportError": "Export error",
     "exportDataError": "Data export error",
     "genericError": "An error occurred",
-    "offlineWarning": "Connection lost. You can save QR scans in an open receive or move page; verify them and confirm the operation after reconnecting."
+    "offlineWarning": "Connection lost. You can save QR scans in an open warehouse page; check them after reconnecting before completing the operation."
   },
 
   "auth": {
@@ -327,6 +327,7 @@
     "multipleReturnMatches": "This label appears in several loans. Choose the correct order.",
     "staleScan": "This item is no longer an active loan. Scan again.",
     "confirmScannedReturn": "Confirm return",
+    "verifyOfflineReturnFirst": "Verify the saved scan after reconnecting first.",
     "documentSearchPlaceholder": "Search document by title or description...",
     "folderSearchPlaceholder": "Search folder by sign, title, box, or transfer list...",
     "itemTypes": {
@@ -1444,12 +1445,15 @@
   },
   "offlineScans": {
     "title": "Scans awaiting verification ({{count}})",
-    "description": "Scans are saved only on this device. Verify them with the server after reconnecting. Receiving or moving happens only after separate confirmation.",
+    "description": "Scans are saved only on this device. Verify them with the server after reconnecting. No operation has been performed without your confirmation.",
+    "saveDescription": "Scans are saved only on this device. After reconnecting, use the button below to save them in the current order or inventory session. We check the latest server state before saving.",
     "added": "Scan saved for later verification",
     "duplicate": "This scan is already awaiting verification",
     "unavailable": "Could not save this scan on the device (limit 200 or storage unavailable)",
     "verify": "Verify pending scans",
+    "save": "Save pending scans",
     "verified": "Verified with the server",
+    "select": "Select",
     "remove": "Remove pending scan {{code}}"
   },
   "warehouseReceive": {

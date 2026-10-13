@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { readWarehouseScans, saveWarehouseScans, warehouseScanKey } from '@/utils/offlineWarehouseScans';
+import { readWarehouseScans, saveWarehouseScans, warehouseScanKey, type WarehouseScanOperation } from '@/utils/offlineWarehouseScans';
 
-export function useOfflineWarehouseScans(userId: string, tenantId: string, operation: 'move' | 'receive') {
-  const key = userId && tenantId ? warehouseScanKey(userId, tenantId, operation) : '';
+export function useOfflineWarehouseScans(userId: string, tenantId: string, operation: WarehouseScanOperation, scopeId = '') {
+  const needsScope = operation === 'issue' || operation === 'inventory';
+  const key = userId && tenantId && (!needsScope || scopeId) ? warehouseScanKey(userId, tenantId, operation, scopeId) : '';
   const [codes, setCodes] = useState(() => readWarehouseScans(key));
   const [verifiedCodes, setVerifiedCodes] = useState<string[]>([]);
   const [online, setOnline] = useState(() => navigator.onLine);

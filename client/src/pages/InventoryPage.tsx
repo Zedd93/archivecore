@@ -5,14 +5,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Check, Download, Loader2, MapPin, RotateCcw, ScanLine, Volume2, VolumeX, X } from 'lucide-react';
 import { parseLocationQrData, parseQrData, type InventoryDiscrepancyKind } from '@archivecore/shared';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import api from '@/services/api';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
+import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { scanFeedbackStyles, useScanFeedback } from '@/hooks/useScanFeedback';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { escapeInventoryCsvCell, reconcileInventory, type InventoryBox } from '@/utils/inventory';
 import { SerialScanQueue } from '@/utils/serialScanQueue';
+import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
+import { readWarehouseScans, warehouseScanKey } from '@/utils/offlineWarehouseScans';
 
 interface Snapshot {
   location: { id: string; fullPath: string };
@@ -68,6 +72,7 @@ export default function InventoryPage() {
   const queryClient = useQueryClient();
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const [session, setSession] = useState<InventorySession | null>(null);
+  const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'inventory', session?.id || '');
   const [isScanning, setIsScanning] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isQueueBusy, setIsQueueBusy] = useState(false);
@@ -119,6 +124,7 @@ export default function InventoryPage() {
     },
   });
   const recentSessions = history?.sessions || [];
+  const pendingSessionScans = (id: string) => readWarehouseScans(warehouseScanKey(user?.id || '', activeTenantId, 'inventory', id)).length;
 
   const startSnapshot = async (locationId: string, force = false, fromQueuedScan = false) => {
     if (!locationId || busyRef.current || (!fromQueuedScan && scanQueueRef.current?.isBusy)) return false;
@@ -187,6 +193,11 @@ export default function InventoryPage() {
     if (!currentSession) { showScanFeedback('error', t('inventory.chooseLocationFirst')); return; }
     const existing = currentSession.scanned.find((box) => box.qrCode === code);
     if (existing) { showScanFeedback('duplicate', t('inventory.duplicateBox', { number: existing.boxNumber })); return; }
+    if (!navigator.onLine) {
+      const saved = offlineScans.stage(code);
+      showScanFeedback(saved === 'unavailable' ? 'error' : 'warning', t(`offlineScans.${saved}`));
+      return;
+    }
 
     busyRef.current = true;
     setIsBusy(true);
@@ -200,13 +211,66 @@ export default function InventoryPage() {
       const isExpected = currentSession.snapshot.expected.some((item) => item.id === box.id);
       showScanFeedback(isExpected ? 'success' : 'warning', t(isExpected ? 'inventory.scannedBox' : 'inventory.discrepancyBox', { number: box.boxNumber }));
     } catch (error) {
-      if (tenantRef.current === activeTenantId) showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+      if (tenantRef.current === activeTenantId) {
+        if (!navigator.onLine || (axios.isAxiosError(error) && !error.response && error.code !== 'ERR_CANCELED')) {
+          const saved = offlineScans.stage(code);
+          showScanFeedback(saved === 'unavailable' ? 'error' : 'warning', t(`offlineScans.${saved}`));
+        } else showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+      }
     } finally {
       busyRef.current = false;
       setIsBusy(false);
     }
   };
   processCodeRef.current = processCode;
+
+  const syncInventoryScans = async () => {
+    const current = sessionRef.current;
+    if (!current || busyRef.current || scanQueueRef.current?.isBusy) return;
+    busyRef.current = true;
+    setIsBusy(true);
+    try {
+      await offlineScans.verify(async (code) => {
+        if (tenantRef.current !== activeTenantId || sessionRef.current?.id !== current.id) return false;
+        try {
+          const { data: existing } = await api.get(`/inventory/sessions/${current.id}`);
+          const latest = existing.data as InventorySession;
+          if (latest.scanned.some((box) => box.qrCode === code)) {
+            applySession(latest);
+            offlineScans.remove(code);
+            return false;
+          }
+          if (latest.status !== 'in_progress') {
+            showScanFeedback('error', t('inventory.finishedHint'));
+            return false;
+          }
+          try {
+            const { data } = await api.post(`/inventory/sessions/${current.id}/scans`, { code });
+            if (tenantRef.current !== activeTenantId || sessionRef.current?.id !== current.id) return false;
+            applySession(data.data);
+            offlineScans.remove(code);
+          } catch (error) {
+            if (!navigator.onLine || (axios.isAxiosError(error) && !error.response)) {
+              const { data } = await api.get(`/inventory/sessions/${current.id}`);
+              const reconciled = data.data as InventorySession;
+              if (reconciled.scanned.some((box) => box.qrCode === code)) {
+                applySession(reconciled);
+                offlineScans.remove(code);
+                return false;
+              }
+            }
+            throw error;
+          }
+        } catch (error) {
+          showScanFeedback('error', getApiErrorMessage(error, t('common.genericError')));
+        }
+        return false;
+      });
+    } finally {
+      busyRef.current = false;
+      setIsBusy(false);
+    }
+  };
 
   const enqueueCode = (code: string) => {
     const queue = scanQueueRef.current;
@@ -247,7 +311,7 @@ export default function InventoryPage() {
   };
 
   const finishSession = async () => {
-    if (!session || !result || busyRef.current || scanQueueRef.current?.isBusy) return;
+    if (!session || !result || offlineScans.codes.length > 0 || busyRef.current || scanQueueRef.current?.isBusy) return;
     if (result.missing.length > 0 && !window.confirm(t('inventory.finishConfirm', { count: result.missing.length }))) return;
     busyRef.current = true;
     setIsBusy(true);
@@ -358,6 +422,7 @@ export default function InventoryPage() {
                 <button type="button" className={`w-full py-2 text-left text-sm hover:text-primary-700 ${session?.id === item.id ? 'font-semibold text-primary-700' : ''}`} disabled={isBusy || isQueueBusy} onClick={() => { void openSession(item.id); }}>
                   <span className="block break-words">{item.locationPath}</span>
                   <span className="text-xs text-gray-500">{new Date(item.startedAt).toLocaleString()} · {t(`inventory.status.${item.status}`)}</span>
+                  {pendingSessionScans(item.id) > 0 && <span className="block text-xs text-amber-700">{t('offlineScans.title', { count: pendingSessionScans(item.id) })}</span>}
                 </button>
               </li>
             ))}
@@ -409,6 +474,8 @@ export default function InventoryPage() {
         </form>
         {!snapshot && <p className="text-sm text-gray-600">{t('inventory.chooseLocationFirst')}</p>}
       </section>
+      {session && <OfflineScanPanel codes={offlineScans.codes} verifiedCodes={offlineScans.verifiedCodes} online={offlineScans.online} syncing={offlineScans.syncing}
+        onRemove={offlineScans.remove} onSync={() => { void syncInventoryScans(); }} savesOnSync />}
       {snapshot && result && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -417,7 +484,7 @@ export default function InventoryPage() {
             ))}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
-            {!isFinished ? <button type="button" className="btn-primary" disabled={isBusy || isQueueBusy} onClick={() => { void finishSession(); }}><Check size={16} />{t('inventory.finish')}</button> : <button type="button" className="btn-secondary" onClick={downloadReport}><Download size={16} />{t('inventory.download')}</button>}
+            {!isFinished ? <button type="button" className="btn-primary" disabled={isBusy || isQueueBusy || offlineScans.codes.length > 0} onClick={() => { void finishSession(); }}><Check size={16} />{t('inventory.finish')}</button> : <button type="button" className="btn-secondary" onClick={downloadReport}><Download size={16} />{t('inventory.download')}</button>}
             <button type="button" className="btn-secondary" disabled={isBusy || isQueueBusy || !session} onClick={() => { if (session) void openSession(session.id); }}><RotateCcw size={16} />{t('inventory.refresh')}</button>
             <button type="button" className="btn-secondary" disabled={isBusy || isQueueBusy} onClick={() => { void startSnapshot(snapshot.location.id, true); }}><RotateCcw size={16} />{t('inventory.restart')}</button>
             {!isFinished && <button type="button" className="btn-secondary" onClick={() => { void undoLast(); }} disabled={scanned.length === 0 || isBusy || isQueueBusy}><X size={16} />{t('inventory.undoLast')}</button>}

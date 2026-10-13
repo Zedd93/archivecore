@@ -22,9 +22,10 @@ test('offline scans are isolated by user, tenant and operation and cleared on lo
   const receive = warehouseScanKey('alice', 'tenant-a', 'receive');
   const otherTenant = warehouseScanKey('alice', 'tenant-b', 'move');
   const otherUser = warehouseScanKey('bob', 'tenant-a', 'move');
+  const otherSession = warehouseScanKey('alice', 'tenant-a', 'inventory', 'session-2');
   assert.equal(saveWarehouseScans(move, ['AC:box']), true);
   assert.deepEqual(readWarehouseScans(move), ['AC:box']);
-  for (const key of [receive, otherTenant, otherUser]) assert.deepEqual(readWarehouseScans(key), []);
+  for (const key of [receive, otherTenant, otherUser, otherSession]) assert.deepEqual(readWarehouseScans(key), []);
   values.set('tenantId', 'tenant-a');
   clearWarehouseScans();
   assert.deepEqual(readWarehouseScans(move), []);
@@ -38,4 +39,18 @@ test('malformed scans are ignored and the batch limit is enforced', () => {
   assert.deepEqual(readWarehouseScans(key), []);
   assert.equal(saveWarehouseScans(key, Array(201).fill('AC:box')), false);
   assert.deepEqual(readWarehouseScans(key), []);
+});
+
+test('inventory sessions and issue orders keep separate pending scans', () => {
+  values.clear();
+  const inventoryOne = warehouseScanKey('alice', 'tenant-a', 'inventory', 'session-1');
+  const inventoryTwo = warehouseScanKey('alice', 'tenant-a', 'inventory', 'session-2');
+  const issueOne = warehouseScanKey('alice', 'tenant-a', 'issue', 'order-1');
+  const issueTwo = warehouseScanKey('alice', 'tenant-a', 'issue', 'order-2');
+  assert.equal(saveWarehouseScans(inventoryOne, ['AC:box-1']), true);
+  assert.equal(saveWarehouseScans(issueOne, ['AC:box-2']), true);
+  assert.deepEqual(readWarehouseScans(inventoryTwo), []);
+  assert.deepEqual(readWarehouseScans(issueTwo), []);
+  assert.deepEqual(readWarehouseScans(inventoryOne), ['AC:box-1']);
+  assert.deepEqual(readWarehouseScans(issueOne), ['AC:box-2']);
 });
