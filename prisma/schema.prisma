@@ -514,6 +514,7 @@ model Box {
   custodyEvents     CustodyEvent[]
   labels            Label[]
   transferListItems TransferListItem[]
+  handoverChecks   OrderHandoverBox[]
 
   @@index([tenantId, status])
   @@index([tenantId, deletedAt])
@@ -904,9 +905,25 @@ model OrderHandoverProof {
 
   order      Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   recordedBy User  @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  boxChecks  OrderHandoverBox[]
 
   @@index([recordedById])
   @@map("order_handover_proofs")
+}
+
+model OrderHandoverBox {
+  orderId       String  @db.Uuid
+  boxId         String  @db.Uuid
+  condition     String  @db.VarChar(20)
+  sealNumber    String? @db.VarChar(100)
+  conditionNote String? @db.VarChar(1000)
+
+  proof OrderHandoverProof @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  box   Box                @relation(fields: [boxId], references: [id], onDelete: Restrict)
+
+  @@id([orderId, boxId])
+  @@index([boxId])
+  @@map("order_handover_boxes")
 }
 
 model BillingEvent {

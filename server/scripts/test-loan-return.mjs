@@ -136,7 +136,7 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
     { orderType: 'checkout', item: { id: itemId, itemStatus: 'picked', boxId }, expectedBoxStatus: 'checked_out' },
     { orderType: 'return_order', item: { id: itemId, itemStatus: 'pending', boxId }, expectedBoxStatus: 'active' },
   ]) {
-    const calls = { custody: [], boxUpdates: [], proofs: [] };
+    const calls = { custody: [], boxUpdates: [], proofs: [], checks: [] };
     const order = {
       id: orderId, tenantId, orderType, status: 'ready',
       orderNumber: 'Z-202610-00001', requestedBy: userId, items: [item],
@@ -146,6 +146,7 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
       orderItem: { updateMany: async () => ({ count: 1 }) },
       custodyEvent: { createMany: async ({ data }) => { calls.custody.push(...data); } },
       orderHandoverProof: { create: async ({ data }) => { calls.proofs.push(data); } },
+      orderHandoverBox: { createMany: async ({ data }) => { calls.checks.push(...data); } },
       box: { updateMany: async (args) => { calls.boxUpdates.push(args); return { count: 1 }; } },
       webhookEndpoint: { findMany: async () => [] },
     };
@@ -156,13 +157,21 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
       mock.method(notificationService, 'notifyTenantUsers', async () => undefined),
     ];
     try {
-      const proof = orderType === 'checkout' && item.folderId
-        ? { recipientName: 'Anna Kowalska', signatureData, latitude: 50.1, longitude: 18.6, accuracyMeters: 12 }
+      const proof = orderType === 'checkout'
+        ? item.folderId
+          ? { recipientName: 'Anna Kowalska', signatureData, latitude: 50.1, longitude: 18.6, accuracyMeters: 12, boxChecks: [] }
+          : { recipientName: 'Anna Kowalska', signatureData, boxChecks: [{ boxId, condition: 'damaged', sealNumber: 'P-12', conditionNote: 'Rozerwany narożnik' }] }
         : undefined;
       await orderService.deliver(orderId, tenantId, userId, proof);
       assert.equal(calls.custody.length, 1);
       assert.equal(calls.custody[0].boxId, boxId);
       assert.equal(calls.proofs.length, proof ? 1 : 0);
+      assert.equal(calls.checks.length, proof && item.boxId ? 1 : 0);
+      if (calls.checks.length) {
+        assert.equal(calls.checks[0].boxId, boxId);
+        assert.equal(calls.checks[0].condition, 'damaged');
+        assert.equal(calls.checks[0].sealNumber, 'P-12');
+      }
       if (proof) {
         assert.equal(calls.proofs[0].orderId, orderId);
         assert.equal(calls.proofs[0].recordedById, userId);
@@ -184,6 +193,16 @@ test('invalid signature cannot deliver an order', async () => {
     await assert.rejects(orderService.deliver(orderId, tenantId, userId, {
       recipientName: 'Anna Kowalska', signatureData: 'data:image/png;base64,bm90IGEgcG5n',
     }), /Podpis/);
+  } finally { getById.mock.restore(); }
+});
+
+test('handover cannot assign a condition to a box outside the order', async () => {
+  const order = { id: orderId, tenantId, orderType: 'checkout', status: 'ready', items: [{ boxId }] };
+  const getById = mock.method(orderService, 'getById', async () => order);
+  try {
+    await assert.rejects(orderService.deliver(orderId, tenantId, userId, {
+      recipientName: 'Anna Kowalska', boxChecks: [{ boxId: itemId, condition: 'intact' }],
+    }), /Potwierdź stan każdego kartonu/);
   } finally { getById.mock.restore(); }
 });
 

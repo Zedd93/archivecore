@@ -46,6 +46,9 @@ interface OrderPickScanItem {
   hrFolder?: { employeeFirstName?: string; employeeLastName?: string } | null;
 }
 
+type BoxCondition = '' | 'intact' | 'damaged' | 'unverified';
+type HandoverBoxCheck = { condition: BoxCondition; sealNumber: string; conditionNote: string };
+
 export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -76,6 +79,7 @@ export default function OrderDetailPage() {
   const [recipientName, setRecipientName] = useState('');
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [handoverLocation, setHandoverLocation] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
+  const [boxChecks, setBoxChecks] = useState<Record<string, HandoverBoxCheck>>({});
   const [isLocating, setIsLocating] = useState(false);
   const locationRequestRef = useRef(0);
   const pickBusyRef = useRef(false);
@@ -104,6 +108,13 @@ export default function OrderDetailPage() {
   const remainingCount = (order.items?.length ?? 0) - handledCount;
   const missingScanCount = order.orderType === 'scan' ? order.items.filter((item: any) => !item.scanFile).length : 0;
   const displayItems = canPick ? sortOrderItemsByPickRoute(order.items || []) : order.items || [];
+  const handoverBoxes = [...new Map<string, { id: string; number: string }>((order.items || [])
+    .filter((item: any) => item.boxId && item.box)
+    .map((item: any): [string, { id: string; number: string }] => [item.boxId, { id: item.boxId, number: item.box.boxNumber }])).values()];
+  const boxChecksReady = handoverBoxes.every((box) => {
+    const check = boxChecks[box.id];
+    return check?.condition && (check.condition !== 'damaged' || check.conditionNote.trim().length >= 3);
+  });
 
   const allowCameraRetry = (code: string) => {
     if (lastCameraCodeRef.current.code === code.trim()) {
@@ -227,7 +238,14 @@ export default function OrderDetailPage() {
     processPickCode(code);
   };
 
-  const handleAction = async (action: string, proof?: { recipientName: string; signatureData?: string; latitude?: number; longitude?: number; accuracyMeters?: number }) => {
+  const handleAction = async (action: string, proof?: {
+    recipientName: string;
+    signatureData?: string;
+    latitude?: number;
+    longitude?: number;
+    accuracyMeters?: number;
+    boxChecks?: Array<{ boxId: string; condition: Exclude<BoxCondition, ''>; sealNumber?: string; conditionNote?: string }>;
+  }) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}`, ...(proof ? { proof } : {}) });
     await queryClient.invalidateQueries({ queryKey: ['order', id] });
     await queryClient.invalidateQueries({ queryKey: ['box'] });
@@ -241,6 +259,7 @@ export default function OrderDetailPage() {
     setRecipientName('');
     setSignatureData(null);
     setHandoverLocation(null);
+    setBoxChecks({});
   };
 
   const requestHandoverLocation = () => {
@@ -269,10 +288,19 @@ export default function OrderDetailPage() {
   const confirmHandover = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = recipientName.trim();
-    if (name.length < 2 || patchOrder.isPending) return;
+    if (name.length < 2 || patchOrder.isPending || !boxChecksReady) return;
     if (signatureData && signatureData.length > 160_000) { toast.error(t('orders.detail.signatureTooLarge')); return; }
     try {
-      await handleAction('deliver', { recipientName: name, ...(signatureData ? { signatureData } : {}), ...(handoverLocation || {}) });
+      const checks = handoverBoxes.map((box) => {
+        const check = boxChecks[box.id];
+        return {
+          boxId: box.id,
+          condition: check.condition as Exclude<BoxCondition, ''>,
+          ...(check.sealNumber.trim() ? { sealNumber: check.sealNumber.trim() } : {}),
+          ...(check.conditionNote.trim() ? { conditionNote: check.conditionNote.trim() } : {}),
+        };
+      });
+      await handleAction('deliver', { recipientName: name, ...(signatureData ? { signatureData } : {}), ...(handoverLocation || {}), boxChecks: checks });
       closeHandover();
     } catch {
       // The mutation displays the server error; keep the form open for retry.
@@ -446,6 +474,7 @@ export default function OrderDetailPage() {
                 setRecipientName('');
                 setSignatureData(null);
                 setHandoverLocation(null);
+                setBoxChecks(Object.fromEntries(handoverBoxes.map((box) => [box.id, { condition: '', sealNumber: '', conditionNote: '' }])));
                 setIsLocating(false);
                 setShowHandover(true);
               } else void handleAction('deliver');
@@ -678,6 +707,14 @@ export default function OrderDetailPage() {
                 <p className="text-sm text-gray-600 mb-1">{t('orders.detail.signature')}</p>
                 <img src={order.handoverProof.signatureData} alt={t('orders.detail.signatureImage')} className="max-w-full max-h-36 rounded border border-gray-200 bg-white" />
               </div>}
+              {order.handoverProof.boxChecks?.length > 0 && <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-700">{t('orders.detail.boxConditionTitle')}</p>
+                {order.handoverProof.boxChecks.map((check: any) => <div key={check.boxId} className="rounded border border-gray-200 p-2 text-sm">
+                  <strong>{check.box.boxNumber}</strong>: {t(`orders.detail.boxCondition.${check.condition}`)}
+                  {check.sealNumber && <p>{t('orders.detail.sealNumber')}: {check.sealNumber}</p>}
+                  {check.conditionNote && <p className="break-words">{t('orders.detail.conditionNote')}: {check.conditionNote}</p>}
+                </div>)}
+              </div>}
               <p className="text-xs text-gray-500">{t('orders.detail.handoverProofHint')}</p>
             </div>
           )}
@@ -699,6 +736,39 @@ export default function OrderDetailPage() {
               value={recipientName} onChange={(event) => setRecipientName(event.target.value)} />
           </div>
           <SignaturePad onChange={setSignatureData} disabled={patchOrder.isPending} />
+          {handoverBoxes.length > 0 && <div className="space-y-3">
+            <p className="label-text">{t('orders.detail.boxConditionTitle')}</p>
+            <p className="text-xs text-gray-500">{t('orders.detail.boxConditionHint')}</p>
+            {handoverBoxes.map((box) => {
+              const check = boxChecks[box.id] || { condition: '', sealNumber: '', conditionNote: '' };
+              const update = (patch: Partial<HandoverBoxCheck>) => setBoxChecks((current) => ({ ...current, [box.id]: { ...current[box.id], ...patch } }));
+              return <fieldset key={box.id} className="rounded-lg border border-gray-200 p-3 space-y-2">
+                <legend className="px-1 font-medium">{box.number}</legend>
+                <div>
+                  <label htmlFor={`condition-${box.id}`} className="label-text">{t('orders.detail.boxConditionLabel')}</label>
+                  <select id={`condition-${box.id}`} className="input-field" required value={check.condition} disabled={patchOrder.isPending}
+                    onChange={(event) => update({ condition: event.target.value as BoxCondition })}>
+                    <option value="">{t('orders.detail.chooseCondition')}</option>
+                    <option value="intact">{t('orders.detail.boxCondition.intact')}</option>
+                    <option value="damaged">{t('orders.detail.boxCondition.damaged')}</option>
+                    <option value="unverified">{t('orders.detail.boxCondition.unverified')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor={`seal-${box.id}`} className="label-text">{t('orders.detail.sealNumber')}</label>
+                  <input id={`seal-${box.id}`} className="input-field" maxLength={100} value={check.sealNumber} disabled={patchOrder.isPending}
+                    onChange={(event) => update({ sealNumber: event.target.value })} />
+                </div>
+                <div>
+                  <label htmlFor={`condition-note-${box.id}`} className="label-text">{t('orders.detail.conditionNote')}</label>
+                  <textarea id={`condition-note-${box.id}`} className="input-field" rows={2} maxLength={1000}
+                    required={check.condition === 'damaged'} minLength={check.condition === 'damaged' ? 3 : undefined}
+                    value={check.conditionNote} disabled={patchOrder.isPending}
+                    onChange={(event) => update({ conditionNote: event.target.value })} />
+                </div>
+              </fieldset>;
+            })}
+          </div>}
           <div className="space-y-2">
             <button type="button" className="btn-secondary" disabled={isLocating || patchOrder.isPending} onClick={requestHandoverLocation}>
               {isLocating ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
@@ -712,7 +782,7 @@ export default function OrderDetailPage() {
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className="btn-secondary" disabled={patchOrder.isPending} onClick={closeHandover}>{t('common.cancel')}</button>
-            <button type="submit" className="btn-primary" disabled={patchOrder.isPending || recipientName.trim().length < 2}>
+            <button type="submit" className="btn-primary" disabled={patchOrder.isPending || recipientName.trim().length < 2 || !boxChecksReady}>
               {patchOrder.isPending && <Loader2 size={16} className="animate-spin" />}{t('orders.detail.confirmHandover')}
             </button>
           </div>

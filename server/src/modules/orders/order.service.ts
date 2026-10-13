@@ -476,7 +476,10 @@ export class OrderService {
           },
         },
         handoverProof: {
-          include: { recordedBy: { select: { firstName: true, lastName: true } } },
+          include: {
+            recordedBy: { select: { firstName: true, lastName: true } },
+            boxChecks: { include: { box: { select: { boxNumber: true } } } },
+          },
         },
       },
     });
@@ -648,6 +651,7 @@ export class OrderService {
     latitude?: number;
     longitude?: number;
     accuracyMeters?: number;
+    boxChecks?: Array<{ boxId: string; condition: 'intact' | 'damaged' | 'unverified'; sealNumber?: string; conditionNote?: string }>;
   }) {
     const order = await this.getById(id, tenantId);
     if (proof && !['checkout', 'return_order'].includes(order.orderType)) {
@@ -670,6 +674,14 @@ export class OrderService {
     const wholeBoxIds = order.items
       .map((item: any) => item.boxId)
       .filter((boxId: string | null): boxId is string => Boolean(boxId));
+    if (proof?.boxChecks) {
+      const expected = new Set(wholeBoxIds);
+      const supplied = new Set(proof.boxChecks.map((check) => check.boxId));
+      if (supplied.size !== expected.size || proof.boxChecks.length !== expected.size
+        || [...supplied].some((boxId) => !expected.has(boxId))) {
+        throw Object.assign(new Error('Potwierdź stan każdego kartonu wydawanego w tym zleceniu'), { statusCode: 400 });
+      }
+    }
     const boxStatus = order.orderType === 'checkout'
       ? 'checked_out'
       : order.orderType === 'return_order'
@@ -706,6 +718,17 @@ export class OrderService {
             recordedAt: deliveredAt,
           },
         });
+        if (proof.boxChecks?.length) {
+          await tx.orderHandoverBox.createMany({
+            data: proof.boxChecks.map((check) => ({
+              orderId: id,
+              boxId: check.boxId,
+              condition: check.condition,
+              sealNumber: check.sealNumber || null,
+              conditionNote: check.conditionNote || null,
+            })),
+          });
+        }
       }
 
       if (boxIds.length > 0) {

@@ -60,6 +60,10 @@ test('handover proof validates recipient and complete optional coordinates', () 
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', latitude: 91, longitude: 18.6, accuracyMeters: 12 } }).success, false);
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', signatureData } }).success, true);
   assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', signatureData: 'data:image/svg+xml;base64,PHN2Zz4=' } }).success, false);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', boxChecks: [{ boxId, condition: 'intact', sealNumber: ' P-12 ' }] } }).data?.proof?.boxChecks?.[0].sealNumber, 'P-12');
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', boxChecks: [{ boxId, condition: 'damaged' }] } }).success, false);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', boxChecks: [{ boxId, condition: 'damaged', conditionNote: 'Rozerwany narożnik' }] } }).success, true);
+  assert.equal(deliverOrderSchema.safeParse({ proof: { recipientName: 'Anna Kowalska', boxChecks: [{ boxId, condition: 'intact' }, { boxId, condition: 'intact' }] } }).success, false);
 });
 
 test('pick route sorts locations and box numbers naturally, leaving unlocated items last', () => {

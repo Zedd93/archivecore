@@ -48,10 +48,24 @@ export const deliverOrderSchema = z.object({
     latitude: z.number().finite().min(-90).max(90).optional(),
     longitude: z.number().finite().min(-180).max(180).optional(),
     accuracyMeters: z.number().finite().min(0).max(100000).optional(),
+    boxChecks: z.array(z.object({
+      boxId: z.string().uuid(),
+      condition: z.enum(['intact', 'damaged', 'unverified']),
+      sealNumber: z.string().trim().max(100).optional(),
+      conditionNote: z.string().trim().max(1000).optional(),
+    }).superRefine((box, context) => {
+      if (box.condition === 'damaged' && (!box.conditionNote || box.conditionNote.length < 3)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: 'Opisz uszkodzenie kartonu', path: ['conditionNote'] });
+      }
+    })).max(1000).optional(),
   }).superRefine((proof, context) => {
     const location = [proof.latitude, proof.longitude, proof.accuracyMeters];
     if (location.some((value) => value !== undefined) && location.some((value) => value === undefined)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'Podaj komplet współrzędnych oraz dokładność', path: ['latitude'] });
+    }
+    const ids = proof.boxChecks?.map((box) => box.boxId) || [];
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Karton może wystąpić tylko raz', path: ['boxChecks'] });
     }
   }).optional(),
 });
