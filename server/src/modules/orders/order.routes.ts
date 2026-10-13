@@ -26,6 +26,7 @@ const uploadScanFile = (req: Parameters<ReturnType<typeof scanUpload.single>>[0]
 
 // List & read
 router.get('/', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.list(req, res, next));
+router.get('/warehouse-tasks', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.listWarehouseTasks(req, res, next));
 router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getOverdueSla(req, res, next));
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));

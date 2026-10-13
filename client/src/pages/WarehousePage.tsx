@@ -7,8 +7,6 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { sortWarehouseTasks, type WarehouseTask } from '@/utils/warehouseTasks';
 
-const taskStatuses = ['approved', 'in_progress', 'ready'] as const;
-
 interface TaskResponse {
   data: WarehouseTask[];
   meta: { total: number };
@@ -32,13 +30,10 @@ export default function WarehousePage() {
     queryKey: ['warehouse-tasks', tenantId],
     enabled: Boolean(tenantId && canHandleOrders),
     queryFn: async () => {
-      const responses = await Promise.all(taskStatuses.map((status) => api.get<TaskResponse>('/orders', {
-        params: { status, page: 1, limit: 10 },
-      })));
-      const tasks = responses.flatMap((response) => response.data.data);
+      const response = await api.get<TaskResponse>('/orders/warehouse-tasks');
       return {
-        tasks: sortWarehouseTasks(tasks).slice(0, 12),
-        total: responses.reduce((sum, response) => sum + response.data.meta.total, 0),
+        tasks: sortWarehouseTasks(response.data.data),
+        total: response.data.meta.total,
       };
     },
     staleTime: 15_000,

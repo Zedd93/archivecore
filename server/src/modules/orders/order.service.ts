@@ -377,6 +377,37 @@ export class OrderService {
     return { data, total };
   }
 
+  async listWarehouseTasks(tenantId: string, department?: string) {
+    const where: Prisma.OrderWhereInput = {
+      tenantId,
+      status: { in: [OrderStatus.approved, OrderStatus.in_progress, OrderStatus.ready] },
+      ...(department ? { AND: [scanOrderVisibility(department)] } : {}),
+    };
+    const [data, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        take: 12,
+        orderBy: [
+          { slaDeadline: { sort: 'asc', nulls: 'last' } },
+          { priority: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        select: {
+          id: true,
+          orderNumber: true,
+          orderType: true,
+          status: true,
+          priority: true,
+          slaDeadline: true,
+          createdAt: true,
+          assignee: { select: { firstName: true, lastName: true } },
+        },
+      }),
+      prisma.order.count({ where }),
+    ]);
+    return { data, total };
+  }
+
   async getById(id: string, tenantId: string, department?: string) {
     const order = await prisma.order.findFirst({
       where: { id, tenantId, ...(department ? { AND: [scanOrderVisibility(department)] } : {}) },

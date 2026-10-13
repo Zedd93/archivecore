@@ -16,6 +16,14 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async listWarehouseTasks(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { data, total } = await orderService.listWarehouseTasks(req.tenantId, req.accessDepartment || undefined);
+      return paginatedResponse(res, data, total, 1, 12);
+    } catch (err) { next(err); }
+  }
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
