@@ -58,7 +58,8 @@ test('warehouse query selects the earliest SLA tasks across all active statuses 
     ]);
     assert.deepEqual(query.where.status.in, ['approved', 'in_progress', 'ready']);
     assert.equal(query.where.tenantId, 'tenant-a');
-    assert.equal(query.where.AND[0].OR[0].orderType.not, 'scan');
+    assert.deepEqual(query.where.AND[0].AND[0].items.some, {});
+    assert.equal(query.where.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
     assert.deepEqual(countWhere, query.where);
   } finally {
     prisma.order.findMany = originalFindMany;
