@@ -34,6 +34,7 @@
     "test:warehouse-home": "node --import tsx --test server/scripts/test-warehouse-home.mjs",
     "test:monthly-report": "node --import tsx --test server/scripts/test-monthly-report.cjs",
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
+    "test:table-import-mapping": "node --import tsx --test server/scripts/test-table-import-mapping.cjs",
     "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",
     "test:offline-shell": "node --test client/scripts/test-offline-shell.cjs",
     "test:offline-warehouse-scans": "node --import tsx --test client/scripts/test-offline-warehouse-scans.mjs",

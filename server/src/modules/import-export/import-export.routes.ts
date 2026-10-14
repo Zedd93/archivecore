@@ -34,8 +34,10 @@ router.get('/export/hr', ...auth, requirePermission(Permissions.EXPORT_DATA), au
 router.get('/export/transfer-lists', ...auth, requirePermission(Permissions.EXPORT_DATA), auditLog('export', 'export.transfer-lists'), (req, res, next) => exportController.exportTransferLists(req, res, next));
 
 // ─── Import endpoints (preview + execute) ────────────────
+router.post('/import/boxes/inspect', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.inspectBoxes(req, res, next));
 router.post('/import/boxes/preview', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.previewBoxes(req, res, next));
 router.post('/import/boxes', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), auditLog('import', 'import.boxes'), (req, res, next) => importController.importBoxes(req, res, next));
+router.post('/import/hr/inspect', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.inspectHR(req, res, next));
 router.post('/import/hr/preview', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.previewHR(req, res, next));
 router.post('/import/hr', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), auditLog('import', 'import.hr'), (req, res, next) => importController.importHR(req, res, next));
 router.post('/import/transfer-lists/preview', ...auth, requirePermission(Permissions.IMPORT_DATA), fileUpload.single('file'), (req, res, next) => importController.previewTransferLists(req, res, next));

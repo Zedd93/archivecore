@@ -6,6 +6,7 @@ import { encryptAES256, hmacSha256 } from '../../utils/crypto';
 import { inspectTransferListImport, parseTransferListImport, TransferListImportOptions } from '../transfer-lists/transfer-list-import.parser';
 import { transferListService } from '../transfer-lists/transfer-list.service';
 import { recognizeScan } from './scan-ocr.service';
+import { inspectTableImport, parseMappedTableRows, type TableImportOptions } from './table-import.parser';
 
 // ─── Row validation schemas (relaxed versions for import) ─
 
@@ -107,7 +108,7 @@ function mapColumns(rows: Record<string, any>[], columnMap: Record<string, strin
       mapping[header] = columnMap[normalized];
     } else {
       // Try direct field name match
-      const directMatch = Object.values(columnMap).find(v => v === normalized);
+      const directMatch = Object.values(columnMap).find(v => v.toLowerCase() === normalized);
       if (directMatch) {
         mapping[header] = directMatch;
       } else {
@@ -127,6 +128,16 @@ function mapColumns(rows: Record<string, any>[], columnMap: Record<string, strin
   });
 }
 
+function readTableRows(buffer: Buffer, filename: string, aliases: Record<string, string>, options?: TableImportOptions) {
+  if (options) return parseMappedTableRows(buffer, options);
+  const rawRows = parseFileToRows(buffer, filename);
+  const mapped = mapColumns(rawRows, aliases);
+  return mapped.map((row, index) => ({
+    row,
+    sourceRow: typeof rawRows[index].__rowNum__ === 'number' ? rawRows[index].__rowNum__ + 1 : index + 2,
+  }));
+}
+
 function transferListTitleFromFilename(filename: string): string {
   const title = normalizeDisplayText(filename).replace(/\.[^.]+$/, '').trim();
   return title || 'Import spisu zdawczo-odbiorczego';
@@ -135,6 +146,14 @@ function transferListTitleFromFilename(filename: string): string {
 // ─── Import Service ──────────────────────────────────────
 
 export class ImportService {
+
+  inspectBoxes(buffer: Buffer) {
+    return inspectTableImport(buffer, BOX_COLUMN_MAP, 'boxes');
+  }
+
+  inspectHR(buffer: Buffer) {
+    return inspectTableImport(buffer, HR_COLUMN_MAP, 'hr');
+  }
 
   async recognizeTransferListScan(buffer: Buffer) {
     return recognizeScan(buffer);
@@ -166,29 +185,27 @@ export class ImportService {
   /**
    * Dry-run: parse and validate without inserting
    */
-  async previewBoxes(buffer: Buffer, filename: string): Promise<{ rows: any[]; errors: ImportResult['errors'] }> {
-    const rawRows = parseFileToRows(buffer, filename);
-    const mapped = mapColumns(rawRows, BOX_COLUMN_MAP);
+  async previewBoxes(buffer: Buffer, filename: string, options?: TableImportOptions): Promise<{ rows: any[]; errors: ImportResult['errors'] }> {
+    const mapped = readTableRows(buffer, filename, BOX_COLUMN_MAP, options);
     const errors: ImportResult['errors'] = [];
     const validRows: any[] = [];
 
-    mapped.forEach((row, i) => {
+    mapped.forEach(({ row, sourceRow }) => {
       const result = boxImportRowSchema.safeParse(row);
       if (!result.success) {
         result.error.errors.forEach(e => {
-          errors.push({ row: i + 2, field: e.path.join('.'), message: e.message });
+          errors.push({ row: sourceRow, field: e.path.join('.'), message: e.message });
         });
       } else {
-        validRows.push({ ...result.data, _rowIndex: i + 2 });
+        validRows.push({ ...result.data, _rowIndex: sourceRow });
       }
     });
 
     return { rows: validRows, errors };
   }
 
-  async importBoxes(buffer: Buffer, filename: string, tenantId: string, userId: string): Promise<ImportResult> {
-    const rawRows = parseFileToRows(buffer, filename);
-    const mapped = mapColumns(rawRows, BOX_COLUMN_MAP);
+  async importBoxes(buffer: Buffer, filename: string, tenantId: string, userId: string, options?: TableImportOptions): Promise<ImportResult> {
+    const mapped = readTableRows(buffer, filename, BOX_COLUMN_MAP, options);
     const errors: ImportResult['errors'] = [];
     let imported = 0;
 
@@ -205,12 +222,12 @@ export class ImportService {
     let counter = lastBox ? parseInt(lastBox.boxNumber.split('-').pop() || '0') : 0;
 
     for (let i = 0; i < mapped.length; i++) {
-      const row = mapped[i];
+      const { row, sourceRow } = mapped[i];
       const result = boxImportRowSchema.safeParse(row);
 
       if (!result.success) {
         result.error.errors.forEach(e => {
-          errors.push({ row: i + 2, field: e.path.join('.'), message: e.message });
+          errors.push({ row: sourceRow, field: e.path.join('.'), message: e.message });
         });
         continue;
       }
@@ -236,7 +253,7 @@ export class ImportService {
         });
         imported++;
       } catch (err: any) {
-        errors.push({ row: i + 2, message: err.message || 'Błąd tworzenia kartonu' });
+        errors.push({ row: sourceRow, message: err.message || 'Błąd tworzenia kartonu' });
       }
     }
 
@@ -246,17 +263,16 @@ export class ImportService {
   /**
    * Preview HR import
    */
-  async previewHR(buffer: Buffer, filename: string): Promise<{ rows: any[]; errors: ImportResult['errors'] }> {
-    const rawRows = parseFileToRows(buffer, filename);
-    const mapped = mapColumns(rawRows, HR_COLUMN_MAP);
+  async previewHR(buffer: Buffer, filename: string, options?: TableImportOptions): Promise<{ rows: any[]; errors: ImportResult['errors'] }> {
+    const mapped = readTableRows(buffer, filename, HR_COLUMN_MAP, options);
     const errors: ImportResult['errors'] = [];
     const validRows: any[] = [];
 
-    mapped.forEach((row, i) => {
+    mapped.forEach(({ row, sourceRow }) => {
       const result = hrImportRowSchema.safeParse(row);
       if (!result.success) {
         result.error.errors.forEach(e => {
-          errors.push({ row: i + 2, field: e.path.join('.'), message: e.message });
+          errors.push({ row: sourceRow, field: e.path.join('.'), message: e.message });
         });
       } else {
         // Mask PESEL in preview
@@ -264,26 +280,25 @@ export class ImportService {
         if (data.employeePesel) {
           data.employeePesel = data.employeePesel.substring(0, 3) + '********';
         }
-        validRows.push({ ...data, _rowIndex: i + 2 });
+        validRows.push({ ...data, _rowIndex: sourceRow });
       }
     });
 
     return { rows: validRows, errors };
   }
 
-  async importHR(buffer: Buffer, filename: string, tenantId: string, userId: string): Promise<ImportResult> {
-    const rawRows = parseFileToRows(buffer, filename);
-    const mapped = mapColumns(rawRows, HR_COLUMN_MAP);
+  async importHR(buffer: Buffer, filename: string, tenantId: string, userId: string, options?: TableImportOptions): Promise<ImportResult> {
+    const mapped = readTableRows(buffer, filename, HR_COLUMN_MAP, options);
     const errors: ImportResult['errors'] = [];
     let imported = 0;
 
     for (let i = 0; i < mapped.length; i++) {
-      const row = mapped[i];
+      const { row, sourceRow } = mapped[i];
       const result = hrImportRowSchema.safeParse(row);
 
       if (!result.success) {
         result.error.errors.forEach(e => {
-          errors.push({ row: i + 2, field: e.path.join('.'), message: e.message });
+          errors.push({ row: sourceRow, field: e.path.join('.'), message: e.message });
         });
         continue;
       }
@@ -298,7 +313,7 @@ export class ImportService {
         });
 
         if (existing) {
-          errors.push({ row: i + 2, message: `Pracownik z tym PESELem już istnieje (ID: ${existing.id})` });
+          errors.push({ row: sourceRow, message: `Pracownik z tym PESELem już istnieje (ID: ${existing.id})` });
           continue;
         }
 
@@ -331,7 +346,7 @@ export class ImportService {
         });
         imported++;
       } catch (err: any) {
-        errors.push({ row: i + 2, message: err.message || 'Błąd tworzenia akt osobowych' });
+        errors.push({ row: sourceRow, message: err.message || 'Błąd tworzenia akt osobowych' });
       }
     }
 

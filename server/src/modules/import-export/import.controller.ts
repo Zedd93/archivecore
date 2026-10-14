@@ -2,8 +2,25 @@ import { Request, Response, NextFunction } from 'express';
 import { importService } from './import.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { parseTransferListImportOptions } from '../transfer-lists/transfer-list-import.parser';
+import { parseTableImportOptions } from './table-import.parser';
 
 export class ImportController {
+
+  async inspectBoxes(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Nie załączono pliku', 400);
+      return successResponse(res, importService.inspectBoxes(req.file.buffer));
+    } catch (err) { next(err); }
+  }
+
+  async inspectHR(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Nie załączono pliku', 400);
+      return successResponse(res, importService.inspectHR(req.file.buffer));
+    } catch (err) { next(err); }
+  }
 
   async recognizeTransferListScan(req: Request, res: Response, next: NextFunction) {
     try {
@@ -34,7 +51,7 @@ export class ImportController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!req.file) return errorResponse(res, 'Nie załączono pliku', 400);
 
-      const result = await importService.previewBoxes(req.file.buffer, req.file.originalname);
+      const result = await importService.previewBoxes(req.file.buffer, req.file.originalname, parseTableImportOptions(req.body.mapping, 'boxes'));
       return successResponse(res, result);
     } catch (err) { next(err); }
   }
@@ -48,7 +65,8 @@ export class ImportController {
         req.file.buffer,
         req.file.originalname,
         req.tenantId,
-        req.user!.userId
+        req.user!.userId,
+        parseTableImportOptions(req.body.mapping, 'boxes')
       );
       return successResponse(res, result, 201);
     } catch (err) { next(err); }
@@ -59,7 +77,7 @@ export class ImportController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!req.file) return errorResponse(res, 'Nie załączono pliku', 400);
 
-      const result = await importService.previewHR(req.file.buffer, req.file.originalname);
+      const result = await importService.previewHR(req.file.buffer, req.file.originalname, parseTableImportOptions(req.body.mapping, 'hr'));
       return successResponse(res, result);
     } catch (err) { next(err); }
   }
@@ -73,7 +91,8 @@ export class ImportController {
         req.file.buffer,
         req.file.originalname,
         req.tenantId,
-        req.user!.userId
+        req.user!.userId,
+        parseTableImportOptions(req.body.mapping, 'hr')
       );
       return successResponse(res, result, 201);
     } catch (err) { next(err); }

@@ -40,8 +40,13 @@ const TRANSFER_FIELDS = [
   'categoryCode', 'folderCount', 'storageLocation', 'disposalOrTransferDate',
   'boxNumber', 'notes',
 ] as const;
+const BOX_FIELDS = ['title', 'docType', 'department', 'description', 'notes'] as const;
+const HR_FIELDS = [
+  'employeeFirstName', 'employeeLastName', 'employeePesel', 'employeeIdNumber',
+  'department', 'position', 'employmentStart', 'employmentStatus', 'retentionPeriod', 'storageForm',
+] as const;
 
-type TransferField = typeof TRANSFER_FIELDS[number];
+type ImportField = typeof TRANSFER_FIELDS[number] | typeof BOX_FIELDS[number] | typeof HR_FIELDS[number];
 
 interface ImportResult {
   totalRows: number;
@@ -77,15 +82,18 @@ export default function ImportPage() {
   const [sheets, setSheets] = useState<SheetStructure[]>([]);
   const [sheetName, setSheetName] = useState('');
   const [headerRow, setHeaderRow] = useState(1);
-  const [columnMapping, setColumnMapping] = useState<Record<string, TransferField>>({});
+  const [columnMapping, setColumnMapping] = useState<Record<string, ImportField>>({});
   const [previewMapping, setPreviewMapping] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedSheet = sheets.find((sheet) => sheet.sheetName === sheetName);
   const selectedHeader = selectedSheet?.rows.find((row) => row.rowNumber === headerRow);
   const mappedFields = Object.values(columnMapping);
-  const mappingReady = ['folderSignature', 'folderTitle', 'categoryCode'].every((field) => mappedFields.includes(field as TransferField))
-    && !(mappedFields.includes('_dateRange') && (mappedFields.includes('dateFrom') || mappedFields.includes('dateTo')));
+  const fields: readonly ImportField[] = entityType === 'boxes' ? BOX_FIELDS : entityType === 'hr' ? HR_FIELDS : TRANSFER_FIELDS;
+  const requiredFields = entityType === 'boxes' ? ['title'] : entityType === 'hr'
+    ? ['employeeFirstName', 'employeeLastName', 'employeePesel'] : ['folderSignature', 'folderTitle', 'categoryCode'];
+  const mappingReady = requiredFields.every((field) => mappedFields.includes(field as ImportField))
+    && (entityType !== 'transfer-lists' || !(mappedFields.includes('_dateRange') && (mappedFields.includes('dateFrom') || mappedFields.includes('dateTo'))));
 
   // ─── File handling ──────────────────────────────────────
   const handleFileSelect = useCallback((selectedFile: File) => {
@@ -128,7 +136,7 @@ export default function ImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const { data } = await api.post('/import/transfer-lists/inspect', formData, {
+      const { data } = await api.post(`/import/${entityType}/inspect`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const availableSheets = data.data as SheetStructure[];
@@ -156,7 +164,7 @@ export default function ImportPage() {
         for (const [index, assigned] of Object.entries(next)) {
           if (assigned === field) delete next[index];
         }
-        next[columnIndex] = field as TransferField;
+        next[columnIndex] = field as ImportField;
       }
       return next;
     });
@@ -197,7 +205,7 @@ export default function ImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (entityType === 'transfer-lists' && previewMapping) formData.append('mapping', previewMapping);
+      if (previewMapping) formData.append('mapping', previewMapping);
 
       const { data } = await api.post(`/import/${entityType}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -332,7 +340,7 @@ export default function ImportPage() {
           </div>
         )}
 
-        {file && entityType === 'transfer-lists' && !importResult && (
+        {file && !importResult && (
           <div className="mt-4 rounded-xl border border-gray-200 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -396,7 +404,7 @@ export default function ImportPage() {
                     </select>
                   </label>
                 </div>
-                <p className="text-xs text-gray-500">{t('import.mappingRequired')}</p>
+                <p className="text-xs text-gray-500">{t(`import.mappingRequired.${entityType === 'transfer-lists' ? 'transferLists' : entityType}`)}</p>
                 <div className="max-h-80 overflow-y-auto space-y-2">
                   {selectedHeader?.cells.map((header, index) => (
                     <div key={index} className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center rounded-lg bg-gray-50 p-2">
@@ -409,7 +417,7 @@ export default function ImportPage() {
                         onChange={(event) => updateMapping(String(index), event.target.value)}
                       >
                         <option value="">{t('import.mappingIgnore')}</option>
-                        {TRANSFER_FIELDS.map((field) => (
+                        {fields.map((field) => (
                           <option key={field} value={field}>{t(`import.mappingFields.${field}`)}</option>
                         ))}
                       </select>
