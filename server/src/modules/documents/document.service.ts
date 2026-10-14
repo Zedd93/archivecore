@@ -237,6 +237,9 @@ export class DocumentService {
 
   async delete(id: string, tenantId: string) {
     await this.getById(id, tenantId);
+    if (await prisma.custodyEvent.count({ where: { documentId: id } })) {
+      throw Object.assign(new Error('Dokument ma historię wydań lub zwrotów i nie może zostać usunięty'), { statusCode: 409 });
+    }
     await prisma.document.delete({ where: { id } });
     return { deleted: true };
   }

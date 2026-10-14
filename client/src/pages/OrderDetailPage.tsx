@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Fragment, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
@@ -59,6 +59,20 @@ type HandoverPhoto = {
   uploadedAt: string;
   uploadedBy: { firstName: string; lastName: string };
 };
+type CustodyTimelineEvent = {
+  id: string;
+  eventType: 'handover' | 'receipt' | 'return_event' | 'transfer';
+  eventAt: string;
+  notes: string | null;
+  recipientName: string | null;
+  box: { id: string; boxNumber: string } | null;
+  folder: { id: string; folderNumber: string; title: string } | null;
+  document: { id: string; title: string } | null;
+  hrFolder: { id: string; employeeFirstName: string; employeeLastName: string } | null;
+  performedBy: { firstName: string; lastName: string } | null;
+  fromUser: { firstName: string; lastName: string } | null;
+  toUser: { firstName: string; lastName: string } | null;
+};
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -69,6 +83,11 @@ export default function OrderDetailPage() {
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'issue', id || '');
   const { data: order, isLoading } = useDetail('order', '/orders', id);
+  const { data: custodyEvents = [], isLoading: custodyLoading, isError: custodyError } = useQuery<CustodyTimelineEvent[]>({
+    queryKey: ['order-custody', activeTenantId, id],
+    queryFn: async () => { const { data } = await api.get(`/orders/${id}/custody`); return data.data; },
+    enabled: Boolean(id && order),
+  });
   const { data: handoverPhotos = [], isLoading: photosLoading, isError: photosError } = useQuery<HandoverPhoto[]>({
     queryKey: ['order-handover-photos', activeTenantId, id],
     queryFn: async () => { const { data } = await api.get(`/orders/${id}/handover/photos`); return data.data; },
@@ -269,6 +288,7 @@ export default function OrderDetailPage() {
   }) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}`, ...(proof ? { proof } : {}) });
     await queryClient.invalidateQueries({ queryKey: ['order', id] });
+    await queryClient.invalidateQueries({ queryKey: ['order-custody', activeTenantId, id] });
     await queryClient.invalidateQueries({ queryKey: ['box'] });
     await queryClient.invalidateQueries({ queryKey: ['boxes'] });
   };
@@ -809,6 +829,27 @@ export default function OrderDetailPage() {
               </div>
             </div>
           )}
+
+          <div className="card space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">{t('orders.detail.custody.title')}</h3>
+            {custodyLoading && <p className="text-sm text-gray-500">{t('common.loading')}</p>}
+            {custodyError && <p className="text-sm text-red-600">{t('orders.detail.custody.loadError')}</p>}
+            {!custodyLoading && !custodyError && custodyEvents.length === 0 && <p className="text-sm text-gray-500">{t('orders.detail.custody.empty')}</p>}
+            <ol className="max-h-96 overflow-y-auto divide-y divide-gray-100">
+              {custodyEvents.map((event) => <li key={event.id} className="py-3 text-sm space-y-1">
+                <p className="font-medium">{t(`orders.detail.custody.${event.eventType}`)} · {new Date(event.eventAt).toLocaleString()}</p>
+                <p className="break-words">
+                  {event.box && <Link to={`/boxes/${event.box.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.box')}: {event.box.boxNumber}</Link>}
+                  {event.folder && <Link to={`/folders/${event.folder.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.folder')}: {event.folder.folderNumber} · {event.folder.title}</Link>}
+                  {event.document && <span>{t('orders.detail.custody.document')}: {event.document.title}</span>}
+                  {event.hrFolder && <Link to={`/hr/${event.hrFolder.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.hrFolder')}: {event.hrFolder.employeeFirstName} {event.hrFolder.employeeLastName}</Link>}
+                </p>
+                {event.performedBy && <p className="text-gray-600">{t('orders.detail.custody.operator')}: {event.performedBy.firstName} {event.performedBy.lastName}</p>}
+                {event.recipientName && <p className="text-gray-600">{t('orders.detail.custody.recipient')}: {event.recipientName}</p>}
+                {event.notes && <p className="text-gray-600 break-words">{event.notes}</p>}
+              </li>)}
+            </ol>
+          </div>
 
           {/* Activity Timeline */}
           <div className="card">

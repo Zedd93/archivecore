@@ -56,8 +56,13 @@ export interface ICreateOrder {
 export interface ICustodyEvent {
   id: string;
   orderId: string | null;
-  boxId: string;
+  boxId: string | null;
+  folderId: string | null;
+  documentId: string | null;
+  hrFolderId: string | null;
   eventType: CustodyEventType;
+  performedById: string | null;
+  recipientName: string | null;
   fromUserId: string | null;
   toUserId: string | null;
   fromLocationId: string | null;

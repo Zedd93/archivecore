@@ -243,7 +243,8 @@ export class OrderController {
   async getCustodyByOrder(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const events = await custodyService.getByOrder(req.params.id, req.tenantId);
+      await orderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      const events = await custodyService.getByOrder(req.params.id, req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, events);
     } catch (err) { next(err); }
   }

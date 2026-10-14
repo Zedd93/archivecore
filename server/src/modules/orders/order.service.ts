@@ -4,7 +4,7 @@ import { canMarkReadyAfterPicking, isValidTransition } from './order-state-machi
 import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS, generateFolderQrData } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
-import { scanOrderVisibility } from './scan-access';
+import { departmentOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
 import PDFDocument from 'pdfkit';
 
@@ -91,6 +91,14 @@ function isPrismaUniqueError(err: unknown, field?: string) {
 }
 
 export class OrderService {
+  private getCustodyTarget(item: any) {
+    if (item.documentId) return { documentId: item.documentId };
+    if (item.folderId) return { folderId: item.folderId };
+    if (item.hrFolderId) return { hrFolderId: item.hrFolderId };
+    if (item.boxId) return { boxId: item.boxId };
+    return null;
+  }
+
   private getOrderItemBoxId(item: any): string | null {
     return item.boxId
       || item.box?.id
@@ -367,7 +375,7 @@ export class OrderService {
 
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
     const where: Prisma.OrderWhereInput = { tenantId };
-    if (department) where.AND = [scanOrderVisibility(department)];
+    if (department) where.AND = [departmentOrderVisibility(department)];
 
     if (filters.status) where.status = filters.status as OrderStatus;
     if (filters.orderType) where.orderType = filters.orderType as OrderType;
@@ -404,7 +412,7 @@ export class OrderService {
     const where: Prisma.OrderWhereInput = {
       tenantId,
       status: { in: [OrderStatus.approved, OrderStatus.in_progress, OrderStatus.ready] },
-      ...(department ? { AND: [scanOrderVisibility(department)] } : {}),
+      ...(department ? { AND: [departmentOrderVisibility(department)] } : {}),
     };
     const [data, total] = await Promise.all([
       prisma.order.findMany({
@@ -433,7 +441,7 @@ export class OrderService {
 
   async getById(id: string, tenantId: string, department?: string) {
     const order = await prisma.order.findFirst({
-      where: { id, tenantId, ...(department ? { AND: [scanOrderVisibility(department)] } : {}) },
+      where: { id, tenantId, ...(department ? { AND: [departmentOrderVisibility(department)] } : {}) },
       include: {
         requester: { select: { id: true, firstName: true, lastName: true, email: true } },
         approver: { select: { id: true, firstName: true, lastName: true } },
@@ -470,7 +478,15 @@ export class OrderService {
         custodyEvents: {
           orderBy: { eventAt: 'desc' },
           take: 20,
-          include: {
+          select: {
+            id: true, orderId: true, eventType: true, eventAt: true, notes: true,
+            boxId: true, folderId: true, documentId: true, hrFolderId: true,
+            recipientName: true,
+            performedBy: { select: { firstName: true, lastName: true } },
+            box: { select: { id: true, boxNumber: true } },
+            folder: { select: { id: true, folderNumber: true, title: true } },
+            document: { select: { id: true, title: true } },
+            hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
             fromUser: { select: { firstName: true, lastName: true } },
             toUser: { select: { firstName: true, lastName: true } },
           },
@@ -671,9 +687,9 @@ export class OrderService {
 
     const deliveredAt = new Date();
     const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
-    const boxIds = (order.orderType === 'scan' ? [] : order.items)
-      .map((item: any) => this.getOrderItemBoxId(item))
-      .filter((boxId: string | null): boxId is string => Boolean(boxId));
+    const custodyTargets = (order.orderType === 'scan' ? [] : order.items)
+      .map((item: any) => this.getCustodyTarget(item))
+      .filter((target: any) => target !== null);
     const wholeBoxIds = order.items
       .map((item: any) => item.boxId)
       .filter((boxId: string | null): boxId is string => Boolean(boxId));
@@ -734,14 +750,16 @@ export class OrderService {
         }
       }
 
-      if (boxIds.length > 0) {
+      if (custodyTargets.length > 0) {
         await tx.custodyEvent.createMany({
-          data: boxIds.map((boxId: string) => ({
+          data: custodyTargets.map((target: any) => ({
             orderId: id,
-            boxId,
+            ...target,
             eventType: order.orderType === 'return_order' ? 'return_event' : 'handover',
             fromUserId: userId,
-            toUserId: order.requestedBy,
+            performedById: userId,
+            recipientName: proof?.recipientName || null,
+            eventAt: deliveredAt,
           })),
         });
       }
@@ -791,6 +809,7 @@ export class OrderService {
 
     const returnedAt = new Date();
     const boxId = this.getOrderItemBoxId(item);
+    const custodyTarget = this.getCustodyTarget(item);
     await prisma.$transaction(async (tx) => {
       const lockedOrder = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
         SELECT "id" FROM "orders"
@@ -821,13 +840,13 @@ export class OrderService {
         throw Object.assign(new Error('Pozycja została już zwrócona. Odśwież listę wypożyczeń.'), { statusCode: 409 });
       }
 
-      if (boxId) {
+      if (custodyTarget) {
         await tx.custodyEvent.create({
           data: {
             orderId,
-            boxId,
+            ...custodyTarget,
             eventType: 'return_event',
-            fromUserId: order.requestedBy,
+            performedById: userId,
             toUserId: userId,
             notes: `Zwrot pozycji z wypożyczenia ${order.orderNumber}`,
             eventAt: returnedAt,

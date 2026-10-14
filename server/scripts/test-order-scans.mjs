@@ -95,12 +95,27 @@ test('department order list keeps scan orders limited to its documents', async (
     await new OrderService().list(tenantId, { search: 'Z-1' }, 0, 20, 'Księgowość');
     assert.equal(capturedWhere.tenantId, tenantId);
     assert.equal(capturedWhere.OR[0].orderNumber.contains, 'Z-1');
-    assert.equal(capturedWhere.AND[0].OR[0].orderType.not, 'scan');
-    assert.equal(capturedWhere.AND[0].OR[1].items.every.OR.length, 5);
+    assert.deepEqual(capturedWhere.AND[0].AND[0].items.some, {});
+    assert.equal(capturedWhere.AND[0].AND[1].items.every.OR.length, 7);
   } finally {
     prisma.order.findMany = originalFindMany;
     prisma.order.count = originalCount;
   }
+});
+
+test('department restriction also applies to non-scan order details', async () => {
+  const original = prisma.order.findFirst;
+  let capturedWhere;
+  prisma.order.findFirst = async ({ where }) => { capturedWhere = where; return null; };
+  try {
+    await assert.rejects(new OrderService().getById(orderId, tenantId, 'Księgowość'), { statusCode: 404 });
+    assert.equal(capturedWhere.id, orderId);
+    assert.equal(capturedWhere.tenantId, tenantId);
+    assert.deepEqual(capturedWhere.AND[0].AND[0].items.some, {});
+    const itemScope = capturedWhere.AND[0].AND[1].items.every.OR;
+    assert.equal(itemScope[0].box.department.equals, 'Księgowość');
+    assert.equal(itemScope.length, 7);
+  } finally { prisma.order.findFirst = original; }
 });
 
 test('scan billing uses the PDF page count, not one event per file', async () => {

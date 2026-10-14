@@ -7,6 +7,7 @@ const { generateQrData, generateFolderQrData } = require('../../shared/src/utils
 const { matchActiveLoansByQr } = require('../../client/src/utils/loanReturn.ts');
 const { prisma } = require('../dist/config/database.js');
 const { orderService } = require('../dist/modules/orders/order.service.js');
+const { custodyService } = require('../dist/modules/orders/custody.service.js');
 const { billingService } = require('../dist/modules/pricing/billing.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
 const { sanitizeAuditValues } = require('../dist/middleware/audit.js');
@@ -81,6 +82,8 @@ test('return records custody once and closes an order after its last item', asyn
     await orderService.returnLoanItem(orderId, itemId, tenantId, userId);
     assert.equal(calls.updates[0].where.itemStatus, 'delivered');
     assert.equal(calls.custody.length, 1);
+    assert.equal(calls.custody[0].data.performedById, userId);
+    assert.equal(calls.custody[0].data.fromUserId, undefined);
     assert.equal(calls.completed.length, 1);
     assert.equal(calls.boxUpdates.length, 1);
     assert.equal(calls.boxLoanQueries[0].boxId, boxId);
@@ -93,6 +96,8 @@ test('returning a folder records custody without changing its parent box status'
   try {
     await orderService.returnLoanItem(orderId, itemId, tenantId, userId);
     assert.equal(calls.custody.length, 1);
+    assert.equal(calls.custody[0].data.folderId, itemId);
+    assert.equal(calls.custody[0].data.boxId, undefined);
     assert.equal(calls.completed.length, 1);
     assert.equal(calls.boxLoanQueries.length, 0);
     assert.equal(calls.boxUpdates.length, 0);
@@ -133,6 +138,8 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
   for (const { orderType, item, expectedBoxStatus } of [
     { orderType: 'checkout', item: { id: itemId, itemStatus: 'picked', folderId: itemId, folder: { box: { id: boxId } } }, expectedBoxStatus: null },
     { orderType: 'return_order', item: { id: itemId, itemStatus: 'pending', folderId: itemId, folder: { box: { id: boxId } } }, expectedBoxStatus: null },
+    { orderType: 'checkout', item: { id: itemId, itemStatus: 'picked', documentId: itemId, document: { box: { id: boxId } } }, expectedBoxStatus: null },
+    { orderType: 'checkout', item: { id: itemId, itemStatus: 'picked', hrFolderId: itemId, hrFolder: { box: { id: boxId } } }, expectedBoxStatus: null },
     { orderType: 'checkout', item: { id: itemId, itemStatus: 'picked', boxId }, expectedBoxStatus: 'checked_out' },
     { orderType: 'return_order', item: { id: itemId, itemStatus: 'pending', boxId }, expectedBoxStatus: 'active' },
   ]) {
@@ -158,13 +165,18 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
     ];
     try {
       const proof = orderType === 'checkout'
-        ? item.folderId
-          ? { recipientName: 'Anna Kowalska', signatureData, latitude: 50.1, longitude: 18.6, accuracyMeters: 12, boxChecks: [] }
-          : { recipientName: 'Anna Kowalska', signatureData, boxChecks: [{ boxId, condition: 'damaged', sealNumber: 'P-12', conditionNote: 'Rozerwany narożnik' }] }
+        ? item.boxId
+          ? { recipientName: 'Anna Kowalska', signatureData, boxChecks: [{ boxId, condition: 'damaged', sealNumber: 'P-12', conditionNote: 'Rozerwany narożnik' }] }
+          : { recipientName: 'Anna Kowalska', signatureData, latitude: 50.1, longitude: 18.6, accuracyMeters: 12, boxChecks: [] }
         : undefined;
       await orderService.deliver(orderId, tenantId, userId, proof);
       assert.equal(calls.custody.length, 1);
-      assert.equal(calls.custody[0].boxId, boxId);
+      const targetField = item.documentId ? 'documentId' : item.folderId ? 'folderId' : item.hrFolderId ? 'hrFolderId' : 'boxId';
+      assert.equal(calls.custody[0][targetField], item[targetField]);
+      assert.equal(['boxId', 'folderId', 'documentId', 'hrFolderId'].filter((field) => calls.custody[0][field]).length, 1);
+      assert.equal(calls.custody[0].performedById, userId);
+      assert.equal(calls.custody[0].recipientName, proof?.recipientName || null);
+      assert.equal(calls.custody[0].toUserId, undefined);
       assert.equal(calls.proofs.length, proof ? 1 : 0);
       assert.equal(calls.checks.length, proof && item.boxId ? 1 : 0);
       if (calls.checks.length) {
@@ -183,6 +195,85 @@ test('delivering or returning a folder leaves its parent box status unchanged', 
       assert.equal(calls.boxUpdates.length, expectedBoxStatus ? 1 : 0);
       if (expectedBoxStatus) assert.equal(calls.boxUpdates[0].data.status, expectedBoxStatus);
     } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
+  }
+});
+
+test('delivering two folders from one box records two distinct folder handovers', async () => {
+  const folderTwoId = 'fb29721c-f3c3-4b63-b82b-62aff03ec269';
+  const calls = { custody: [], boxUpdates: [] };
+  const order = {
+    id: orderId, tenantId, orderType: 'checkout', status: 'ready', requestedBy: userId,
+    items: [
+      { id: itemId, folderId: itemId, folder: { box: { id: boxId } }, itemStatus: 'picked' },
+      { id: folderTwoId, folderId: folderTwoId, folder: { box: { id: boxId } }, itemStatus: 'picked' },
+    ],
+  };
+  const tx = {
+    order: { update: async () => order },
+    orderItem: { updateMany: async () => ({ count: 2 }) },
+    custodyEvent: { createMany: async ({ data }) => { calls.custody.push(...data); } },
+    box: { updateMany: async (args) => { calls.boxUpdates.push(args); } },
+    webhookEndpoint: { findMany: async () => [] },
+  };
+  const mocks = [
+    mock.method(orderService, 'getById', async () => order),
+    mock.method(prisma, '$transaction', async (callback) => callback(tx)),
+    mock.method(billingService, 'buildOrderDeliveryEvents', async () => []),
+    mock.method(notificationService, 'notifyTenantUsers', async () => undefined),
+  ];
+  try {
+    await orderService.deliver(orderId, tenantId, userId);
+    assert.deepEqual(calls.custody.map((event) => event.folderId), [itemId, folderTwoId]);
+    assert.ok(calls.custody.every((event) => event.boxId === undefined));
+    assert.equal(calls.boxUpdates.length, 0);
+  } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
+});
+
+test('order custody history filters by department and does not return signature bytes', async () => {
+  const originals = { order: prisma.order.findFirst, events: prisma.custodyEvent.findMany };
+  let captured;
+  prisma.order.findFirst = async ({ where }) => where.id === orderId && where.tenantId === tenantId ? { id: orderId } : null;
+  prisma.custodyEvent.findMany = async (query) => { captured = query; return []; };
+  try {
+    await custodyService.getByOrder(orderId, tenantId, 'Księgowość');
+    assert.equal(captured.where.orderId, orderId);
+    assert.equal(captured.where.OR[1].folder.box.department.equals, 'Księgowość');
+    assert.equal(captured.select.folderId, true);
+    assert.equal(captured.select.documentId, true);
+    assert.equal(captured.select.signatureData, undefined);
+  } finally {
+    prisma.order.findFirst = originals.order;
+    prisma.custodyEvent.findMany = originals.events;
+  }
+});
+
+test('manual custody requires a direct order box and a tenant recipient', async () => {
+  let directItem = null;
+  let recipient = null;
+  const originals = {
+    box: prisma.box.findFirst, order: prisma.order.findFirst, item: prisma.orderItem.findFirst,
+    user: prisma.user.findFirst, event: prisma.custodyEvent.create,
+  };
+  prisma.box.findFirst = async () => ({ id: boxId });
+  prisma.order.findFirst = async () => ({ id: orderId });
+  prisma.orderItem.findFirst = async ({ where }) => { assert.equal(where.boxId, boxId); return directItem; };
+  prisma.user.findFirst = async ({ where }) => { assert.equal(where.OR[0].tenantId, tenantId); return recipient; };
+  prisma.custodyEvent.create = async ({ data }) => data;
+  try {
+    const data = { orderId, boxId, eventType: 'handover', fromUserId: userId, toUserId: userId };
+    await assert.rejects(custodyService.create(data, tenantId), { statusCode: 400 });
+    directItem = { id: itemId };
+    await assert.rejects(custodyService.create(data, tenantId), { statusCode: 400 });
+    recipient = { id: userId };
+    const created = await custodyService.create(data, tenantId);
+    assert.equal(created.boxId, boxId);
+    assert.equal(created.performedById, userId);
+  } finally {
+    prisma.box.findFirst = originals.box;
+    prisma.order.findFirst = originals.order;
+    prisma.orderItem.findFirst = originals.item;
+    prisma.user.findFirst = originals.user;
+    prisma.custodyEvent.create = originals.event;
   }
 });
 

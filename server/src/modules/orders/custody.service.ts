@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { CustodyEventType } from '@prisma/client';
+import { CustodyEventType, Prisma } from '@prisma/client';
 
 export class CustodyService {
   private async validateTargetLocation(locationId: string | undefined, tenantId: string) {
@@ -57,6 +57,21 @@ export class CustodyService {
       if (!order) {
         throw Object.assign(new Error('Order not found or access denied'), { statusCode: 404 });
       }
+      const item = await prisma.orderItem.findFirst({
+        where: { orderId: data.orderId, boxId: data.boxId },
+        select: { id: true },
+      });
+      if (!item) {
+        throw Object.assign(new Error('Karton nie jest bezpośrednią pozycją tego zlecenia'), { statusCode: 400 });
+      }
+    }
+
+    if (data.toUserId) {
+      const recipient = await prisma.user.findFirst({
+        where: { id: data.toUserId, OR: [{ tenantId }, { tenantId: null }] },
+        select: { id: true },
+      });
+      if (!recipient) throw Object.assign(new Error('Odbiorca nie należy do tenanta'), { statusCode: 400 });
     }
 
     return prisma.custodyEvent.create({
@@ -65,6 +80,7 @@ export class CustodyService {
         boxId: data.boxId,
         eventType: data.eventType,
         fromUserId: data.fromUserId,
+        performedById: data.fromUserId,
         toUserId: data.toUserId,
         fromLocationId: data.fromLocationId,
         toLocationId: data.toLocationId,
@@ -107,7 +123,7 @@ export class CustodyService {
     });
   }
 
-  async getByOrder(orderId: string, tenantId: string) {
+  async getByOrder(orderId: string, tenantId: string, department?: string) {
     // Verify order belongs to tenant
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
@@ -117,11 +133,28 @@ export class CustodyService {
       throw Object.assign(new Error('Order not found or access denied'), { statusCode: 404 });
     }
 
+    const departmentFilter: Prisma.CustodyEventWhereInput = department ? {
+      OR: [
+        { box: { department: { equals: department, mode: 'insensitive' } } },
+        { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+        { document: { OR: [
+          { box: { department: { equals: department, mode: 'insensitive' } } },
+          { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+        ] } },
+      ],
+    } : {};
     return prisma.custodyEvent.findMany({
-      where: { orderId },
+      where: { orderId, ...departmentFilter },
       orderBy: { eventAt: 'desc' },
-      include: {
+      select: {
+        id: true, eventType: true, eventAt: true, notes: true,
+        boxId: true, folderId: true, documentId: true, hrFolderId: true,
+        recipientName: true,
+        performedBy: { select: { id: true, firstName: true, lastName: true } },
         box: { select: { id: true, boxNumber: true, title: true } },
+        folder: { select: { id: true, folderNumber: true, title: true } },
+        document: { select: { id: true, title: true } },
+        hrFolder: { select: { id: true, employeeFirstName: true, employeeLastName: true } },
         fromUser: { select: { id: true, firstName: true, lastName: true } },
         toUser: { select: { id: true, firstName: true, lastName: true } },
         fromLocation: { select: { id: true, fullPath: true, code: true } },

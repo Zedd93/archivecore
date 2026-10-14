@@ -307,6 +307,7 @@ model User {
   pickedItems          OrderItem[]     @relation("ItemPicker")
   custodyFrom          CustodyEvent[]  @relation("CustodyFrom")
   custodyTo            CustodyEvent[]  @relation("CustodyTo")
+  custodyActions       CustodyEvent[]  @relation("CustodyActor")
   auditLogs            AuditLog[]
   labels               Label[]
   uploadedAttachments  Attachment[]    @relation("AttachmentUploader")
@@ -607,6 +608,7 @@ model Folder {
   documents        Document[]
   attachments      Attachment[]      @relation("FolderAttachments")
   orderItems       OrderItem[]
+  custodyEvents    CustodyEvent[]
   transferListItem TransferListItem?
 
   @@index([boxId])
@@ -635,6 +637,7 @@ model Document {
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   attachments Attachment[] @relation("DocumentAttachments")
   orderItems  OrderItem[]
+  custodyEvents CustodyEvent[]
 
   @@index([folderId])
   @@index([boxId])
@@ -725,6 +728,7 @@ model HRFolder {
   box        Box?           @relation(fields: [boxId], references: [id])
   parts      HRFolderPart[]
   orderItems OrderItem[]
+  custodyEvents CustodyEvent[]
 
   @@index([tenantId, employmentStatus])
   @@index([employeePeselHmac])
@@ -873,7 +877,12 @@ model WarehouseOperation {
 model CustodyEvent {
   id             String           @id @default(uuid()) @db.Uuid
   orderId        String?          @db.Uuid
-  boxId          String           @db.Uuid
+  boxId          String?          @db.Uuid
+  folderId       String?          @db.Uuid
+  documentId     String?          @db.Uuid
+  hrFolderId     String?          @db.Uuid
+  performedById  String?          @db.Uuid
+  recipientName  String?          @db.VarChar(120)
   eventType      CustodyEventType
   fromUserId     String?          @db.Uuid
   toUserId       String?          @db.Uuid
@@ -884,14 +893,22 @@ model CustodyEvent {
   eventAt        DateTime         @default(now())
 
   order        Order?    @relation(fields: [orderId], references: [id])
-  box          Box       @relation(fields: [boxId], references: [id])
+  box          Box?      @relation(fields: [boxId], references: [id])
+  folder       Folder?   @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  document     Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  hrFolder     HRFolder? @relation(fields: [hrFolderId], references: [id], onDelete: Restrict)
   fromUser     User?     @relation("CustodyFrom", fields: [fromUserId], references: [id])
   toUser       User?     @relation("CustodyTo", fields: [toUserId], references: [id])
+  performedBy  User?     @relation("CustodyActor", fields: [performedById], references: [id], onDelete: Restrict)
   fromLocation Location? @relation("CustodyFromLocation", fields: [fromLocationId], references: [id])
   toLocation   Location? @relation("CustodyToLocation", fields: [toLocationId], references: [id])
 
   @@index([orderId])
   @@index([boxId])
+  @@index([folderId])
+  @@index([documentId])
+  @@index([hrFolderId])
+  @@index([performedById])
   @@index([eventAt])
   @@map("custody_events")
 }
