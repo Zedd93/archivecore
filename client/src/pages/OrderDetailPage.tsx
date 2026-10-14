@@ -841,7 +841,7 @@ export default function OrderDetailPage() {
                 <p className="break-words">
                   {event.box && <Link to={`/boxes/${event.box.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.box')}: {event.box.boxNumber}</Link>}
                   {event.folder && <Link to={`/folders/${event.folder.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.folder')}: {event.folder.folderNumber} · {event.folder.title}</Link>}
-                  {event.document && <span>{t('orders.detail.custody.document')}: {event.document.title}</span>}
+                  {event.document && <Link to={`/documents/${event.document.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.document')}: {event.document.title}</Link>}
                   {event.hrFolder && <Link to={`/hr/${event.hrFolder.id}`} className="text-primary-700 hover:underline">{t('orders.detail.custody.hrFolder')}: {event.hrFolder.employeeFirstName} {event.hrFolder.employeeLastName}</Link>}
                 </p>
                 {event.performedBy && <p className="text-gray-600">{t('orders.detail.custody.operator')}: {event.performedBy.firstName} {event.performedBy.lastName}</p>}

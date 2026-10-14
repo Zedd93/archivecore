@@ -18,6 +18,7 @@ export class SearchService {
    */
   async search(tenantId: string, query: string, options: {
     types?: string[];
+    canViewHr?: boolean;
     limit?: number;
     offset?: number;
   } = {}, department?: string): Promise<{ results: SearchResult[]; total: number }> {
@@ -74,11 +75,11 @@ export class SearchService {
     }
     if (types.includes('document')) {
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
-      searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      if (options.canViewHr) searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
     }
 
     await Promise.all(searchPromises);
@@ -192,14 +193,17 @@ export class SearchService {
     const documents = await prisma.document.findMany({
       where: {
         tenantId,
-        ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}),
-        OR: [
+        ...(department ? { OR: [
+          { box: { department: { equals: department, mode: 'insensitive' } } },
+          { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+        ] } : {}),
+        AND: [{ OR: [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
           { attachments: { some: { fileName: { contains: query, mode: 'insensitive' } } } },
           { attachments: { some: { ocrText: { contains: query, mode: 'insensitive' } } } },
-        ],
+        ] }],
       },
       include: {
         folder: { select: { folderNumber: true, box: { select: { id: true, boxNumber: true, department: true } } } },
@@ -347,6 +351,8 @@ export class SearchService {
           box?.boxNumber || '',
         ]),
         metadata: {
+          documentId: attachment.document?.id,
+          folderId: attachment.folder?.id,
           boxId: box?.id,
           boxNumber: box?.boxNumber,
           department: box?.department,

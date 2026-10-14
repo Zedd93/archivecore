@@ -9,6 +9,7 @@ import api from '@/services/api';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 import StatusBadge from '@/components/ui/StatusBadge';
+import CustodyHistory from '@/components/ui/CustodyHistory';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 
@@ -29,6 +30,7 @@ interface FolderDetail {
     transferList: { id: string; listNumber: string; title: string };
   } | null;
   _count: { documents: number; attachments: number };
+  documents: Array<{ id: string; title: string }>;
 }
 
 function displayDate(value: string | null) {
@@ -38,10 +40,11 @@ function displayDate(value: string | null) {
 export default function FolderDetailPage() {
   const { id } = useParams();
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const tenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const [printing, setPrinting] = useState(false);
   const { data: folder, isLoading, error, refetch } = useQuery({
-    queryKey: ['folder', id],
+    queryKey: ['folder', tenantId, id],
     queryFn: async () => {
       const { data } = await api.get(`/folders/${encodeURIComponent(id!)}`);
       return data.data as FolderDetail;
@@ -129,6 +132,13 @@ export default function FolderDetailPage() {
           )}
         </div>
       </div>
+      {folder.documents.length > 0 && <div className="card space-y-3">
+        <h2 className="text-lg font-semibold">{t('boxes.documents')}</h2>
+        <ul className="divide-y divide-gray-100">{folder.documents.map((document) => <li key={document.id} className="py-2">
+          <Link to={`/documents/${document.id}`} className="text-primary-700 hover:underline break-words">{normalizeDisplayText(document.title)}</Link>
+        </li>)}</ul>
+      </div>}
+      <CustodyHistory kind="folder" id={folder.id} />
     </div>
   );
 }

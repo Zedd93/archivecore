@@ -45,6 +45,7 @@ const BoxListPage = lazyWithReload(() => import('@/pages/BoxListPage'));
 const BoxDetailPage = lazyWithReload(() => import('@/pages/BoxDetailPage'));
 const FolderListPage = lazyWithReload(() => import('@/pages/FolderListPage'));
 const FolderDetailPage = lazyWithReload(() => import('@/pages/FolderDetailPage'));
+const DocumentDetailPage = lazyWithReload(() => import('@/pages/DocumentDetailPage'));
 const OrderListPage = lazyWithReload(() => import('@/pages/OrderListPage'));
 const OrderDetailPage = lazyWithReload(() => import('@/pages/OrderDetailPage'));
 const LoansPage = lazyWithReload(() => import('@/pages/LoansPage'));
@@ -138,6 +139,7 @@ function AppRoutes() {
         <Route path="/boxes/:id" element={<Suspense fallback={suspenseFallback}><BoxDetailPage /></Suspense>} />
         <Route path="/folders" element={<Suspense fallback={suspenseFallback}><FolderListPage /></Suspense>} />
         <Route path="/folders/:id" element={<Suspense fallback={suspenseFallback}><FolderDetailPage /></Suspense>} />
+        <Route path="/documents/:id" element={<Suspense fallback={suspenseFallback}><DocumentDetailPage /></Suspense>} />
         <Route path="/orders" element={<Suspense fallback={suspenseFallback}><OrderListPage /></Suspense>} />
         <Route path="/orders/:id" element={<Suspense fallback={suspenseFallback}><OrderDetailPage /></Suspense>} />
         <Route path="/loans" element={<Suspense fallback={suspenseFallback}><LoansPage /></Suspense>} />

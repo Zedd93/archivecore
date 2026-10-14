@@ -877,6 +877,7 @@ model WarehouseOperation {
 model CustodyEvent {
   id             String           @id @default(uuid()) @db.Uuid
   orderId        String?          @db.Uuid
+  orderNumberSnapshot String?     @db.VarChar(50)
   boxId          String?          @db.Uuid
   folderId       String?          @db.Uuid
   documentId     String?          @db.Uuid

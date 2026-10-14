@@ -8,6 +8,7 @@ import Modal from '@/components/ui/Modal';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ActivityTimeline from '@/components/ui/ActivityTimeline';
+import CustodyHistory from '@/components/ui/CustodyHistory';
 import ShareButton from '@/components/ui/ShareButton';
 import { FileText, Lock, ShieldAlert, Pencil } from 'lucide-react';
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
@@ -218,6 +219,7 @@ export default function HRDetailPage() {
           )}
 
           {/* Activity Timeline */}
+          <CustodyHistory kind="hr" id={folder.id} />
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('boxes.changeHistory')}</h3>
             <ActivityTimeline entityType="hr" entityId={folder.id} />

@@ -176,6 +176,7 @@
     }
   },
 
+  "custodyHistory": { "order": "Order", "more": "Show older events", "moreDocuments": "Show more documents", "documentNotFound": "Document not found", "date": "Document date", "pages": "Page count" },
   "folders": {
     "title": "Folders",
     "subtitle": "Smallest archive units: transfer-list folders and manually added folders",

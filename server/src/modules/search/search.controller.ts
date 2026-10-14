@@ -19,6 +19,7 @@ export class SearchController {
         : requestedTypes.filter((type) => type !== 'hr_folder');
       const results = await searchService.search(req.tenantId, q as string, {
         types: typeArray,
+        canViewHr: req.user!.permissions.includes(Permissions.HR_VIEW),
         limit: limit ? parseInt(limit as string) : 20,
         offset: offset ? parseInt(offset as string) : 0,
       }, req.accessDepartment || undefined);

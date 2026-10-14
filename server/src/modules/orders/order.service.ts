@@ -506,7 +506,7 @@ export class OrderService {
   async delete(id: string, tenantId: string) {
     const order = await prisma.order.findFirst({
       where: { id, tenantId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, orderNumber: true },
     });
     if (!order) throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 });
     if (!['completed', 'cancelled'].includes(order.status)) {
@@ -522,7 +522,7 @@ export class OrderService {
     await prisma.$transaction([
       prisma.custodyEvent.updateMany({
         where: { orderId: id },
-        data: { orderId: null },
+        data: { orderId: null, orderNumberSnapshot: order.orderNumber },
       }),
       prisma.order.delete({ where: { id } }),
     ]);
@@ -754,6 +754,7 @@ export class OrderService {
         await tx.custodyEvent.createMany({
           data: custodyTargets.map((target: any) => ({
             orderId: id,
+            orderNumberSnapshot: order.orderNumber,
             ...target,
             eventType: order.orderType === 'return_order' ? 'return_event' : 'handover',
             fromUserId: userId,
@@ -844,6 +845,7 @@ export class OrderService {
         await tx.custodyEvent.create({
           data: {
             orderId,
+            orderNumberSnapshot: order.orderNumber,
             ...custodyTarget,
             eventType: 'return_event',
             performedById: userId,

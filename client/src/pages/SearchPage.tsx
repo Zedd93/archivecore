@@ -58,6 +58,20 @@ export default function SearchPage() {
       navigate(`/hr/${result.metadata.hrFolderId}`);
       return;
     }
+    if (result.metadata?.source === 'attachment') {
+      if (result.metadata.documentId) navigate(`/documents/${result.metadata.documentId}`);
+      else if (result.metadata.folderId) navigate(`/folders/${result.metadata.folderId}`);
+      else if (result.metadata.boxId) navigate(`/boxes/${result.metadata.boxId}`);
+      return;
+    }
+    if (result.type === 'document') {
+      navigate(`/documents/${result.id}`);
+      return;
+    }
+    if (result.type === 'folder') {
+      navigate(`/folders/${result.id}`);
+      return;
+    }
     const boxId = result.metadata?.boxId;
     if (boxId) {
       navigate(`/boxes/${boxId}`);

@@ -7,17 +7,23 @@ export class DocumentService {
       return this.listLoanable(tenantId, filters, skip, take, department);
     }
 
-    const where: Prisma.DocumentWhereInput = { tenantId, ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}) };
+    const departmentScope: Prisma.DocumentWhereInput = department ? {
+      OR: [
+        { box: { department: { equals: department, mode: 'insensitive' } } },
+        { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+      ],
+    } : {};
+    const where: Prisma.DocumentWhereInput = { tenantId, ...departmentScope };
 
     if (filters.folderId) where.folderId = filters.folderId;
     if (filters.boxId) where.boxId = filters.boxId;
     if (filters.docType) where.docType = filters.docType;
     if (filters.confidentiality) where.confidentiality = filters.confidentiality as Confidentiality;
     if (filters.search) {
-      where.OR = [
+      where.AND = [{ OR: [
         { title: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
-      ];
+      ] }];
     }
 
     const [data, total] = await Promise.all([
@@ -173,7 +179,10 @@ export class DocumentService {
 
   async getById(id: string, tenantId: string, department?: string) {
     const doc = await prisma.document.findFirst({
-      where: { id, tenantId, ...(department ? { box: { department: { equals: department, mode: 'insensitive' } } } : {}) },
+      where: { id, tenantId, ...(department ? { OR: [
+        { box: { department: { equals: department, mode: 'insensitive' } } },
+        { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+      ] } : {}) },
       include: {
         folder: { select: { id: true, folderNumber: true, title: true, boxId: true } },
         box: { select: { id: true, boxNumber: true, title: true } },

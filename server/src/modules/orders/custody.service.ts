@@ -48,11 +48,12 @@ export class CustodyService {
       throw Object.assign(new Error('Box not found or access denied'), { statusCode: 404 });
     }
 
+    let orderNumberSnapshot: string | undefined;
     // If orderId provided, verify it belongs to the tenant
     if (data.orderId) {
       const order = await prisma.order.findFirst({
         where: { id: data.orderId, tenantId },
-        select: { id: true },
+        select: { id: true, orderNumber: true },
       });
       if (!order) {
         throw Object.assign(new Error('Order not found or access denied'), { statusCode: 404 });
@@ -64,6 +65,7 @@ export class CustodyService {
       if (!item) {
         throw Object.assign(new Error('Karton nie jest bezpośrednią pozycją tego zlecenia'), { statusCode: 400 });
       }
+      orderNumberSnapshot = order.orderNumber;
     }
 
     if (data.toUserId) {
@@ -77,6 +79,7 @@ export class CustodyService {
     return prisma.custodyEvent.create({
       data: {
         orderId: data.orderId,
+        orderNumberSnapshot,
         boxId: data.boxId,
         eventType: data.eventType,
         fromUserId: data.fromUserId,
@@ -161,6 +164,36 @@ export class CustodyService {
         toLocation: { select: { id: true, fullPath: true, code: true } },
       },
     });
+  }
+
+  async getByTarget(kind: 'box' | 'folder' | 'document' | 'hr', id: string, tenantId: string, department: string | undefined, skip: number, take: number) {
+    const dept = department ? { equals: department, mode: 'insensitive' as const } : undefined;
+    const targets = {
+      box: { key: 'boxId', exists: () => prisma.box.findFirst({ where: { id, tenantId, deletedAt: null, ...(dept ? { department: dept } : {}) }, select: { id: true } }) },
+      folder: { key: 'folderId', exists: () => prisma.folder.findFirst({ where: { id, tenantId, ...(dept ? { box: { is: { department: dept, deletedAt: null } } } : {}) }, select: { id: true } }) },
+      document: { key: 'documentId', exists: () => prisma.document.findFirst({ where: { id, tenantId, ...(dept ? { OR: [{ box: { is: { department: dept, deletedAt: null } } }, { folder: { is: { box: { is: { department: dept, deletedAt: null } } } } }] } : {}) }, select: { id: true } }) },
+      hr: { key: 'hrFolderId', exists: () => prisma.hRFolder.findFirst({ where: { id, tenantId, ...(dept ? { department: dept } : {}) }, select: { id: true } }) },
+    };
+    const target = targets[kind];
+    if (!await target.exists()) throw Object.assign(new Error('Zasób nie znaleziony'), { statusCode: 404 });
+
+    const where = { [target.key]: id } as Prisma.CustodyEventWhereInput;
+    const [data, total] = await Promise.all([
+      prisma.custodyEvent.findMany({
+        where, skip, take, orderBy: [{ eventAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true, eventType: true, eventAt: true, notes: true, recipientName: true, orderNumberSnapshot: true,
+          order: { select: { id: true, orderNumber: true } },
+          performedBy: { select: { firstName: true, lastName: true } },
+          fromUser: { select: { firstName: true, lastName: true } },
+          toUser: { select: { firstName: true, lastName: true } },
+          fromLocation: { select: { fullPath: true } },
+          toLocation: { select: { fullPath: true } },
+        },
+      }),
+      prisma.custodyEvent.count({ where }),
+    ]);
+    return { data, total };
   }
 }
 

@@ -8,6 +8,7 @@ const { matchActiveLoansByQr } = require('../../client/src/utils/loanReturn.ts')
 const { prisma } = require('../dist/config/database.js');
 const { orderService } = require('../dist/modules/orders/order.service.js');
 const { custodyService } = require('../dist/modules/orders/custody.service.js');
+const { searchService } = require('../dist/modules/search/search.service.js');
 const { billingService } = require('../dist/modules/pricing/billing.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
 const { sanitizeAuditValues } = require('../dist/middleware/audit.js');
@@ -245,6 +246,97 @@ test('order custody history filters by department and does not return signature 
     prisma.order.findFirst = originals.order;
     prisma.custodyEvent.findMany = originals.events;
   }
+});
+
+test('asset custody history requires tenant and department access and excludes signatures', async () => {
+  let folderVisible = false;
+  let captured;
+  const originals = { folder: prisma.folder.findFirst, events: prisma.custodyEvent.findMany, count: prisma.custodyEvent.count };
+  prisma.folder.findFirst = async ({ where }) => {
+    assert.equal(where.tenantId, tenantId);
+    assert.equal(where.box.is.department.equals, 'Księgowość');
+    return folderVisible ? { id: itemId } : null;
+  };
+  prisma.custodyEvent.findMany = async (query) => { captured = query; return []; };
+  prisma.custodyEvent.count = async () => 0;
+  try {
+    await assert.rejects(custodyService.getByTarget('folder', itemId, tenantId, 'Księgowość', 0, 30), { statusCode: 404 });
+    assert.equal(captured, undefined);
+    folderVisible = true;
+    const result = await custodyService.getByTarget('folder', itemId, tenantId, 'Księgowość', 30, 30);
+    assert.deepEqual(result, { data: [], total: 0 });
+    assert.equal(captured.where.folderId, itemId);
+    assert.equal(captured.skip, 30);
+    assert.equal(captured.take, 30);
+    assert.equal(captured.select.signatureData, undefined);
+    assert.equal(captured.select.orderNumberSnapshot, true);
+  } finally {
+    prisma.folder.findFirst = originals.folder;
+    prisma.custodyEvent.findMany = originals.events;
+    prisma.custodyEvent.count = originals.count;
+  }
+});
+
+test('document custody history accepts a document inside a department folder', async () => {
+  let captured;
+  const originals = { document: prisma.document.findFirst, events: prisma.custodyEvent.findMany, count: prisma.custodyEvent.count };
+  prisma.document.findFirst = async ({ where }) => {
+    assert.equal(where.tenantId, tenantId);
+    assert.equal(where.OR[1].folder.is.box.is.department.equals, 'Księgowość');
+    return { id: itemId };
+  };
+  prisma.custodyEvent.findMany = async (query) => { captured = query; return []; };
+  prisma.custodyEvent.count = async () => 0;
+  try {
+    await custodyService.getByTarget('document', itemId, tenantId, 'Księgowość', 0, 30);
+    assert.equal(captured.where.documentId, itemId);
+  } finally {
+    prisma.document.findFirst = originals.document;
+    prisma.custodyEvent.findMany = originals.events;
+    prisma.custodyEvent.count = originals.count;
+  }
+});
+
+test('deleting a closed order preserves its number on custody events', async () => {
+  let updated;
+  const originals = {
+    order: prisma.order.findFirst, scanCount: prisma.orderScanFile.count,
+    photoCount: prisma.orderHandoverPhoto.count, custody: prisma.custodyEvent.updateMany,
+    deleteOrder: prisma.order.delete,
+  };
+  prisma.order.findFirst = async () => ({ id: orderId, status: 'completed', orderNumber: 'Z-202610-00001' });
+  prisma.orderScanFile.count = async () => 0;
+  prisma.orderHandoverPhoto.count = async () => 0;
+  prisma.custodyEvent.updateMany = async (args) => { updated = args; return { count: 1 }; };
+  prisma.order.delete = async () => ({ id: orderId });
+  const transaction = mock.method(prisma, '$transaction', async (operations) => Promise.all(operations));
+  try {
+    assert.deepEqual(await orderService.delete(orderId, tenantId), { deleted: true });
+    assert.equal(updated.where.orderId, orderId);
+    assert.deepEqual(updated.data, { orderId: null, orderNumberSnapshot: 'Z-202610-00001' });
+  } finally {
+    transaction.mock.restore();
+    prisma.order.findFirst = originals.order;
+    prisma.orderScanFile.count = originals.scanCount;
+    prisma.orderHandoverPhoto.count = originals.photoCount;
+    prisma.custodyEvent.updateMany = originals.custody;
+    prisma.order.delete = originals.deleteOrder;
+  }
+});
+
+test('search does not expose personnel documents without HR permission', async () => {
+  let hrQueries = 0;
+  const mocks = [
+    mock.method(searchService, 'searchDocuments', async () => []),
+    mock.method(searchService, 'searchAttachments', async () => []),
+    mock.method(searchService, 'searchHRDocuments', async () => { hrQueries++; return []; }),
+  ];
+  try {
+    await searchService.search(tenantId, 'test', { types: ['document'], canViewHr: false }, 'Księgowość');
+    assert.equal(hrQueries, 0);
+    await searchService.search(tenantId, 'test', { types: ['document'], canViewHr: true });
+    assert.equal(hrQueries, 1);
+  } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
 });
 
 test('manual custody requires a direct order box and a tenant recipient', async () => {

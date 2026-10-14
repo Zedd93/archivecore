@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
 import { useDetail } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
@@ -6,10 +6,11 @@ import api from '@/services/api';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ActivityTimeline from '@/components/ui/ActivityTimeline';
+import CustodyHistory from '@/components/ui/CustodyHistory';
 import ShareButton from '@/components/ui/ShareButton';
 import Modal from '@/components/ui/Modal';
 import LocationPicker from '@/components/ui/LocationPicker';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOC_TYPES, Permissions } from '@archivecore/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { MapPin, QrCode, FileText, Printer, FileSpreadsheet, Loader2, Edit3, RefreshCw, ShieldAlert } from 'lucide-react';
@@ -30,8 +31,19 @@ export default function BoxDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const { data: box, isLoading, refetch } = useDetail('box', '/boxes', id);
+  const { data: directDocumentPages, hasNextPage: hasMoreDocuments, fetchNextPage: fetchMoreDocuments, isFetchingNextPage: isFetchingMoreDocuments } = useInfiniteQuery({
+    queryKey: ['box-direct-documents', user?.tenantId || localStorage.getItem('tenantId'), id],
+    initialPageParam: 1,
+    enabled: Boolean(box?.id && box._count?.documents),
+    queryFn: async ({ pageParam }) => {
+      const { data } = await api.get<{ data: Array<{ id: string; title: string }>; pagination: { totalPages: number } }>(`/documents`, { params: { boxId: id, page: pageParam, limit: 50 } });
+      return data;
+    },
+    getNextPageParam: (page, pages) => pages.length < page.pagination.totalPages ? pages.length + 1 : undefined,
+  });
+  const directDocuments = directDocumentPages?.pages.flatMap((page) => page.data) || [];
   const { data: custodyEvents, isLoading: movesLoading, isError: movesError } = useQuery({
     queryKey: ['box-custody', id],
     enabled: Boolean(box?.id),
@@ -303,6 +315,13 @@ export default function BoxDetailPage() {
           </div>
 
           {/* Folders */}
+          {directDocuments.length > 0 && <div className="card space-y-3">
+            <h2 className="text-lg font-semibold">{t('boxes.documents')}</h2>
+            <ul className="divide-y divide-gray-100">{directDocuments.map((document) => <li key={document.id} className="py-2">
+              <Link to={`/documents/${document.id}`} className="text-primary-700 hover:underline break-words">{document.title}</Link>
+            </li>)}</ul>
+            {hasMoreDocuments && <button type="button" className="btn-secondary" disabled={isFetchingMoreDocuments} onClick={() => void fetchMoreDocuments()}>{isFetchingMoreDocuments ? t('common.loading') : t('custodyHistory.moreDocuments')}</button>}
+          </div>}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">{t('boxes.foldersCount', { count: totalFolderCount })}</h2>
@@ -405,6 +424,7 @@ export default function BoxDetailPage() {
           </div>
 
           {/* Activity Timeline */}
+          <CustodyHistory kind="box" id={box.id} />
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('boxes.changeHistory')}</h3>
             <ActivityTimeline entityType="box" entityId={box.id} />

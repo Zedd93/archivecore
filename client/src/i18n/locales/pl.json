@@ -176,6 +176,7 @@
     }
   },
 
+  "custodyHistory": { "order": "Zlecenie", "more": "Pokaż starsze zdarzenia", "moreDocuments": "Pokaż więcej dokumentów", "documentNotFound": "Dokument nie znaleziony", "date": "Data dokumentu", "pages": "Liczba stron" },
   "folders": {
     "title": "Teczki",
     "subtitle": "Najmniejsze jednostki archiwalne: teczki ze spisów ZO i teczki dodane ręcznie",
