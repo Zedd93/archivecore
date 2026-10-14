@@ -12,6 +12,7 @@ const auth = [authenticate, tenantContext];
 
 router.get('/tree', ...auth, requirePermission(Permissions.LOCATION_READ), (r, s, n) => locationController.getTree(r, s, n));
 router.get('/available-slots', ...auth, requirePermission(Permissions.LOCATION_READ), (r, s, n) => locationController.getAvailableSlots(r, s, n));
+router.post('/available-slots', ...auth, requirePermission(Permissions.LOCATION_READ), (r, s, n) => locationController.getAvailableSlots(r, s, n));
 router.get('/:id', ...auth, requirePermission(Permissions.LOCATION_READ), (r, s, n) => locationController.getById(r, s, n));
 router.get('/:id/boxes', ...auth, requirePermission(Permissions.LOCATION_READ), (r, s, n) => locationController.getBoxes(r, s, n));
 router.post('/', ...auth, requirePermission(Permissions.LOCATION_WRITE), validate(createLocationSchema), auditLog('location', 'location.create'), (r, s, n) => locationController.create(r, s, n));

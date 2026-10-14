@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { findAvailableLocations } = require('../src/modules/locations/location-capacity.ts');
+const { prisma } = require('../dist/config/database.js');
+const { locationService } = require('../dist/modules/locations/location.service.js');
 
 const location = (id, parentId, type, capacity, tenantId = 'tenant-a', isActive = true) => ({
   id, parentId, type, capacity, tenantId, isActive,
@@ -43,4 +45,54 @@ test('does not recommend a child of a full or inactive parent', () => {
     location('inactive-child', 'inactive-parent', 'shelf', 10),
   ];
   assert.deepEqual(findAvailableLocations(locations, new Map([['child', 1]]), 'tenant-a'), []);
+});
+
+test('a move within a full warehouse reuses capacity already occupied by selected boxes', () => {
+  const locations = [
+    location('warehouse', null, 'warehouse', 3),
+    location('rack', 'warehouse', 'rack', null),
+    location('source', 'rack', 'shelf', 3),
+    location('destination', 'rack', 'shelf', 2),
+  ];
+  const counts = new Map([['source', 3]]);
+  assert.deepEqual(findAvailableLocations(locations, counts, 'tenant-a'), []);
+  const result = findAvailableLocations(locations, counts, 'tenant-a', ['source', 'source']);
+  assert.deepEqual(result.map(({ id, available }) => [id, available]), [['destination', 2], ['source', 2]]);
+});
+
+test('destination must fit the whole batch and a foreign ancestor is never suggested', () => {
+  const locations = [
+    location('warehouse', null, 'warehouse', 3),
+    location('source', 'warehouse', 'shelf', 3),
+    location('small', 'warehouse', 'shelf', 1),
+    location('foreign-warehouse', null, 'warehouse', 10, 'tenant-b'),
+    location('shared-child', 'foreign-warehouse', 'shelf', 10, null),
+  ];
+  const result = findAvailableLocations(locations, new Map([['source', 3]]), 'tenant-a', ['source', 'source']);
+  assert.equal(result.find((item) => item.id === 'small')?.available, 1);
+  assert.equal(result.some((item) => item.id === 'shared-child'), false);
+  assert.equal(result.filter((item) => item.available >= 2).some((item) => item.id === 'small'), false);
+});
+
+test('capacity suggestions reject boxes outside the selected tenant or department', async () => {
+  const originals = { locations: prisma.location.findMany, counts: prisma.box.groupBy, boxes: prisma.box.findMany };
+  const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
+  let visible = false;
+  prisma.location.findMany = async () => [location('shelf', null, 'shelf', 2)];
+  prisma.box.groupBy = async () => [];
+  prisma.box.findMany = async ({ where }) => {
+    assert.equal(where.tenantId, 'tenant-a');
+    assert.equal(where.department.equals, 'Finanse');
+    return visible ? [{ id: boxId, locationId: null }] : [];
+  };
+  try {
+    await assert.rejects(locationService.getAvailableSlots('tenant-a', [boxId], 'Finanse'), { statusCode: 404 });
+    visible = true;
+    const result = await locationService.getAvailableSlots('tenant-a', [boxId], 'Finanse');
+    assert.deepEqual(result.map(({ id, available }) => [id, available]), [['shelf', 2]]);
+  } finally {
+    prisma.location.findMany = originals.locations;
+    prisma.box.groupBy = originals.counts;
+    prisma.box.findMany = originals.boxes;
+  }
 });

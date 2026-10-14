@@ -19,6 +19,7 @@ export function findAvailableLocations(
   locations: CapacityLocation[],
   directCounts: Map<string, number>,
   tenantId: string | null,
+  movingFrom: Array<string | null> = [],
 ): AvailableLocation[] {
   const byId = new Map(locations.map((location) => [location.id, location]));
   const children = new Map<string, string[]>();
@@ -30,6 +31,17 @@ export function findAvailableLocations(
   }
 
   const occupied = new Map<string, number>();
+  // A move within an ancestor does not add another box to that ancestor's occupancy.
+  const movingWithin = new Map<string, number>();
+  for (const sourceId of movingFrom) {
+    let current = sourceId ? byId.get(sourceId) : undefined;
+    const seen = new Set<string>();
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      movingWithin.set(current.id, (movingWithin.get(current.id) ?? 0) + 1);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+  }
   const visiting = new Set<string>();
   function count(id: string): number {
     if (occupied.has(id)) return occupied.get(id)!;
@@ -55,8 +67,12 @@ export function findAvailableLocations(
         available = 0;
         break;
       }
+      if (tenantId && ancestor.tenantId !== null && ancestor.tenantId !== tenantId) {
+        available = 0;
+        break;
+      }
       if (ancestor.capacity !== null) {
-        available = Math.min(available, ancestor.capacity - count(ancestor.id));
+        available = Math.min(available, ancestor.capacity - count(ancestor.id) + (movingWithin.get(ancestor.id) ?? 0));
       }
       ancestor = ancestor.parentId ? byId.get(ancestor.parentId) : undefined;
     }

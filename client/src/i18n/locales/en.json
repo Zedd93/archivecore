@@ -1062,7 +1062,9 @@
     "pickLocation": "Select location...",
     "noResults": "No locations found",
     "suggestedFreeSpace": "Suggested available locations",
-    "availableSpaces": "Spaces available: {{count}}"
+    "availableSpaces": "Spaces available: {{count}}",
+    "suggestionsError": "Could not check available space",
+    "noCapacitySuggestion": "No confirmed space for {{count}} boxes. Check the location's capacity before selecting it from the list."
   },
 
   "labels": {

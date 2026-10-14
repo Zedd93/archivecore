@@ -1062,7 +1062,9 @@
     "pickLocation": "Wybierz lokalizację...",
     "noResults": "Nie znaleziono lokalizacji",
     "suggestedFreeSpace": "Proponowane wolne miejsca",
-    "availableSpaces": "Wolne miejsca: {{count}}"
+    "availableSpaces": "Wolne miejsca: {{count}}",
+    "suggestionsError": "Nie udało się sprawdzić wolnych miejsc",
+    "noCapacitySuggestion": "Brak potwierdzonego miejsca dla {{count}} kartonów. Sprawdź pojemność lokalizacji przed wyborem z listy."
   },
 
   "labels": {

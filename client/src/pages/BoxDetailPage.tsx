@@ -526,7 +526,7 @@ export default function BoxDetailPage() {
             </div>
             <div>
               <label className="label-text">{t('boxes.location')}</label>
-              <LocationPicker value={editForm.locationId} onChange={(id) => setEditForm({ ...editForm, locationId: id })} excludeTypes={['warehouse', 'zone', 'rack']} suggestPlacement />
+              <LocationPicker value={editForm.locationId} onChange={(id) => setEditForm({ ...editForm, locationId: id })} excludeTypes={['warehouse', 'zone', 'rack']} suggestPlacement movingBoxIds={[box.id]} />
             </div>
           </div>
           <div>

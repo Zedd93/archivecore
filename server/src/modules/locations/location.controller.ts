@@ -2,6 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { locationService } from './location.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions, RoleCode } from '@archivecore/shared';
+import { z } from 'zod';
+
+const placementRequest = z.object({
+  tenantId: z.string().uuid().optional(),
+  boxIds: z.array(z.string().uuid()).min(1).max(1000),
+});
 
 function canSelectLocationTenant(req: Request) {
   return !req.user?.tenantId && (
@@ -54,10 +60,12 @@ export class LocationController {
 
   async getAvailableSlots(req: Request, res: Response, next: NextFunction) {
     try {
+      const parsed = req.method === 'POST' ? placementRequest.safeParse(req.body) : null;
+      if (parsed && !parsed.success) return errorResponse(res, 'Wybierz od 1 do 1000 kartonów', 400);
       const selectedTenantId = canSelectLocationTenant(req)
-        ? (req.query.tenantId as string | undefined) || req.tenantId || null
+        ? (parsed?.data.tenantId || (req.query.tenantId as string | undefined) || req.tenantId || null)
         : req.tenantId || null;
-      const slots = await locationService.getAvailableSlots(selectedTenantId);
+      const slots = await locationService.getAvailableSlots(selectedTenantId, parsed?.data.boxIds || [], req.accessDepartment || undefined);
       return successResponse(res, slots);
     } catch (err) { next(err); }
   }

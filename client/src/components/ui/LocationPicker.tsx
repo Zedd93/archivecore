@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { Search, MapPin, ChevronDown, Loader2, X } from 'lucide-react';
 
 interface LocationNode {
@@ -40,6 +41,7 @@ interface LocationPickerProps {
   tenantId?: string;
   suggestPlacement?: boolean;
   placementCount?: number;
+  movingBoxIds?: string[];
   className?: string;
 }
 
@@ -114,6 +116,7 @@ export default function LocationPicker({
   tenantId,
   suggestPlacement = false,
   placementCount = 1,
+  movingBoxIds,
   className = '',
 }: LocationPickerProps) {
   const { t } = useTranslation();
@@ -135,12 +138,12 @@ export default function LocationPicker({
     },
   });
 
-  const { data: availableLocations } = useQuery({
-    queryKey: ['locations-available-slots', activeTenantId || 'active'],
+  const { data: availableLocations, isLoading: suggestionsLoading, error: suggestionsError } = useQuery({
+    queryKey: ['locations-available-slots', activeTenantId || 'active', movingBoxIds?.slice().sort().join(',') || ''],
     queryFn: async () => {
-      const { data } = await api.get('/locations/available-slots', {
-        params: activeTenantId ? { tenantId: activeTenantId } : undefined,
-      });
+      const { data } = movingBoxIds?.length
+        ? await api.post('/locations/available-slots', { tenantId: activeTenantId || undefined, boxIds: movingBoxIds })
+        : await api.get('/locations/available-slots', { params: activeTenantId ? { tenantId: activeTenantId } : undefined });
       return data.data as AvailableLocation[];
     },
     enabled: suggestPlacement && open,
@@ -297,6 +300,11 @@ export default function LocationPicker({
             </button>
           ))}
         </div>
+      )}
+      {suggestPlacement && !search.trim() && suggestionsLoading && <p className="px-3 py-2 text-xs text-gray-500">{t('common.loading')}</p>}
+      {suggestPlacement && !search.trim() && suggestionsError && <p role="alert" className="px-3 py-2 text-xs text-red-700">{getApiErrorMessage(suggestionsError, t('locations.suggestionsError'))}</p>}
+      {suggestPlacement && !search.trim() && !suggestionsLoading && !suggestionsError && suggestions.length === 0 && (
+        <p className="px-3 py-2 text-xs text-amber-700">{t('locations.noCapacitySuggestion', { count: placementCount })}</p>
       )}
       {isLoading ? (
         <div className="flex items-center justify-center py-4">

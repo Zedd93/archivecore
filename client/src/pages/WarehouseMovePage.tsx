@@ -307,6 +307,7 @@ export default function WarehouseMovePage() {
           tenantId={activeTenantId}
           suggestPlacement
           placementCount={boxes.length}
+          movingBoxIds={boxes.map((box) => box.id)}
         />
         <p className="text-sm text-gray-600 break-words">{destination?.fullPath || t('warehouseMove.noDestination')}</p>
       </section>

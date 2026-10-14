@@ -194,8 +194,12 @@ export class LocationService {
     });
   }
 
-  async getAvailableSlots(tenantId: string | null) {
-    const [locations, counts] = await Promise.all([
+  async getAvailableSlots(tenantId: string | null, movingBoxIds: string[] = [], department?: string) {
+    const uniqueBoxIds = [...new Set(movingBoxIds)];
+    if (uniqueBoxIds.length > 0 && !tenantId) {
+      throw Object.assign(new Error('Wybierz tenanta przed wyszukaniem miejsca'), { statusCode: 400 });
+    }
+    const [locations, counts, movingBoxes] = await Promise.all([
       prisma.location.findMany({
         select: { id: true, parentId: true, tenantId: true, type: true, code: true, name: true, fullPath: true, capacity: true, isActive: true },
       }),
@@ -204,9 +208,19 @@ export class LocationService {
         where: { locationId: { not: null }, deletedAt: null, status: { not: 'disposed' } },
         _count: { _all: true },
       }),
+      uniqueBoxIds.length ? prisma.box.findMany({
+        where: {
+          id: { in: uniqueBoxIds }, tenantId: tenantId!, deletedAt: null, status: { not: 'disposed' },
+          ...(department ? { department: { equals: department, mode: 'insensitive' as const } } : {}),
+        },
+        select: { id: true, locationId: true },
+      }) : Promise.resolve([]),
     ]);
+    if (movingBoxes.length !== uniqueBoxIds.length) {
+      throw Object.assign(new Error('Co najmniej jeden karton nie należy do wybranego tenanta lub działu'), { statusCode: 404 });
+    }
     const directCounts = new Map(counts.filter((row) => row.locationId).map((row) => [row.locationId!, row._count._all]));
-    return findAvailableLocations(locations, directCounts, tenantId);
+    return findAvailableLocations(locations, directCounts, tenantId, movingBoxes.map((box) => box.locationId));
   }
 
   async getBoxes(locationId: string, tenantId: string) {
