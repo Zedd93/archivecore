@@ -537,6 +537,7 @@ model InventorySession {
   locationId     String                 @db.Uuid
   locationPath   String                 @db.VarChar(500)
   expected       Json
+  scopeLocationIds Json?
   excludedCount  Int                    @default(0)
   status         InventorySessionStatus @default(in_progress)
   startedById    String                 @db.Uuid

@@ -37,6 +37,20 @@ test('a box moved in the records after the snapshot is not counted as matched', 
   assert.deepEqual(result.wrongLocation, scanned);
 });
 
+test('a shelf check includes boxes in its child slots but not neighbouring shelves', () => {
+  const expected = [{ id: 'child-box', locationId: 'slot-a' }];
+  const scanned = [
+    { id: 'child-box', locationId: 'slot-a' },
+    { id: 'new-child-box', locationId: 'slot-b' },
+    { id: 'other-shelf-box', locationId: 'shelf-b' },
+  ];
+  const result = reconcileInventory(['shelf-a', 'slot-a', 'slot-b'], expected, scanned);
+  assert.deepEqual(result.matched.map((box) => box.id), ['child-box']);
+  assert.deepEqual(result.unexpected.map((box) => box.id), ['new-child-box']);
+  assert.deepEqual(result.wrongLocation.map((box) => box.id), ['other-shelf-box']);
+  assert.deepEqual(result.missing, []);
+});
+
 test('CSV cells escape quotes, delimiters and spreadsheet formulas', () => {
   assert.equal(escapeInventoryCsvCell('A; "B"'), '"A; ""B"""');
   assert.equal(escapeInventoryCsvCell('=HYPERLINK("x")'), '"\'=HYPERLINK(""x"")"');

@@ -14,8 +14,8 @@ interface BoxRecord {
   location?: { fullPath: string } | null;
 }
 
-export function inventoryDiscrepancies(locationId: string, expected: BoxRecord[], scanned: BoxRecord[]) {
-  const result = reconcileInventory(locationId, expected, scanned);
+export function inventoryDiscrepancies(locationIds: string | readonly string[], expected: BoxRecord[], scanned: BoxRecord[]) {
+  const result = reconcileInventory(locationIds, expected, scanned);
   return [
     ...result.missing.map((box) => ({ box, kind: 'missing' as const })),
     ...result.wrongLocation.map((box) => ({ box, kind: 'wrong_location' as const })),
@@ -24,9 +24,9 @@ export function inventoryDiscrepancies(locationId: string, expected: BoxRecord[]
 }
 
 export function resolvedInventoryDiscrepancies<T extends { boxId: string; kind: string; action: string }>(
-  locationId: string, expected: BoxRecord[], scanned: BoxRecord[], events: T[],
+  locationIds: string | readonly string[], expected: BoxRecord[], scanned: BoxRecord[], events: T[],
 ) {
-  return inventoryDiscrepancies(locationId, expected, scanned).map(({ box, kind }) => {
+  return inventoryDiscrepancies(locationIds, expected, scanned).map(({ box, kind }) => {
     const history = events.filter((event) => event.boxId === box.id && event.kind === kind);
     return { boxId: box.id, kind, status: history.at(-1)?.action === 'resolved' ? 'resolved' as const : 'open' as const, history };
   });
@@ -43,9 +43,24 @@ export class InventoryService {
       throw Object.assign(new Error('Wybierz półkę, poziom lub pozycję odkładczą'), { statusCode: 400 });
     }
 
+    const locations = await prisma.location.findMany({
+      where: { isActive: true, OR: [{ tenantId }, { tenantId: null }] },
+      select: { id: true, parentId: true },
+    });
+    const children = new Map<string, string[]>();
+    for (const item of locations) {
+      if (!item.parentId) continue;
+      const siblings = children.get(item.parentId) ?? [];
+      siblings.push(item.id);
+      children.set(item.parentId, siblings);
+    }
+    const locationIds = [locationId];
+    for (let index = 0; index < locationIds.length; index++) {
+      locationIds.push(...(children.get(locationIds[index]) ?? []));
+    }
     const boxes = await prisma.box.findMany({
-      where: { tenantId, locationId, deletedAt: null },
-      select: { id: true, boxNumber: true, title: true, qrCode: true, status: true, locationId: true },
+      where: { tenantId, locationId: { in: locationIds }, deletedAt: null },
+      select: { id: true, boxNumber: true, title: true, qrCode: true, status: true, locationId: true, location: { select: { fullPath: true } } },
       orderBy: { boxNumber: 'asc' },
     });
     const directLoans = boxes.length ? await prisma.orderItem.findMany({
@@ -58,7 +73,7 @@ export class InventoryService {
     }) : [];
     const loanedBoxIds = new Set(directLoans.map((item) => item.boxId).filter((id): id is string => Boolean(id)));
     const expected = expectedInventoryBoxes(boxes, loanedBoxIds);
-    return { location, expected, excludedCount: boxes.length - expected.length, capturedAt: new Date().toISOString() };
+    return { location, locationIds, expected, excludedCount: boxes.length - expected.length, capturedAt: new Date().toISOString() };
   }
 
   async resolveBox(qrCode: string, tenantId: string) {
@@ -105,7 +120,10 @@ export class InventoryService {
       scanId: scan.id,
     }));
     const discrepancies = session.status === 'completed'
-      ? resolvedInventoryDiscrepancies(session.locationId, session.expected as unknown as BoxRecord[], scanned as unknown as BoxRecord[], session.resolutionEvents)
+      ? resolvedInventoryDiscrepancies(
+        (session.scopeLocationIds as string[] | null) ?? [session.locationId],
+        session.expected as unknown as BoxRecord[], scanned as unknown as BoxRecord[], session.resolutionEvents,
+      )
       : [];
     return {
       id: session.id,
@@ -114,6 +132,7 @@ export class InventoryService {
       snapshot: {
         location: { id: session.locationId, fullPath: session.locationPath },
         expected: session.expected,
+        locationIds: (session.scopeLocationIds as string[] | null) ?? [session.locationId],
         excludedCount: session.excludedCount,
         capturedAt: session.startedAt,
       },
@@ -130,6 +149,7 @@ export class InventoryService {
         locationId,
         locationPath: snapshot.location.fullPath,
         expected: snapshot.expected as Prisma.InputJsonValue,
+        scopeLocationIds: snapshot.locationIds,
         excludedCount: snapshot.excludedCount,
         startedById: userId,
       },
@@ -217,10 +237,10 @@ export class InventoryService {
       if (rows[0].status !== 'completed') throw Object.assign(new Error('Najpierw zakończ kontrolę półki'), { statusCode: 409 });
       const session = await tx.inventorySession.findUniqueOrThrow({
         where: { id },
-        select: { locationId: true, expected: true, scans: { where: { voidedAt: null }, select: { boxData: true } } },
+        select: { locationId: true, scopeLocationIds: true, expected: true, scans: { where: { voidedAt: null }, select: { boxData: true } } },
       });
       const discrepancies = inventoryDiscrepancies(
-        session.locationId,
+        (session.scopeLocationIds as string[] | null) ?? [session.locationId],
         session.expected as unknown as BoxRecord[],
         session.scans.map((scan) => scan.boxData as unknown as BoxRecord),
       );

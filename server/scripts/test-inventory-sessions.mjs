@@ -42,6 +42,44 @@ test('serial inventory scans use the session opened by an earlier location scan'
   ]);
 });
 
+test('snapshot freezes active tenant-visible child locations and their boxes', async () => {
+  const shelfId = 'shelf-a';
+  const slotId = 'slot-a';
+  const boxQueries = [];
+  const originals = {
+    locationFindFirst: prisma.location.findFirst,
+    locationFindMany: prisma.location.findMany,
+    boxFindMany: prisma.box.findMany,
+    orderItemFindMany: prisma.orderItem.findMany,
+  };
+  prisma.location.findFirst = async () => ({ id: shelfId, fullPath: 'Warehouse > Shelf A', type: 'shelf' });
+  prisma.location.findMany = async (args) => {
+    assert.deepEqual(args.where.OR, [{ tenantId }, { tenantId: null }]);
+    return [
+      { id: shelfId, parentId: null },
+      { id: slotId, parentId: shelfId },
+      { id: 'slot-b', parentId: slotId },
+      { id: 'other-shelf', parentId: null },
+    ];
+  };
+  prisma.box.findMany = async (args) => {
+    boxQueries.push(args.where);
+    return [{ id: boxId, boxNumber: '1', title: 'A', status: 'active', locationId: slotId }];
+  };
+  prisma.orderItem.findMany = async () => [];
+  try {
+    const snapshot = await new InventoryService().snapshot(shelfId, tenantId);
+    assert.deepEqual(snapshot.locationIds, [shelfId, slotId, 'slot-b']);
+    assert.deepEqual(boxQueries[0].locationId.in, snapshot.locationIds);
+    assert.deepEqual(snapshot.expected.map((box) => box.id), [boxId]);
+  } finally {
+    prisma.orderItem.findMany = originals.orderItemFindMany;
+    prisma.box.findMany = originals.boxFindMany;
+    prisma.location.findMany = originals.locationFindMany;
+    prisma.location.findFirst = originals.locationFindFirst;
+  }
+});
+
 function setup({ status = 'in_progress', boxExists = true, duplicate = false, latestScanId = scanId } = {}) {
   const calls = { created: [], voided: [], finished: [] };
   const service = new InventoryService();
@@ -131,6 +169,13 @@ test('saved snapshots derive discrepancies even without prior resolution events'
   assert.deepEqual(inventoryDiscrepancies('shelf-1', expected, scanned).map(({ box, kind }) => [box.id, kind]), [
     [boxId, 'missing'], ['box-2', 'wrong_location'], ['box-3', 'unexpected'],
   ]);
+});
+
+test('completed reconciliation treats a child slot as part of the frozen shelf scope', () => {
+  const expected = [{ id: boxId, boxNumber: '1', title: 'A', locationId: 'slot-a' }];
+  const scanned = [{ ...expected[0], locationId: 'slot-b' }];
+  assert.deepEqual(inventoryDiscrepancies(['shelf-a', 'slot-a', 'slot-b'], expected, scanned), []);
+  assert.deepEqual(resolvedInventoryDiscrepancies(['shelf-a', 'slot-a', 'slot-b'], expected, scanned, []), []);
 });
 
 test('completed historical session exposes open discrepancies and decision history', () => {

@@ -20,6 +20,7 @@ import { readWarehouseScans, warehouseScanKey } from '@/utils/offlineWarehouseSc
 
 interface Snapshot {
   location: { id: string; fullPath: string };
+  locationIds?: string[];
   expected: InventoryBox[];
   excludedCount: number;
   capturedAt: string;
@@ -208,8 +209,12 @@ export default function InventoryPage() {
       applySession(updated);
       const box = updated.scanned.find((item) => item.qrCode === code);
       if (!box) throw new Error(t('common.genericError'));
-      const isExpected = currentSession.snapshot.expected.some((item) => item.id === box.id);
-      showScanFeedback(isExpected ? 'success' : 'warning', t(isExpected ? 'inventory.scannedBox' : 'inventory.discrepancyBox', { number: box.boxNumber }));
+      const isMatched = reconcileInventory(
+        updated.snapshot.locationIds ?? updated.snapshot.location.id,
+        updated.snapshot.expected,
+        updated.scanned,
+      ).matched.some((item) => item.id === box.id);
+      showScanFeedback(isMatched ? 'success' : 'warning', t(isMatched ? 'inventory.scannedBox' : 'inventory.discrepancyBox', { number: box.boxNumber }));
     } catch (error) {
       if (tenantRef.current === activeTenantId) {
         if (!navigator.onLine || (axios.isAxiosError(error) && !error.response && error.code !== 'ERR_CANCELED')) {
@@ -292,7 +297,7 @@ export default function InventoryPage() {
     if (enqueueCode(trimmed)) lastCameraCodeRef.current = trimmed;
   };
 
-  const result = snapshot ? reconcileInventory(snapshot.location.id, snapshot.expected, scanned) : null;
+  const result = snapshot ? reconcileInventory(snapshot.locationIds ?? snapshot.location.id, snapshot.expected, scanned) : null;
 
   const undoLast = async () => {
     if (!session || scanned.length === 0 || busyRef.current || scanQueueRef.current?.isBusy) return;
@@ -365,10 +370,10 @@ export default function InventoryPage() {
       [t('inventory.snapshotAt'), new Date(snapshot.capturedAt).toLocaleString(), '', '', '', ''],
       [t('inventory.finishedAt'), session?.finishedAt ? new Date(session.finishedAt).toLocaleString() : '', '', '', '', ''],
       [t('inventory.csvResult'), t('boxes.boxNumber'), t('common.title'), t('boxes.location'), t('inventory.resolution'), t('inventory.resolutionNote')],
-      ...result.matched.map((box) => [t('inventory.matched'), box.boxNumber, box.title, snapshot.location.fullPath, '', '']),
-      ...result.missing.map((box) => [t('inventory.missing'), box.boxNumber, box.title, snapshot.location.fullPath, ...resolutionColumns(box.id, 'missing')]),
+      ...result.matched.map((box) => [t('inventory.matched'), box.boxNumber, box.title, box.location?.fullPath || snapshot.location.fullPath, '', '']),
+      ...result.missing.map((box) => [t('inventory.missing'), box.boxNumber, box.title, box.location?.fullPath || snapshot.location.fullPath, ...resolutionColumns(box.id, 'missing')]),
       ...result.wrongLocation.map((box) => [t('inventory.wrongLocation'), box.boxNumber, box.title, box.location?.fullPath || '', ...resolutionColumns(box.id, 'wrong_location')]),
-      ...result.unexpected.map((box) => [t('inventory.unexpected'), box.boxNumber, box.title, snapshot.location.fullPath, ...resolutionColumns(box.id, 'unexpected')]),
+      ...result.unexpected.map((box) => [t('inventory.unexpected'), box.boxNumber, box.title, box.location?.fullPath || snapshot.location.fullPath, ...resolutionColumns(box.id, 'unexpected')]),
     ];
     const csv = `\uFEFF${rows.map((row) => row.map(escapeInventoryCsvCell).join(';')).join('\r\n')}\r\n`;
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
