@@ -22,5 +22,6 @@ router.get('/retention', ...auth, requirePermission(Permissions.REPORT_VIEW), (r
 router.get('/audit-activity', ...auth, requirePermission(Permissions.AUDIT_VIEW), (req, res, next) => reportController.getAuditActivity(req, res, next));
 router.get('/sla', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getSlaPerformance(req, res, next));
 router.get('/sla/breakdown', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getSlaBreakdown(req, res, next));
+router.get('/sla/breakdown/export', ...auth, requirePermission(Permissions.REPORT_EXPORT), (req, res, next) => reportController.exportSlaBreakdown(req, res, next));
 
 export default router;

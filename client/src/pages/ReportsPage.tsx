@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { RoleCode } from '@archivecore/shared';
+import { Permissions, RoleCode } from '@archivecore/shared';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
+import { useExport } from '@/hooks/useExport';
 import toast from 'react-hot-toast';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
 
@@ -48,7 +49,7 @@ const previousMonth = () => {
 
 export default function ReportsPage() {
   const { t } = useTranslation();
-  const { user, hasRole } = useAuth();
+  const { user, hasPermission, hasRole } = useAuth();
   const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(null);
   const [reportMonth, setReportMonth] = useState(previousMonth);
   const [downloadingReport, setDownloadingReport] = useState(false);
@@ -56,6 +57,10 @@ export default function ReportsPage() {
   const [slaScope, setSlaScope] = useState<'tenant' | 'all'>('tenant');
   const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const { exportData: exportSlaBreakdown, isExporting: slaExporting } = useExport({
+    endpoint: '/reports/sla/breakdown/export',
+    defaultFilename: 'raport_sla.xlsx',
+  });
 
   const downloadMonthlyReport = async () => {
     if (!reportMonth || downloadingReport) return;
@@ -255,6 +260,14 @@ export default function ReportsPage() {
               <option value="all">{t('reports.slaAllTenants')}</option>
             </select>
           </label>}
+          {hasPermission(Permissions.REPORT_EXPORT) && <div className="flex flex-wrap items-end gap-2">
+            <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'xlsx', scope: slaScope, days: String(slaDays) }); }}>
+              {slaExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}{t('reports.slaExportXlsx')}
+            </button>
+            <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'csv', scope: slaScope, days: String(slaDays) }); }}>
+              {t('reports.slaExportCsv')}
+            </button>
+          </div>}
         </div>
         {slaBreakdownLoading ? <p className="text-sm text-gray-500">{t('common.loading')}</p> : slaBreakdownError ? (
           <button type="button" className="btn-secondary" onClick={() => { void refetchSlaBreakdown(); }}>{t('common.tryAgain')}</button>

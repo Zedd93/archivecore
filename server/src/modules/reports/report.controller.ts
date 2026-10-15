@@ -3,6 +3,22 @@ import { reportService } from './report.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions, RoleCode } from '@archivecore/shared';
 import { buildMonthlyReportPdf, getMonthlyReport, parseReportMonth } from './monthly-report.service';
+import { buildSlaBreakdownExport } from './sla-breakdown-export';
+import { prisma } from '../../config/database';
+
+type SlaBreakdownOptions =
+  | { ok: true; scope: 'all' | 'tenant'; tenantId: string | undefined; days: number }
+  | { ok: false; error: string; status: number };
+
+function parseSlaBreakdownOptions(req: Request): SlaBreakdownOptions {
+  const scope: 'all' | 'tenant' = req.query.scope === 'all' ? 'all' : 'tenant';
+  const canViewAll = req.user?.roles.some((role) => role === RoleCode.SUPER_ADMIN || role === RoleCode.DOXART_ADMIN);
+  if (scope === 'all' && !canViewAll) return { ok: false, error: 'Brak uprawnień do raportu wszystkich tenantów', status: 403 };
+  if (scope === 'tenant' && !req.tenantId) return { ok: false, error: 'Brak kontekstu tenanta', status: 400 };
+  const days = req.query.days === undefined ? 180 : Number(req.query.days);
+  if (![30, 90, 180, 365].includes(days)) return { ok: false, error: 'Nieprawidłowy zakres raportu SLA', status: 400 };
+  return { ok: true, scope, tenantId: scope === 'all' ? undefined : req.tenantId!, days };
+}
 
 export class ReportController {
   async getMonthlyPdf(req: Request, res: Response, next: NextFunction) {
@@ -120,13 +136,36 @@ export class ReportController {
 
   async getSlaBreakdown(req: Request, res: Response, next: NextFunction) {
     try {
-      const allTenants = req.query.scope === 'all';
-      const canViewAll = req.user?.roles.some((role) => role === RoleCode.SUPER_ADMIN || role === RoleCode.DOXART_ADMIN);
-      if (allTenants && !canViewAll) return errorResponse(res, 'Brak uprawnień do raportu wszystkich tenantów', 403);
-      if (!allTenants && !req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const days = req.query.days === undefined ? 180 : Number(req.query.days);
-      if (![30, 90, 180, 365].includes(days)) return errorResponse(res, 'Nieprawidłowy zakres raportu SLA', 400);
-      return successResponse(res, await reportService.getSlaBreakdown(allTenants ? undefined : req.tenantId!, days));
+      const options = parseSlaBreakdownOptions(req);
+      if (!options.ok) return errorResponse(res, options.error, options.status);
+      return successResponse(res, await reportService.getSlaBreakdown(options.tenantId, options.days));
+    } catch (err) { next(err); }
+  }
+
+  async exportSlaBreakdown(req: Request, res: Response, next: NextFunction) {
+    try {
+      const options = parseSlaBreakdownOptions(req);
+      if (!options.ok) return errorResponse(res, options.error, options.status);
+      const format = req.query.format === undefined ? 'xlsx' : req.query.format;
+      if (format !== 'xlsx' && format !== 'csv') return errorResponse(res, 'Nieprawidłowy format eksportu', 400);
+      const report = await reportService.getSlaBreakdown(options.tenantId, options.days);
+      const { buffer, filename, contentType } = buildSlaBreakdownExport(report, options.scope, format);
+      await prisma.auditLog.create({
+        data: {
+          tenantId: options.tenantId,
+          userId: req.user!.userId,
+          action: 'report.sla.export',
+          entityType: 'report',
+          newValues: { scope: options.scope, days: options.days, format, rows: report.data.length, asOf: report.asOf.toISOString() },
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']?.substring(0, 500),
+        },
+      });
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(buffer);
     } catch (err) { next(err); }
   }
 }

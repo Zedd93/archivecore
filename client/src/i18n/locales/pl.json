@@ -1053,6 +1053,8 @@
     "slaActiveOverdue": "Aktywne po terminie",
     "slaRate": "W terminie",
     "slaTotal": "Razem",
+    "slaExportXlsx": "Pobierz Excel",
+    "slaExportCsv": "Pobierz CSV",
     "hrRetention": "Retencja akt osobowych",
     "hrOverdue": "Przeterminowane",
     "hrByDepartment": "Akta wg działów",

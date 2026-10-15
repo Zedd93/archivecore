@@ -1053,6 +1053,8 @@
     "slaActiveOverdue": "Active overdue",
     "slaRate": "On time",
     "slaTotal": "Total",
+    "slaExportXlsx": "Download Excel",
+    "slaExportCsv": "Download CSV",
     "hrRetention": "HR records retention",
     "hrOverdue": "Overdue",
     "hrByDepartment": "Records by department",
