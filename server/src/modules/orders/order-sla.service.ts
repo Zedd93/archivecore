@@ -2,7 +2,7 @@ import { PrismaClient, OrderStatus } from '@prisma/client';
 import { RoleCode } from '@archivecore/shared';
 import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
-import { ACTIVE_SLA_STATUSES, slaEscalationLevel, SlaEscalationLevel } from './order-sla';
+import { ACTIVE_SLA_STATUSES, orderSlaLevel, SlaEscalationLevel } from './order-sla';
 
 const ACTIVE_STATUSES: OrderStatus[] = [...ACTIVE_SLA_STATUSES];
 
@@ -20,7 +20,7 @@ export class OrderSlaService {
   async processDue(now = new Date()) {
     let cursor: string | undefined;
     let processed = 0;
-    const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60_000);
+    const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60_000);
 
     for (;;) {
       const orders = await this.db.order.findMany({
@@ -29,7 +29,7 @@ export class OrderSlaService {
           slaDeadline: { lte: horizon },
           slaEscalations: { none: { level: 120 } },
         },
-        select: { id: true, priority: true, slaDeadline: true, slaEscalations: { select: { level: true } } },
+        select: { id: true, status: true, priority: true, slaDeadline: true, slaWarningAt: true, slaSevereAt: true, slaEscalations: { select: { level: true } } },
         orderBy: [{ slaDeadline: 'asc' }, { id: 'asc' }],
         take: 100,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -38,7 +38,7 @@ export class OrderSlaService {
       for (const order of orders) {
         if (!order.slaDeadline) continue;
         if (order.slaEscalations.some((event) => event.level === 120)) continue;
-        const level = slaEscalationLevel(order.slaDeadline, order.priority, now);
+        const level = orderSlaLevel(order.status, order.slaDeadline, order.priority, now, order.slaWarningAt, order.slaSevereAt);
         if (!level || order.slaEscalations.some((event) => event.level >= level)) continue;
         try {
           if (await this.escalate(order.id, now)) processed++;
@@ -61,12 +61,12 @@ export class OrderSlaService {
         where: { id: orderId, status: { in: ACTIVE_STATUSES } },
         select: {
           id: true, tenantId: true, orderNumber: true, priority: true,
-          slaDeadline: true, assignedTo: true,
+          slaDeadline: true, slaWarningAt: true, slaSevereAt: true, assignedTo: true, status: true,
           slaEscalations: { select: { level: true } },
         },
       });
       if (!order?.slaDeadline) return false;
-      const level = slaEscalationLevel(order.slaDeadline, order.priority, now);
+      const level = orderSlaLevel(order.status, order.slaDeadline, order.priority, now, order.slaWarningAt, order.slaSevereAt);
       if (!level || order.slaEscalations.some((event) => event.level >= level)) return false;
 
       await tx.orderSlaEscalation.create({ data: { orderId, level } });

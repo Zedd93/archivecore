@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useList, useCreate } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -8,7 +8,25 @@ import Modal from '@/components/ui/Modal';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { Plus, Building2, Loader2 } from 'lucide-react';
+import { useConfirm } from '@/hooks/useConfirm';
+import { Plus, Building2, Loader2, Clock3 } from 'lucide-react';
+
+interface SlaPolicy {
+  orderType: string;
+  priority: string;
+  hours: number | '';
+  isCustom?: boolean;
+}
+
+const SLA_ORDER_TYPES = [
+  { code: 'checkout', labelKey: 'orders.typeIssue' },
+  { code: 'return_order', labelKey: 'orders.typeReturn' },
+  { code: 'transfer', labelKey: 'orders.typeTransfer' },
+  { code: 'disposal', labelKey: 'orders.typeDestruction' },
+  { code: 'scan', labelKey: 'orders.typeScan' },
+] as const;
+
+const SLA_PRIORITIES = ['normal', 'high', 'urgent'] as const;
 
 interface TenantFormState {
   name: string;
@@ -39,6 +57,12 @@ export default function TenantsPage() {
   const [search, setSearch] = useState('');
   const [tenantForm, setTenantForm] = useState<TenantFormState>(emptyTenantForm);
   const [gusLoading, setGusLoading] = useState(false);
+  const [slaTenant, setSlaTenant] = useState<{ id: string; name: string } | null>(null);
+  const [slaPolicies, setSlaPolicies] = useState<SlaPolicy[]>([]);
+  const [slaLoading, setSlaLoading] = useState(false);
+  const [slaSaving, setSlaSaving] = useState(false);
+  const slaRequest = useRef(0);
+  const { confirm, ConfirmDialogElement } = useConfirm();
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -76,7 +100,77 @@ export default function TenantsPage() {
     { key: 'boxes', header: t('admin.tenants.colBoxes'), render: (item) => item._count?.boxes ?? 0 },
     { key: 'users', header: t('admin.tenants.colUsers'), render: (item) => item._count?.users ?? 0 },
     { key: 'hrFolders', header: t('admin.tenants.colHr'), render: (item) => item._count?.hrFolders ?? 0 },
+    { key: 'sla', header: 'SLA', render: (item) => (
+      <button type="button" className="btn-secondary flex items-center gap-1" onClick={() => { void openSla(item); }}>
+        <Clock3 size={16} />{t('admin.tenants.sla.configure')}
+      </button>
+    ) },
   ];
+
+  const openSla = async (tenant: { id: string; name: string }) => {
+    const request = ++slaRequest.current;
+    setSlaTenant(tenant);
+    setSlaPolicies([]);
+    setSlaLoading(true);
+    try {
+      const { data } = await api.get(`/tenants/${tenant.id}/sla`);
+      if (request === slaRequest.current) setSlaPolicies(data.data);
+    } catch (error) {
+      if (request === slaRequest.current) {
+        toast.error(getApiErrorMessage(error, t('admin.tenants.sla.loadError')));
+        setSlaTenant(null);
+      }
+    } finally {
+      if (request === slaRequest.current) setSlaLoading(false);
+    }
+  };
+
+  const closeSla = () => {
+    if (slaSaving) return;
+    slaRequest.current++;
+    setSlaTenant(null);
+  };
+
+  const saveSla = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!slaTenant || slaPolicies.length !== 15 || slaSaving) return;
+    setSlaSaving(true);
+    try {
+      await api.put(`/tenants/${slaTenant.id}/sla`, {
+        policies: slaPolicies.map(({ orderType, priority, hours }) => ({ orderType, priority, hours: Number(hours) })),
+      });
+      toast.success(t('admin.tenants.sla.saved'));
+      slaRequest.current++;
+      setSlaTenant(null);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('admin.tenants.sla.saveError')));
+    } finally {
+      setSlaSaving(false);
+    }
+  };
+
+  const resetSla = async () => {
+    if (!slaTenant || slaSaving) return;
+    const tenantId = slaTenant.id;
+    const request = slaRequest.current;
+    const accepted = await confirm({
+      title: t('admin.tenants.sla.resetTitle'),
+      message: t('admin.tenants.sla.resetConfirm'),
+      confirmLabel: t('admin.tenants.sla.reset'),
+      variant: 'warning',
+    });
+    if (!accepted || request !== slaRequest.current) return;
+    setSlaSaving(true);
+    try {
+      const { data } = await api.delete(`/tenants/${tenantId}/sla`);
+      setSlaPolicies(data.data);
+      toast.success(t('admin.tenants.sla.resetDone'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('admin.tenants.sla.saveError')));
+    } finally {
+      setSlaSaving(false);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -175,6 +269,38 @@ export default function TenantsPage() {
           </div>
         </form>
       </Modal>
+
+      <Modal isOpen={Boolean(slaTenant)} onClose={closeSla} title={t('admin.tenants.sla.title', { name: slaTenant?.name })} size="xl">
+        {slaLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div> : (
+          <form onSubmit={saveSla} className="space-y-4">
+            <p className="text-sm text-gray-600">{t('admin.tenants.sla.description')}</p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[580px] text-sm">
+                <thead><tr className="border-b text-left"><th className="py-2 pr-3">{t('admin.tenants.sla.orderType')}</th>{SLA_PRIORITIES.map((priority) => <th key={priority} className="py-2 px-2">{t(`admin.tenants.sla.${priority}`)}</th>)}</tr></thead>
+                <tbody>{SLA_ORDER_TYPES.map(({ code, labelKey }) => <tr key={code} className="border-b border-gray-100">
+                  <th scope="row" className="py-2 pr-3 text-left font-medium">{t(labelKey)}</th>
+                  {SLA_PRIORITIES.map((priority) => {
+                    const policy = slaPolicies.find((entry) => entry.orderType === code && entry.priority === priority);
+                    return <td key={priority} className="py-2 px-2"><input
+                      type="number" min={1} max={240} step={1} required
+                      aria-label={`${t(labelKey)} - ${t(`admin.tenants.sla.${priority}`)}`}
+                      value={policy?.hours ?? ''}
+                      onChange={(event) => setSlaPolicies((current) => current.map((entry) => entry.orderType === code && entry.priority === priority ? { ...entry, hours: event.target.value === '' ? '' : Number(event.target.value) } : entry))}
+                      className="input-field w-24"
+                    /></td>;
+                  })}
+                </tr>)}</tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-500">{t('admin.tenants.sla.rangeHint')}</p>
+            <div className="flex flex-wrap justify-between gap-3 border-t pt-4">
+              <button type="button" className="btn-secondary" disabled={slaSaving} onClick={() => { void resetSla(); }}>{t('admin.tenants.sla.reset')}</button>
+              <div className="flex gap-2"><button type="button" className="btn-secondary" onClick={closeSla} disabled={slaSaving}>{t('common.cancel')}</button><button type="submit" className="btn-primary" disabled={slaSaving || slaPolicies.length !== 15 || slaPolicies.some((policy) => policy.hours === '')}>{slaSaving ? t('common.saving') : t('common.save')}</button></div>
+            </div>
+          </form>
+        )}
+      </Modal>
+      {ConfirmDialogElement}
     </div>
   );
 }

@@ -233,6 +233,7 @@ model Tenant {
   integrationKeys   IntegrationKey[]
   webhookEndpoints  WebhookEndpoint[]
   warehouseOperations WarehouseOperation[]
+  slaPolicies       TenantSlaPolicy[]
 
   @@map("tenants")
 }
@@ -256,6 +257,18 @@ model PriceList {
   @@index([tenantId, status])
   @@index([tenantId, validFrom])
   @@map("price_lists")
+}
+
+model TenantSlaPolicy {
+  tenantId  String        @db.Uuid
+  orderType OrderType
+  priority  OrderPriority
+  hours     Int
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, orderType, priority])
+  @@map("tenant_sla_policies")
 }
 
 model PriceListItem {
@@ -787,6 +800,9 @@ model Order {
   approvedBy       String?       @db.Uuid
   assignedTo       String?       @db.Uuid
   slaDeadline      DateTime?
+  slaHours         Int?
+  slaWarningAt     DateTime?
+  slaSevereAt      DateTime?
   expectedReturnAt DateTime?
   completedAt      DateTime?
   notes            String?       @db.Text
@@ -806,6 +822,8 @@ model Order {
   @@index([tenantId, status])
   @@index([orderNumber])
   @@index([slaDeadline])
+  @@index([slaWarningAt])
+  @@index([slaSevereAt])
   @@index([expectedReturnAt])
   @@map("orders")
 }

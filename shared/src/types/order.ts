@@ -15,6 +15,9 @@ export interface IOrder {
   approvedBy: string | null;
   assignedTo: string | null;
   slaDeadline: string | null;
+  slaHours: number | null;
+  slaWarningAt: string | null;
+  slaSevereAt: string | null;
   expectedReturnAt: string | null;
   completedAt: string | null;
   notes: string | null;

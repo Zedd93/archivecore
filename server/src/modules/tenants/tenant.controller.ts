@@ -3,6 +3,7 @@ import { tenantService } from './tenant.service';
 import { gusBirService } from './gus-bir.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { tenantSlaService } from './tenant-sla.service';
 
 export class TenantController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -45,6 +46,24 @@ export class TenantController {
     try {
       const stats = await tenantService.getStats(req.params.id);
       return successResponse(res, stats);
+    } catch (err) { next(err); }
+  }
+
+  async getSlaPolicies(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(res, await tenantSlaService.list(req.params.id));
+    } catch (err) { next(err); }
+  }
+
+  async updateSlaPolicies(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(res, await tenantSlaService.replace(req.params.id, req.body.policies));
+    } catch (err) { next(err); }
+  }
+
+  async resetSlaPolicies(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(res, await tenantSlaService.reset(req.params.id));
     } catch (err) { next(err); }
   }
 }

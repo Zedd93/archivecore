@@ -5,7 +5,7 @@ export type SlaEscalationLevel = 80 | 100 | 120;
 
 export const ACTIVE_SLA_STATUSES = ['submitted', 'approved', 'in_progress', 'ready'] as const;
 
-function slaHours(priority: string): number {
+export function slaHours(priority: string): number {
   return SLA_LEVELS.find((entry) => entry.code === priority)?.hours ?? 48;
 }
 
@@ -52,8 +52,15 @@ export function orderSlaLevel(
   deadline: Date | null,
   priority: string,
   now: Date,
+  warningAt?: Date | null,
+  severeAt?: Date | null,
 ): SlaEscalationLevel | null {
   if (!deadline || !ACTIVE_SLA_STATUSES.includes(status as typeof ACTIVE_SLA_STATUSES[number])) return null;
+  if (warningAt && severeAt) {
+    if (now >= severeAt) return 120;
+    if (now >= deadline) return 100;
+    return now >= warningAt ? 80 : null;
+  }
   return slaEscalationLevel(deadline, priority, now);
 }
 
@@ -77,6 +84,17 @@ export function addBusinessMinutes(start: Date, minutes: number): Date {
     remaining -= step;
   }
   return current;
+}
+
+export function createSlaSchedule(start: Date, hours: number) {
+  const minutes = hours * 60;
+  const deadline = addBusinessMinutes(start, minutes);
+  return {
+    hours,
+    deadline,
+    warningAt: addBusinessMinutes(start, Math.round(minutes * SLA_ESCALATION.warningPercent / 100)),
+    severeAt: addBusinessMinutes(deadline, Math.round(minutes * (SLA_ESCALATION.overduepercent - 100) / 100)),
+  };
 }
 
 export function subtractBusinessMinutes(end: Date, minutes: number): Date {
@@ -111,22 +129,28 @@ export function slaRiskDeadlines(now: Date): Array<{ priority: string; deadline:
 export function slaRiskWhere(now: Date): Prisma.OrderWhereInput {
   return {
     status: { in: [...ACTIVE_SLA_STATUSES] },
-    OR: slaRiskDeadlines(now).map(({ priority, deadline }) => ({
-      priority: priority as OrderPriority,
-      slaDeadline: { lte: deadline },
-    })),
+    OR: [
+      { slaWarningAt: { lte: now } },
+      { slaWarningAt: null, OR: slaRiskDeadlines(now).map(({ priority, deadline }) => ({
+        priority: priority as OrderPriority,
+        slaDeadline: { lte: deadline },
+      })) },
+    ],
   };
 }
 
 function slaSevereWhere(now: Date): Prisma.OrderWhereInput {
   return {
     status: { in: [...ACTIVE_SLA_STATUSES] },
-    OR: SLA_LEVELS.map(({ code, hours }) => ({
-      priority: code as OrderPriority,
-      slaDeadline: {
-        lte: subtractBusinessMinutes(now, Math.round(hours * 60 * (SLA_ESCALATION.overduepercent - 100) / 100)),
-      },
-    })),
+    OR: [
+      { slaSevereAt: { lte: now } },
+      { slaSevereAt: null, OR: SLA_LEVELS.map(({ code, hours }) => ({
+        priority: code as OrderPriority,
+        slaDeadline: {
+          lte: subtractBusinessMinutes(now, Math.round(hours * 60 * (SLA_ESCALATION.overduepercent - 100) / 100)),
+        },
+      })) },
+    ],
   };
 }
 

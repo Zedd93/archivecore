@@ -24,6 +24,7 @@ export * from './constants/pricing';
 export * from './validators/common.schema';
 export * from './validators/box.schema';
 export * from './validators/order.schema';
+export * from './validators/sla-policy.schema';
 export * from './validators/hr.schema';
 export * from './validators/user.schema';
 export * from './validators/transfer-list.schema';

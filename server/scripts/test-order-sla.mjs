@@ -6,10 +6,13 @@ const slaModule = await import('../src/modules/orders/order-sla.ts');
 const serviceModule = await import('../src/modules/orders/order-sla.service.ts');
 const orderModule = await import('../src/modules/orders/order.service.ts');
 const exportModule = await import('../src/modules/import-export/export.service.ts');
-const { businessMinutesBetween, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere, subtractBusinessMinutes, slaLevelWhere } = slaModule;
+const tenantSlaModule = await import('../src/modules/tenants/tenant-sla.service.ts');
+const { updateTenantSlaSchema } = await import('../../shared/src/validators/sla-policy.schema.ts');
+const { businessMinutesBetween, createSlaSchedule, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere, subtractBusinessMinutes, slaLevelWhere } = slaModule;
 const { OrderSlaService } = serviceModule;
 const { OrderService } = orderModule;
 const { ExportService } = exportModule;
+const { tenantSlaService } = tenantSlaModule;
 const { prisma } = await import('../src/config/database.ts');
 
 test('business time excludes the weekend and time outside opening hours', () => {
@@ -37,7 +40,10 @@ test('risk filter reaches across weekends and matches the displayed warning', ()
   assert.equal(orderSlaLevel('submitted', new Date('2026-10-19T06:37:00Z'), 'urgent', now), null);
   assert.equal(orderSlaLevel('completed', new Date('2026-10-16T12:00:00Z'), 'urgent', now), null);
   assert.deepEqual(slaRiskWhere(now).status, { in: ['submitted', 'approved', 'in_progress', 'ready'] });
-  assert.equal(slaRiskWhere(now).OR.find((item) => item.priority === 'urgent').slaDeadline.lte.toISOString(), urgent.deadline.toISOString());
+  const risk = slaRiskWhere(now);
+  assert.deepEqual(risk.OR[0], { slaWarningAt: { lte: now } });
+  assert.equal(risk.OR[1].slaWarningAt, null);
+  assert.equal(risk.OR[1].OR.find((item) => item.priority === 'urgent').slaDeadline.lte.toISOString(), urgent.deadline.toISOString());
 });
 
 test('120 percent cutoff matches business-time escalation across a weekend', () => {
@@ -47,9 +53,88 @@ test('120 percent cutoff matches business-time escalation across a weekend', () 
   assert.equal(slaEscalationLevel(cutoff, 'urgent', now), 120);
   assert.equal(slaEscalationLevel(new Date(cutoff.getTime() + 60_000), 'urgent', now), 100);
   const severe = slaLevelWhere(120, now);
-  assert.equal(severe.OR.find((entry) => entry.priority === 'urgent').slaDeadline.lte.toISOString(), cutoff.toISOString());
+  assert.deepEqual(severe.OR[0], { slaSevereAt: { lte: now } });
+  assert.equal(severe.OR[1].slaSevereAt, null);
+  assert.equal(severe.OR[1].OR.find((entry) => entry.priority === 'urgent').slaDeadline.lte.toISOString(), cutoff.toISOString());
   assert.deepEqual(slaLevelWhere(80, now).AND[1], { slaDeadline: { gt: now } });
   assert.deepEqual(slaLevelWhere(100, now).AND[0].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+});
+
+test('tenant-specific SLA snapshots use working hours and retain their own thresholds', () => {
+  const start = new Date('2026-10-16T13:00:00Z'); // Friday 15:00 Warsaw
+  const schedule = createSlaSchedule(start, 2);
+  assert.equal(schedule.deadline.toISOString(), '2026-10-19T07:00:00.000Z');
+  assert.equal(schedule.warningAt.toISOString(), '2026-10-19T06:36:00.000Z');
+  assert.equal(schedule.severeAt.toISOString(), '2026-10-19T07:24:00.000Z');
+  assert.equal(orderSlaLevel('submitted', schedule.deadline, 'normal', schedule.warningAt, schedule.warningAt, schedule.severeAt), 80);
+  assert.equal(orderSlaLevel('submitted', schedule.deadline, 'normal', schedule.deadline, schedule.warningAt, schedule.severeAt), 100);
+  assert.equal(orderSlaLevel('submitted', schedule.deadline, 'normal', schedule.severeAt, schedule.warningAt, schedule.severeAt), 120);
+  assert.equal(orderSlaLevel('completed', schedule.deadline, 'normal', schedule.severeAt, schedule.warningAt, schedule.severeAt), null);
+});
+
+test('SLA policy input requires one valid duration for every service and priority', () => {
+  const orderTypes = ['checkout', 'return_order', 'transfer', 'disposal', 'scan'];
+  const priorities = ['normal', 'high', 'urgent'];
+  const policies = orderTypes.flatMap((orderType) => priorities.map((priority) => ({ orderType, priority, hours: 10 })));
+  assert.equal(updateTenantSlaSchema.safeParse({ policies }).success, true);
+  assert.equal(updateTenantSlaSchema.safeParse({ policies: [...policies.slice(0, 14), policies[0]] }).success, false);
+  assert.equal(updateTenantSlaSchema.safeParse({ policies: policies.map((policy, index) => index ? policy : { ...policy, hours: 0 }) }).success, false);
+  assert.equal(updateTenantSlaSchema.safeParse({ policies: policies.map((policy, index) => index ? policy : { ...policy, hours: 241 }) }).success, false);
+});
+
+test('tenant SLA lookup falls back to defaults and never reads another tenant policy', async () => {
+  const originalFindUnique = prisma.tenantSlaPolicy.findUnique;
+  const queries = [];
+  prisma.tenantSlaPolicy.findUnique = async ({ where }) => {
+    queries.push(where);
+    return where.tenantId_orderType_priority.tenantId === 'custom' ? { hours: 3 } : null;
+  };
+  try {
+    assert.equal(await tenantSlaService.getHours('custom', 'scan', 'urgent'), 3);
+    assert.equal(await tenantSlaService.getHours('other', 'scan', 'urgent'), 8);
+    assert.deepEqual(queries.map((query) => query.tenantId_orderType_priority.tenantId), ['custom', 'other']);
+  } finally {
+    prisma.tenantSlaPolicy.findUnique = originalFindUnique;
+  }
+});
+
+test('tenant SLA settings show defaults, mark overrides, and replace only that tenant in a transaction', async () => {
+  const originalTenantFind = prisma.tenant.findUnique;
+  const originalPolicyFind = prisma.tenantSlaPolicy.findMany;
+  const originalTransaction = prisma.$transaction;
+  const changes = [];
+  prisma.tenant.findUnique = async ({ where }) => where.id === 'tenant-a' ? { id: 'tenant-a' } : null;
+  prisma.tenantSlaPolicy.findMany = async ({ where }) => {
+    assert.equal(where.tenantId, 'tenant-a');
+    return [{ orderType: 'scan', priority: 'urgent', hours: 3 }];
+  };
+  prisma.$transaction = async (callback) => callback({
+    tenant: { findUnique: prisma.tenant.findUnique },
+    tenantSlaPolicy: {
+      deleteMany: async ({ where }) => { changes.push(['delete', where.tenantId]); },
+      createMany: async ({ data }) => { changes.push(['create', data]); },
+    },
+  });
+  try {
+    const matrix = await tenantSlaService.list('tenant-a');
+    assert.equal(matrix.length, 15);
+    assert.deepEqual(matrix.find((policy) => policy.orderType === 'scan' && policy.priority === 'urgent'), {
+      orderType: 'scan', priority: 'urgent', hours: 3, isCustom: true,
+    });
+    assert.deepEqual(matrix.find((policy) => policy.orderType === 'checkout' && policy.priority === 'normal'), {
+      orderType: 'checkout', priority: 'normal', hours: 48, isCustom: false,
+    });
+    await assert.rejects(tenantSlaService.list('missing'), /Tenant nie znaleziony/);
+    await tenantSlaService.replace('tenant-a', matrix.map(({ orderType, priority, hours }) => ({ orderType, priority, hours })));
+    assert.deepEqual(changes[0], ['delete', 'tenant-a']);
+    assert.equal(changes[1][0], 'create');
+    assert.equal(changes[1][1].length, 15);
+    assert.ok(changes[1][1].every((policy) => policy.tenantId === 'tenant-a'));
+  } finally {
+    prisma.tenant.findUnique = originalTenantFind;
+    prisma.tenantSlaPolicy.findMany = originalPolicyFind;
+    prisma.$transaction = originalTransaction;
+  }
 });
 
 test('submission starts a fresh SLA window instead of using draft creation time', () => {
@@ -58,6 +143,25 @@ test('submission starts a fresh SLA window instead of using draft creation time'
   const update = service.getStatusUpdateData({ priority: 'urgent', notes: null }, 'submitted', 'requester');
   assert.ok(update.slaDeadline instanceof Date);
   assert.ok(update.slaDeadline > before);
+});
+
+test('submitting an order snapshots the selected tenant policy and its thresholds', async () => {
+  const originalGetHours = tenantSlaService.getHours;
+  const service = new OrderService();
+  tenantSlaService.getHours = async (tenantId, orderType, priority) => {
+    assert.deepEqual([tenantId, orderType, priority], ['tenant-a', 'scan', 'high']);
+    return 3;
+  };
+  try {
+    const schedule = await service.getSlaSchedule('tenant-a', 'scan', 'high');
+    const update = service.getStatusUpdateData({ priority: 'high', notes: null }, 'submitted', 'requester', undefined, schedule);
+    assert.equal(update.slaHours, 3);
+    assert.equal(update.slaDeadline.toISOString(), schedule.deadline.toISOString());
+    assert.equal(update.slaWarningAt.toISOString(), schedule.warningAt.toISOString());
+    assert.equal(update.slaSevereAt.toISOString(), schedule.severeAt.toISOString());
+  } finally {
+    tenantSlaService.getHours = originalGetHours;
+  }
 });
 
 test('worker sends one warning and records its level across runs', async () => {

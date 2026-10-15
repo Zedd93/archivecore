@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 import { Prisma, OrderStatus, OrderType, OrderPriority, OrderItemStatus } from '@prisma/client';
 import { canMarkReadyAfterPicking, isValidTransition } from './order-state-machine';
-import { SLA_LEVELS, BUSINESS_HOURS, Permissions, ORDER_STATUS_LABELS, generateFolderQrData } from '@archivecore/shared';
+import { Permissions, ORDER_STATUS_LABELS, generateFolderQrData } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
 import { departmentOrderVisibility } from './scan-access';
@@ -10,7 +10,8 @@ import { assertDepartmentRequesterAction } from './order-requester-access';
 import { ORDER_HISTORY_ACTIONS, mergeOrderHistory, toOrderHistoryEntry } from './order-history';
 import { orderNotificationAudience } from './order-notifications';
 import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
-import { ACTIVE_SLA_STATUSES, orderSlaLevel, parseSlaLevel, slaLevelWhere, slaRiskWhere } from './order-sla';
+import { ACTIVE_SLA_STATUSES, createSlaSchedule, orderSlaLevel, parseSlaLevel, slaHours, slaLevelWhere, slaRiskWhere } from './order-sla';
+import { tenantSlaService } from '../tenants/tenant-sla.service';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -33,28 +34,6 @@ function validateHandoverSignature(data?: string) {
   } catch {
     throw Object.assign(new Error('Podpis jest uszkodzony lub ma nieprawidłowe wymiary'), { statusCode: 400 });
   }
-}
-
-function calculateSlaDeadline(priority: string): Date {
-  const slaMap: Record<string, number> = {
-    normal: SLA_LEVELS.find(level => level.code === 'normal')?.hours || 48,
-    high: SLA_LEVELS.find(level => level.code === 'high')?.hours || 24,
-    urgent: SLA_LEVELS.find(level => level.code === 'urgent')?.hours || 8,
-  };
-  const hours = slaMap[priority] || 48;
-  const now = new Date();
-  let remaining = hours;
-  const current = new Date(now);
-
-  while (remaining > 0) {
-    current.setHours(current.getHours() + 1);
-    const day = current.getDay();
-    const hour = current.getHours();
-    if (BUSINESS_HOURS.workDays.includes(day) && hour >= BUSINESS_HOURS.startHour && hour < BUSINESS_HOURS.endHour) {
-      remaining--;
-    }
-  }
-  return current;
 }
 
 function parseExpectedReturnAt(value?: string | null): Date | undefined {
@@ -96,6 +75,11 @@ function isPrismaUniqueError(err: unknown, field?: string) {
 }
 
 export class OrderService {
+  private async getSlaSchedule(tenantId: string, orderType: OrderType, priority: OrderPriority) {
+    const hours = await tenantSlaService.getHours(tenantId, orderType, priority);
+    return createSlaSchedule(new Date(), hours);
+  }
+
   private getCustodyTarget(item: any) {
     if (item.documentId) return { documentId: item.documentId };
     if (item.folderId) return { folderId: item.folderId };
@@ -147,7 +131,7 @@ export class OrderService {
     }, db);
   }
 
-  private getStatusUpdateData(order: any, newStatus: OrderStatus, userId: string, notes?: string): Prisma.OrderUpdateInput {
+  private getStatusUpdateData(order: any, newStatus: OrderStatus, userId: string, notes?: string, schedule?: ReturnType<typeof createSlaSchedule>): Prisma.OrderUpdateInput {
     const updateData: Prisma.OrderUpdateInput = {
       status: newStatus,
       notes: notes || order.notes,
@@ -155,7 +139,11 @@ export class OrderService {
 
     switch (newStatus) {
       case 'submitted':
-        updateData.slaDeadline = calculateSlaDeadline(order.priority);
+        schedule ??= createSlaSchedule(new Date(), slaHours(order.priority));
+        updateData.slaDeadline = schedule.deadline;
+        updateData.slaHours = schedule.hours;
+        updateData.slaWarningAt = schedule.warningAt;
+        updateData.slaSevereAt = schedule.severeAt;
         break;
       case 'approved':
         updateData.approver = { connect: { id: userId } };
@@ -313,7 +301,7 @@ export class OrderService {
     return err;
   }
 
-  private async createOrderWithItems(data: any, tenantId: string, userId: string, resolvedItems: any[], orderNumber: string, slaDeadline: Date) {
+  private async createOrderWithItems(data: any, tenantId: string, userId: string, resolvedItems: any[], orderNumber: string, schedule: ReturnType<typeof createSlaSchedule>) {
     try {
       return await prisma.order.create({
         data: {
@@ -323,7 +311,10 @@ export class OrderService {
           priority: data.priority || 'normal',
           status: 'draft',
           requestedBy: userId,
-          slaDeadline,
+          slaDeadline: schedule.deadline,
+          slaHours: schedule.hours,
+          slaWarningAt: schedule.warningAt,
+          slaSevereAt: schedule.severeAt,
           expectedReturnAt: parseExpectedReturnAt(data.expectedReturnAt),
           notes: data.notes,
           items: {
@@ -357,11 +348,11 @@ export class OrderService {
     return `${prefix}${(maxSequence + 1).toString().padStart(5, '0')}`;
   }
 
-  private async createOrderWithUniqueNumber(data: any, tenantId: string, userId: string, resolvedItems: any[], slaDeadline: Date) {
+  private async createOrderWithUniqueNumber(data: any, tenantId: string, userId: string, resolvedItems: any[], schedule: ReturnType<typeof createSlaSchedule>) {
     for (let attempt = 0; attempt < 5; attempt++) {
       const orderNumber = await this.generateOrderNumber();
       try {
-        return await this.createOrderWithItems(data, tenantId, userId, resolvedItems, orderNumber, slaDeadline);
+        return await this.createOrderWithItems(data, tenantId, userId, resolvedItems, orderNumber, schedule);
       } catch (err) {
         if (isPrismaUniqueError(err, 'orderNumber')) continue;
         throw err;
@@ -420,7 +411,7 @@ export class OrderService {
     return {
       data: data.map((order) => ({
         ...order,
-        slaLevel: orderSlaLevel(order.status, order.slaDeadline, order.priority, now),
+        slaLevel: orderSlaLevel(order.status, order.slaDeadline, order.priority, now, order.slaWarningAt, order.slaSevereAt),
       })),
       total,
     };
@@ -608,9 +599,9 @@ export class OrderService {
     if (data.orderType === 'scan' && data.items.some((item: any) => item.boxId || item.boxNumber || item.hrFolderId)) {
       throw Object.assign(new Error('Zlecenie skanu może zawierać tylko teczki, pozycje spisu lub dokumenty'), { statusCode: 400 });
     }
-    const slaDeadline = calculateSlaDeadline(data.priority || 'normal');
+    const schedule = await this.getSlaSchedule(tenantId, data.orderType, data.priority || 'normal');
     const resolvedItems = await this.resolveOrderItems(data.items, tenantId, department);
-    const order = await this.createOrderWithUniqueNumber(data, tenantId, userId, resolvedItems, slaDeadline);
+    const order = await this.createOrderWithUniqueNumber(data, tenantId, userId, resolvedItems, schedule);
 
     return order;
   }
@@ -680,7 +671,10 @@ export class OrderService {
       );
     }
 
-    const updateData = this.getStatusUpdateData(order, newStatus, userId, notes);
+    const schedule = newStatus === OrderStatus.submitted
+      ? await this.getSlaSchedule(tenantId, order.orderType, order.priority)
+      : undefined;
+    const updateData = this.getStatusUpdateData(order, newStatus, userId, notes, schedule);
 
     const updated = await prisma.$transaction(async (tx) => {
       let changed;
