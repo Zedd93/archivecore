@@ -115,7 +115,7 @@ export class OrderController {
   async addItem(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const item = await orderService.addItem(req.params.id, req.tenantId, req.body, req.accessDepartment || undefined);
+      const item = await orderService.addItem(req.params.id, req.tenantId, req.body, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, item, 201);
     } catch (err) { next(err); }
   }
@@ -123,8 +123,7 @@ export class OrderController {
   async submit(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      if (req.accessDepartment) await orderService.getById(req.params.id, req.tenantId, req.accessDepartment);
-      const order = await orderService.submit(req.params.id, req.tenantId, req.user!.userId);
+      const order = await orderService.submit(req.params.id, req.tenantId, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }
@@ -180,8 +179,7 @@ export class OrderController {
   async cancel(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      if (req.accessDepartment) await orderService.getById(req.params.id, req.tenantId, req.accessDepartment);
-      const order = await orderService.cancel(req.params.id, req.tenantId, req.user!.userId, req.body.notes);
+      const order = await orderService.cancel(req.params.id, req.tenantId, req.user!.userId, req.body.notes, req.accessDepartment || undefined);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }

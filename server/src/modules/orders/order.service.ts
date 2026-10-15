@@ -6,6 +6,7 @@ import { notificationService } from '../notifications/notification.service';
 import { billingService } from '../pricing/billing.service';
 import { departmentOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
+import { assertDepartmentRequesterAction } from './order-requester-access';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -541,8 +542,9 @@ export class OrderService {
     return order;
   }
 
-  async addItem(orderId: string, tenantId: string, item: any, department?: string) {
+  async addItem(orderId: string, tenantId: string, item: any, userId: string, department?: string) {
     const order = await this.getById(orderId, tenantId, department);
+    if (department) assertDepartmentRequesterAction(order, userId, 'addItem');
     if (['ready', 'delivered', 'completed', 'cancelled'].includes(order.status)) {
       throw Object.assign(new Error('Nie można dodawać pozycji do gotowego, wydanego, zakończonego albo anulowanego zlecenia'), { statusCode: 400 });
     }
@@ -584,8 +586,11 @@ export class OrderService {
     });
   }
 
-  async updateStatus(id: string, tenantId: string, newStatus: OrderStatus, userId: string, notes?: string) {
-    const order = await this.getById(id, tenantId);
+  async updateStatus(id: string, tenantId: string, newStatus: OrderStatus, userId: string, notes?: string, department?: string) {
+    const order = await this.getById(id, tenantId, department);
+    if (department && (newStatus === OrderStatus.submitted || newStatus === OrderStatus.cancelled)) {
+      assertDepartmentRequesterAction(order, userId, newStatus === OrderStatus.submitted ? 'submit' : 'cancel');
+    }
 
     if (order.orderType === 'scan' && order.status === 'delivered' && newStatus === 'in_progress') {
       throw Object.assign(new Error('Udostępnionego zlecenia skanu nie można ponownie otworzyć'), { statusCode: 409 });
@@ -636,8 +641,8 @@ export class OrderService {
     return updated;
   }
 
-  async submit(id: string, tenantId: string, userId: string) {
-    return this.updateStatus(id, tenantId, 'submitted', userId);
+  async submit(id: string, tenantId: string, userId: string, department?: string) {
+    return this.updateStatus(id, tenantId, 'submitted', userId, undefined, department);
   }
 
   async approve(id: string, tenantId: string, userId: string) {
@@ -893,8 +898,8 @@ export class OrderService {
     return this.getById(orderId, tenantId);
   }
 
-  async cancel(id: string, tenantId: string, userId: string, notes?: string) {
-    return this.updateStatus(id, tenantId, 'cancelled', userId, notes);
+  async cancel(id: string, tenantId: string, userId: string, notes?: string, department?: string) {
+    return this.updateStatus(id, tenantId, 'cancelled', userId, notes, department);
   }
 
   async updateItemStatus(

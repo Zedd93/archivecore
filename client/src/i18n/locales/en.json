@@ -201,6 +201,7 @@
   },
 
   "orders": {
+    "awaitingApproval": "Awaiting approval ({{count}})",
     "title": "Orders",
     "subtitle": "Issues, returns, transfers, destruction and scans",
     "searchPlaceholder": "Search by number...",

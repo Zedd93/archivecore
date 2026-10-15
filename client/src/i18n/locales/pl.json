@@ -201,6 +201,7 @@
   },
 
   "orders": {
+    "awaitingApproval": "Do zatwierdzenia ({{count}})",
     "title": "Zlecenia",
     "subtitle": "Wydania, zwroty, transfery, brakowanie i skany",
     "searchPlaceholder": "Szukaj po numerze...",

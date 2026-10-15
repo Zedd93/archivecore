@@ -3,6 +3,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
+import { RoleCode } from '@archivecore/shared';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
@@ -363,7 +364,11 @@ export default function OrderDetailPage() {
     }
   };
 
-  const canAddItems = hasPermission('order.create') || hasPermission('order.process');
+  const isDepartmentEmployee = user?.roles.includes(RoleCode.TENANT_EMPLOYEE) ?? false;
+  const ownsOrder = order.requestedBy === user?.id;
+  const canAddItems = isDepartmentEmployee
+    ? ownsOrder && order.status === 'draft' && hasPermission('order.create')
+    : hasPermission('order.create') || hasPermission('order.process');
 
   const resetAddItemForm = () => {
     setSelectedBoxes([]);
@@ -543,7 +548,7 @@ export default function OrderDetailPage() {
       <div className="card">
         <h2 className="text-lg font-semibold mb-3">{t('common.actions')}</h2>
         <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
-          {order.status === 'draft' && (
+          {order.status === 'draft' && hasPermission('order.create') && (!isDepartmentEmployee || ownsOrder) && (
             <button onClick={() => handleAction('submit')} className="btn-primary" disabled={patchOrder.isPending}>
               <Play size={16} /> {t('orders.detail.submit')}
             </button>
@@ -588,7 +593,8 @@ export default function OrderDetailPage() {
               <CheckCircle size={16} /> {t('orders.detail.complete')}
             </button>
           )}
-          {!['completed', 'cancelled'].includes(order.status) && (
+          {['draft', 'submitted', 'approved', 'in_progress', 'ready'].includes(order.status)
+            && (!isDepartmentEmployee || (ownsOrder && ['draft', 'submitted'].includes(order.status))) && (
             <button onClick={() => handleAction('cancel')} className="btn-danger" disabled={patchOrder.isPending}>
               <XCircle size={16} /> {t('common.cancel')}
             </button>

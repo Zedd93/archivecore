@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useList, useCreate, useDelete } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +12,8 @@ import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import { useAuth } from '@/contexts/AuthContext';
-import { RoleCode } from '@archivecore/shared';
+import api from '@/services/api';
+import { Permissions, RoleCode } from '@archivecore/shared';
 import { readOrderDraft } from '@/utils/orderDraft';
 import { Plus, AlertTriangle, Download, Loader2, Trash2 } from 'lucide-react';
 
@@ -30,7 +32,7 @@ export default function OrderListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { user, hasRole } = useAuth();
+  const { user, hasPermission, hasRole } = useAuth();
   const consumedDraft = useRef(false);
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
@@ -56,6 +58,16 @@ export default function OrderListPage() {
   }, [location.pathname, location.state, navigate, user?.tenantId]);
 
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters });
+  const canApproveOrders = hasPermission(Permissions.ORDER_APPROVE);
+  const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const { data: awaitingApprovalCount = 0 } = useQuery({
+    queryKey: ['orders', 'awaiting-approval', activeTenantId],
+    queryFn: async () => {
+      const { data: response } = await api.get('/orders', { params: { status: 'submitted', page: 1, limit: 1 } });
+      return Number(response.meta?.total) || 0;
+    },
+    enabled: canApproveOrders && Boolean(activeTenantId),
+  });
   const createOrder = useCreate('/orders', ['orders'], t('common.success'));
   const deleteOrder = useDelete('/orders', ['orders'], t('orders.deleted'));
   const { exportData, isExporting } = useExport({ endpoint: '/export/orders', defaultFilename: 'zlecenia.xlsx' });
@@ -204,6 +216,19 @@ export default function OrderListPage() {
       </div>
 
       {/* Filters */}
+      {canApproveOrders && (
+        <button
+          type="button"
+          onClick={() => {
+            setFilters(filters.status === 'submitted' ? { search: '', status: '', orderType: '' } : { search: '', status: 'submitted', orderType: '' });
+            setPage(1);
+          }}
+          className={filters.status === 'submitted' ? 'btn-primary' : 'btn-secondary'}
+          aria-pressed={filters.status === 'submitted'}
+        >
+          {t('orders.awaitingApproval', { count: awaitingApprovalCount })}
+        </button>
+      )}
       <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <input

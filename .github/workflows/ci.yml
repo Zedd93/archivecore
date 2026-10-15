@@ -55,6 +55,9 @@ jobs:
       - name: Verify search-to-order selection
         run: npm run test:order-draft
 
+      - name: Verify employee order permissions
+        run: npm run test:order-requester-access
+
       - name: Verify offline warehouse scan drafts
         run: npm run test:offline-warehouse-scans
 

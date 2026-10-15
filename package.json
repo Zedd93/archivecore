@@ -42,6 +42,7 @@
     "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",
     "test:offline-shell": "node --test client/scripts/test-offline-shell.cjs",
     "test:order-draft": "node --import tsx --test client/scripts/test-order-draft.mjs",
+    "test:order-requester-access": "node --import tsx --test server/scripts/test-order-requester-access.mjs",
     "test:offline-warehouse-scans": "node --import tsx --test client/scripts/test-offline-warehouse-scans.mjs",
     "test:warehouse-submission": "node --import tsx --test client/scripts/test-warehouse-submission.mjs",
     "test:warehouse-idempotency": "node --import tsx --test server/scripts/test-warehouse-idempotency.mjs",
