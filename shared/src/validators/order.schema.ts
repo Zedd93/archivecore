@@ -23,6 +23,11 @@ export const createOrderSchema = z.object({
   }
 });
 
+export const previewOrderSlaQuerySchema = z.object({
+  orderType: z.enum(['checkout', 'return_order', 'transfer', 'disposal', 'scan']),
+  priority: z.enum(['normal', 'high', 'urgent']).default('normal'),
+});
+
 export const addOrderItemSchema = orderItemSchema;
 
 export const assignOrderSchema = z.object({

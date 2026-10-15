@@ -238,6 +238,16 @@
     "slaWarning": "Deadline approaching",
     "slaOverdue": "Overdue",
     "slaEscalated": "Seriously overdue",
+    "slaPreview": {
+      "title": "Estimated fulfilment deadline",
+      "duration": "{{hours}} business hours",
+      "loading": "Calculating deadline...",
+      "error": "Could not calculate the deadline. You can continue; the deadline will be set on submission.",
+      "missingTenant": "Select a client to see the deadline.",
+      "pendingSubmission": "The deadline will be set when the order is submitted",
+      "explanation": "Estimate for submitting now. The final deadline is calculated when the order is submitted (Warsaw time).",
+      "loanNote": "This is the order fulfilment deadline, not the due date for returning borrowed materials."
+    },
     "type": "Type",
     "priority": "Priority",
     "dueDate": "Due date",

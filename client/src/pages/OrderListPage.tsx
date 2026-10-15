@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
+import OrderSlaPreview from '@/components/OrderSlaPreview';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
@@ -59,6 +60,7 @@ export default function OrderListPage() {
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [createType, setCreateType] = useState('checkout');
+  const [createPriority, setCreatePriority] = useState('normal');
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
@@ -208,7 +210,7 @@ export default function OrderListPage() {
       key: 'slaDeadline',
       header: t('orders.sla'),
       render: (item) => {
-        if (!item.slaDeadline) return '—';
+        if (item.status === 'draft' || !item.slaDeadline) return '—';
         const deadline = new Date(item.slaDeadline);
         const level = item.slaLevel as 80 | 100 | 120 | null;
         const badge = level === 120
@@ -322,6 +324,7 @@ export default function OrderListPage() {
     setSelectedFolders([]);
     setSelectedDocuments([]);
     setCreateType('checkout');
+    setCreatePriority('normal');
   };
 
   return (
@@ -503,13 +506,14 @@ export default function OrderListPage() {
             </div>
             <div>
               <label htmlFor="order-create-priority" className="label-text">{t('orders.createModal.priority')}</label>
-              <select id="order-create-priority" name="priority" className="input-field">
+              <select id="order-create-priority" name="priority" className="input-field" value={createPriority} onChange={(event) => setCreatePriority(event.target.value)}>
                 <option value="normal">{t('orders.createModal.priorityNormal')}</option>
                 <option value="high">{t('orders.createModal.priorityHigh')}</option>
                 <option value="urgent">{t('orders.createModal.priorityUrgent')}</option>
               </select>
             </div>
           </div>
+          <OrderSlaPreview tenantId={activeTenantId} orderType={createType} priority={createPriority} enabled={showCreate} />
           {createType === 'scan' && <p className="text-sm text-gray-600">{t('orders.createModal.scanHint')}</p>}
           {createType !== 'scan' && <div>
             <label className="label-text">{t('orders.createModal.boxIds')}</label>

@@ -238,6 +238,16 @@
     "slaWarning": "Zbliża się termin",
     "slaOverdue": "Termin minął",
     "slaEscalated": "Poważnie po terminie",
+    "slaPreview": {
+      "title": "Przewidywany termin realizacji",
+      "duration": "{{hours}} h roboczych",
+      "loading": "Obliczanie terminu...",
+      "error": "Nie udało się obliczyć terminu. Możesz kontynuować; termin zostanie nadany przy zgłoszeniu.",
+      "missingTenant": "Wybierz klienta, aby zobaczyć termin.",
+      "pendingSubmission": "Termin zostanie nadany po złożeniu zlecenia",
+      "explanation": "Szacunek dla zgłoszenia w tej chwili. Ostateczny termin zostanie wyliczony przy złożeniu zlecenia (czas polski).",
+      "loanNote": "To termin obsługi zlecenia, a nie data zwrotu wypożyczonych materiałów."
+    },
     "type": "Typ",
     "priority": "Priorytet",
     "dueDate": "Termin realizacji",

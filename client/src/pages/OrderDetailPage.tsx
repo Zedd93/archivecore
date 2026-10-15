@@ -15,6 +15,7 @@ import Modal from '@/components/ui/Modal';
 import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
+import OrderSlaPreview from '@/components/OrderSlaPreview';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
 import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
 import SignaturePad from '@/components/ui/SignaturePad';
@@ -394,6 +395,7 @@ export default function OrderDetailPage() {
 
   const isDepartmentEmployee = user?.roles.includes(RoleCode.TENANT_EMPLOYEE) ?? false;
   const ownsOrder = order.requestedBy === user?.id;
+  const canSubmitOrder = order.status === 'draft' && hasPermission('order.create') && (!isDepartmentEmployee || ownsOrder);
   const canAddItems = isDepartmentEmployee
     ? ownsOrder && order.status === 'draft' && hasPermission('order.create')
     : hasPermission('order.create') || hasPermission('order.process');
@@ -575,8 +577,16 @@ export default function OrderDetailPage() {
       {/* Actions */}
       <div className="card">
         <h2 className="text-lg font-semibold mb-3">{t('common.actions')}</h2>
+        {canSubmitOrder && <div className="mb-3">
+          <OrderSlaPreview
+            tenantId={activeTenantId}
+            orderType={order.orderType}
+            priority={order.priority}
+            enabled
+          />
+        </div>}
         <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
-          {order.status === 'draft' && hasPermission('order.create') && (!isDepartmentEmployee || ownsOrder) && (
+          {canSubmitOrder && (
             <button onClick={() => handleAction('submit')} className="btn-primary" disabled={patchOrder.isPending}>
               <Play size={16} /> {t('orders.detail.submit')}
             </button>
@@ -800,7 +810,7 @@ export default function OrderDetailPage() {
                 <dt className="text-gray-500">{t('orders.detail.slaDeadline')}</dt>
                 <dd className="flex items-center gap-1">
                   <Clock size={14} />
-                  {order.slaDeadline ? new Date(order.slaDeadline).toLocaleString('pl-PL') : '—'}
+                  {order.status === 'draft' ? t('orders.slaPreview.pendingSubmission') : order.slaDeadline ? new Date(order.slaDeadline).toLocaleString('pl-PL') : '—'}
                 </dd>
               </div>
               {order.expectedReturnAt && (

@@ -6,6 +6,7 @@ import { parsePagination } from '../../utils/pagination';
 import { orderScanService } from './order-scan.service';
 import { orderHandoverPhotoService } from './order-handover-photo.service';
 import { z } from 'zod';
+import { OrderPriority, OrderType } from '@prisma/client';
 
 export class OrderController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -30,6 +31,15 @@ export class OrderController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const summary = await orderService.getSlaSummary(req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, summary);
+    } catch (err) { next(err); }
+  }
+
+  async previewSla(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const preview = await orderService.previewSla(req.tenantId, req.query.orderType as OrderType, req.query.priority as OrderPriority);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, preview);
     } catch (err) { next(err); }
   }
 

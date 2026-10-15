@@ -5,7 +5,7 @@ import { tenantContext } from '../../middleware/tenant';
 import { requirePermission, requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, RoleCode, createOrderSchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema, deliverOrderSchema } from '@archivecore/shared';
+import { Permissions, RoleCode, createOrderSchema, previewOrderSlaQuerySchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema, deliverOrderSchema } from '@archivecore/shared';
 import multer from 'multer';
 
 const router = Router();
@@ -37,6 +37,7 @@ const uploadHandoverPhoto = (req: Parameters<ReturnType<typeof photoUpload.singl
 router.get('/', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.list(req, res, next));
 router.get('/warehouse-tasks', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.listWarehouseTasks(req, res, next));
 router.get('/sla-summary', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getSlaSummary(req, res, next));
+router.get('/sla-preview', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(previewOrderSlaQuerySchema, 'query'), (req, res, next) => orderController.previewSla(req, res, next));
 router.get('/assignees', ...auth, requirePermission(Permissions.ORDER_PROCESS), (req, res, next) => orderController.listAssignees(req, res, next));
 router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getOverdueSla(req, res, next));
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));

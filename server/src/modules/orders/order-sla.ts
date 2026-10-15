@@ -90,6 +90,7 @@ export function createSlaSchedule(start: Date, hours: number) {
   const minutes = hours * 60;
   const deadline = addBusinessMinutes(start, minutes);
   return {
+    calculatedAt: new Date(start),
     hours,
     deadline,
     warningAt: addBusinessMinutes(start, Math.round(minutes * SLA_ESCALATION.warningPercent / 100)),

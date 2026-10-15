@@ -8,6 +8,7 @@ const orderModule = await import('../src/modules/orders/order.service.ts');
 const exportModule = await import('../src/modules/import-export/export.service.ts');
 const tenantSlaModule = await import('../src/modules/tenants/tenant-sla.service.ts');
 const { updateTenantSlaSchema } = await import('../../shared/src/validators/sla-policy.schema.ts');
+const { previewOrderSlaQuerySchema } = await import('../../shared/src/validators/order.schema.ts');
 const { businessMinutesBetween, createSlaSchedule, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere, subtractBusinessMinutes, slaLevelWhere } = slaModule;
 const { OrderSlaService } = serviceModule;
 const { OrderService } = orderModule;
@@ -80,6 +81,12 @@ test('SLA policy input requires one valid duration for every service and priorit
   assert.equal(updateTenantSlaSchema.safeParse({ policies: [...policies.slice(0, 14), policies[0]] }).success, false);
   assert.equal(updateTenantSlaSchema.safeParse({ policies: policies.map((policy, index) => index ? policy : { ...policy, hours: 0 }) }).success, false);
   assert.equal(updateTenantSlaSchema.safeParse({ policies: policies.map((policy, index) => index ? policy : { ...policy, hours: 241 }) }).success, false);
+});
+
+test('SLA preview accepts only supported order types and priorities', () => {
+  assert.deepEqual(previewOrderSlaQuerySchema.parse({ orderType: 'scan' }), { orderType: 'scan', priority: 'normal' });
+  assert.equal(previewOrderSlaQuerySchema.safeParse({ orderType: 'unknown', priority: 'high' }).success, false);
+  assert.equal(previewOrderSlaQuerySchema.safeParse({ orderType: 'checkout', priority: 'unknown' }).success, false);
 });
 
 test('tenant SLA lookup falls back to defaults and never reads another tenant policy', async () => {
@@ -159,6 +166,24 @@ test('submitting an order snapshots the selected tenant policy and its threshold
     assert.equal(update.slaDeadline.toISOString(), schedule.deadline.toISOString());
     assert.equal(update.slaWarningAt.toISOString(), schedule.warningAt.toISOString());
     assert.equal(update.slaSevereAt.toISOString(), schedule.severeAt.toISOString());
+  } finally {
+    prisma.tenantSlaPolicy.findUnique = originalFindUnique;
+  }
+});
+
+test('SLA preview uses the same selected tenant policy and deadline calculation as submission', async () => {
+  const originalFindUnique = prisma.tenantSlaPolicy.findUnique;
+  prisma.tenantSlaPolicy.findUnique = async ({ where }) => {
+    assert.deepEqual(where.tenantId_orderType_priority, { tenantId: 'tenant-a', orderType: 'scan', priority: 'high' });
+    return { hours: 3 };
+  };
+  try {
+    const before = new Date();
+    const preview = await new OrderService().previewSla('tenant-a', 'scan', 'high');
+    const after = new Date();
+    assert.equal(preview.hours, 3);
+    assert.ok(preview.calculatedAt >= before && preview.calculatedAt <= after);
+    assert.equal(preview.deadline.toISOString(), createSlaSchedule(preview.calculatedAt, 3).deadline.toISOString());
   } finally {
     prisma.tenantSlaPolicy.findUnique = originalFindUnique;
   }

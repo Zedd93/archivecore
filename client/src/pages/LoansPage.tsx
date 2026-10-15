@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import BoxPicker from '@/components/ui/BoxPicker';
 import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
+import OrderSlaPreview from '@/components/OrderSlaPreview';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import QrCameraScanner from '@/components/ui/QrCameraScanner';
@@ -485,6 +486,8 @@ export default function LoansPage() {
               <option value="urgent">{t('orders.createModal.priorityUrgent')}</option>
             </select>
           </div>
+
+          <OrderSlaPreview tenantId={activeTenantId} orderType="checkout" priority={priority} enabled={showCreate} isLoan />
 
           <div>
             <label htmlFor="loan-expected-return" className="label-text">{t('loans.createModal.expectedReturnAt')}</label>

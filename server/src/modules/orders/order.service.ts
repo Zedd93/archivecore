@@ -80,6 +80,11 @@ export class OrderService {
     return createSlaSchedule(new Date(), hours);
   }
 
+  async previewSla(tenantId: string, orderType: OrderType, priority: OrderPriority) {
+    const { calculatedAt, hours, deadline } = await this.getSlaSchedule(tenantId, orderType, priority);
+    return { calculatedAt, hours, deadline };
+  }
+
   private getCustodyTarget(item: any) {
     if (item.documentId) return { documentId: item.documentId };
     if (item.folderId) return { folderId: item.folderId };
