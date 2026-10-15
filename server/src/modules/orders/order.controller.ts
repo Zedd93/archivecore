@@ -149,7 +149,7 @@ export class OrderController {
   async approve(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.approve(req.params.id, req.tenantId, req.user!.userId);
+      const order = await orderService.approve(req.params.id, req.tenantId, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }
@@ -157,7 +157,7 @@ export class OrderController {
   async reject(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.reject(req.params.id, req.tenantId, req.user!.userId, req.body.notes);
+      const order = await orderService.reject(req.params.id, req.tenantId, req.user!.userId, req.body.notes, req.accessDepartment || undefined);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }
@@ -165,7 +165,7 @@ export class OrderController {
   async startProcessing(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.startProcessing(req.params.id, req.tenantId, req.user!.userId);
+      const order = await orderService.startProcessing(req.params.id, req.tenantId, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }

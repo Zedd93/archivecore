@@ -80,13 +80,65 @@ test('ordinary status transitions store webhook events in the order transaction'
   service.notifyOrderStatus = async () => undefined;
   let queued;
   prisma.$transaction = async (callback) => callback({
-    order: { update: async () => ({ ...order, status: 'submitted' }) },
+    order: { update: async ({ where }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.status, 'draft');
+      return { ...order, status: 'submitted' };
+    } },
     webhookEndpoint: { findMany: async () => [{ id: 'endpoint-a' }] },
     webhookDelivery: { createMany: async (args) => { queued = args; return { count: 1 }; } },
   });
   try {
     await service.updateStatus('order-1', 'tenant-a', 'submitted', 'user-a');
     assert.equal(JSON.parse(queued.data[0].payloadText).data.status, 'submitted');
+  } finally {
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('quick approval rejects a stale transition within the department scope', async () => {
+  const originalTransaction = prisma.$transaction;
+  const service = new OrderService();
+  const order = { id: 'order-1', tenantId: 'tenant-a', orderNumber: 'Z-1', orderType: 'checkout', status: 'submitted', requestedBy: 'user-a', items: [] };
+  let updateWhere;
+  service.getById = async (_id, _tenantId, department) => {
+    assert.equal(department, 'Księgowość');
+    return order;
+  };
+  prisma.$transaction = async (callback) => callback({
+    order: { update: async ({ where }) => { updateWhere = where; throw { code: 'P2025' }; } },
+  });
+  try {
+    await assert.rejects(
+      service.approve('order-1', 'tenant-a', 'manager-1', 'Księgowość'),
+      (error) => error.statusCode === 409,
+    );
+    assert.equal(updateWhere.tenantId, 'tenant-a');
+    assert.equal(updateWhere.status, 'submitted');
+    assert.equal(updateWhere.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
+  } finally {
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('quick processing keeps the assigned handler and checks the previous status', async () => {
+  const originalTransaction = prisma.$transaction;
+  const service = new OrderService();
+  const order = { id: 'order-1', tenantId: 'tenant-a', orderNumber: 'Z-1', orderType: 'checkout', status: 'approved', requestedBy: 'user-a', assignedTo: 'worker-1', items: [] };
+  service.getById = async () => order;
+  service.notifyOrderStatus = async () => undefined;
+  prisma.$transaction = async (callback) => callback({
+    order: { update: async ({ where, data }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.status, 'approved');
+      assert.equal(data.assignee, undefined);
+      return { ...order, status: 'in_progress' };
+    } },
+    webhookEndpoint: { findMany: async () => [] },
+  });
+  try {
+    const result = await service.startProcessing('order-1', 'tenant-a', 'manager-1');
+    assert.equal(result.status, 'in_progress');
   } finally {
     prisma.$transaction = originalTransaction;
   }

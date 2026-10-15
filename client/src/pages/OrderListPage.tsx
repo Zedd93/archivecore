@@ -43,6 +43,12 @@ interface AssignableOrder {
   assignedTo: string | null;
 }
 
+interface QuickTransition {
+  id: string;
+  orderNumber: string;
+  action: 'approve' | 'process';
+}
+
 export default function OrderListPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -60,6 +66,8 @@ export default function OrderListPage() {
   const [assigningOrder, setAssigningOrder] = useState<AssignableOrder | null>(null);
   const [assigneeChoice, setAssigneeChoice] = useState('');
   const [assigning, setAssigning] = useState(false);
+  const [quickTransition, setQuickTransition] = useState<QuickTransition | null>(null);
+  const [transitionBusy, setTransitionBusy] = useState(false);
 
   useEffect(() => {
     if (consumedDraft.current) return;
@@ -126,6 +134,29 @@ export default function OrderListPage() {
       toast.error(getApiErrorMessage(error, t('common.genericError')));
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const confirmQuickTransition = async () => {
+    if (!quickTransition || transitionBusy) return;
+    setTransitionBusy(true);
+    try {
+      await api.patch(`/orders/${quickTransition.id}/${quickTransition.action}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['order', quickTransition.id] }),
+        queryClient.invalidateQueries({ queryKey: ['order-history'] }),
+      ]);
+      setQuickTransition(null);
+      toast.success(t('orders.detail.statusChanged'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      if ((error as { response?: { status?: number } })?.response?.status === 409) {
+        setQuickTransition(null);
+        await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      }
+    } finally {
+      setTransitionBusy(false);
     }
   };
 
@@ -199,22 +230,39 @@ export default function OrderListPage() {
         );
       },
     },
-    ...(canProcessOrders ? [{
+    ...(canProcessOrders || canApproveOrders ? [{
       key: 'slaAction',
       header: t('orders.slaQuickAction'),
-      render: (item: any) => item.slaLevel && ['submitted', 'approved', 'in_progress', 'ready'].includes(item.status) ? (
-        <button
-          type="button"
-          onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
-            event.stopPropagation();
-            setAssigneeChoice('');
-            setAssigningOrder({ id: item.id, orderNumber: item.orderNumber, assignedTo: item.assignedTo });
-          }}
-          className="btn-secondary text-sm"
-          aria-label={t('orders.slaAssignAction', { number: item.orderNumber })}
-        >
-          {t('orders.detail.assign')}
-        </button>
+      render: (item: any) => item.slaLevel ? (
+        <div className="flex flex-wrap gap-1">
+          {canProcessOrders && ['submitted', 'approved', 'in_progress', 'ready'].includes(item.status) && (
+            <button
+              type="button"
+              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation();
+                setAssigneeChoice('');
+                setAssigningOrder({ id: item.id, orderNumber: item.orderNumber, assignedTo: item.assignedTo });
+              }}
+              className="btn-secondary text-sm"
+              aria-label={t('orders.slaAssignAction', { number: item.orderNumber })}
+            >
+              {t('orders.detail.assign')}
+            </button>
+          )}
+          {((item.status === 'submitted' && canApproveOrders) || (item.status === 'approved' && canProcessOrders)) && (
+            <button
+              type="button"
+              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation();
+                setQuickTransition({ id: item.id, orderNumber: item.orderNumber, action: item.status === 'submitted' ? 'approve' : 'process' });
+              }}
+              className="btn-primary text-sm"
+              aria-label={t(item.status === 'submitted' ? 'orders.slaApproveAction' : 'orders.slaProcessAction', { number: item.orderNumber })}
+            >
+              {t(item.status === 'submitted' ? 'orders.detail.approve' : 'orders.detail.startProgress')}
+            </button>
+          )}
+        </div>
       ) : null,
     }] : []),
     ...(canDeleteOrders ? [{
@@ -418,6 +466,25 @@ export default function OrderListPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(quickTransition)}
+        onClose={() => { if (!transitionBusy) setQuickTransition(null); }}
+        title={t('orders.slaTransitionTitle', { number: quickTransition?.orderNumber || '' })}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            {t(quickTransition?.action === 'approve' ? 'orders.slaApproveConfirm' : 'orders.slaProcessConfirm')}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setQuickTransition(null)} disabled={transitionBusy}>{t('common.cancel')}</button>
+            <button type="button" className="btn-primary" onClick={() => { void confirmQuickTransition(); }} disabled={transitionBusy}>
+              {transitionBusy && <Loader2 size={16} className="animate-spin" />}
+              {t(quickTransition?.action === 'approve' ? 'orders.detail.approve' : 'orders.detail.startProgress')}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Create Modal */}

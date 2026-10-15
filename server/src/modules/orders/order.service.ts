@@ -683,16 +683,29 @@ export class OrderService {
     const updateData = this.getStatusUpdateData(order, newStatus, userId, notes);
 
     const updated = await prisma.$transaction(async (tx) => {
-      const changed = await tx.order.update({
-        where: { id },
-        data: updateData,
-        include: {
-          requester: { select: { id: true, firstName: true, lastName: true } },
-          approver: { select: { id: true, firstName: true, lastName: true } },
-          assignee: { select: { id: true, firstName: true, lastName: true } },
-          items: true,
-        },
-      });
+      let changed;
+      try {
+        changed = await tx.order.update({
+          where: {
+            id,
+            tenantId,
+            status: order.status,
+            ...(department ? { AND: [departmentOrderVisibility(department)] } : {}),
+          },
+          data: updateData,
+          include: {
+            requester: { select: { id: true, firstName: true, lastName: true } },
+            approver: { select: { id: true, firstName: true, lastName: true } },
+            assignee: { select: { id: true, firstName: true, lastName: true } },
+            items: true,
+          },
+        });
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'P2025') {
+          throw Object.assign(new Error('Status zlecenia zmienił się. Odśwież listę i spróbuj ponownie.'), { statusCode: 409 });
+        }
+        throw error;
+      }
       if (newStatus === OrderStatus.completed) {
         await tx.orderItem.updateMany({
           where: {
@@ -717,16 +730,16 @@ export class OrderService {
     return this.updateStatus(id, tenantId, 'submitted', userId, undefined, department);
   }
 
-  async approve(id: string, tenantId: string, userId: string) {
-    return this.updateStatus(id, tenantId, 'approved', userId);
+  async approve(id: string, tenantId: string, userId: string, department?: string) {
+    return this.updateStatus(id, tenantId, 'approved', userId, undefined, department);
   }
 
-  async reject(id: string, tenantId: string, userId: string, notes?: string) {
-    return this.updateStatus(id, tenantId, 'rejected', userId, notes);
+  async reject(id: string, tenantId: string, userId: string, notes?: string, department?: string) {
+    return this.updateStatus(id, tenantId, 'rejected', userId, notes, department);
   }
 
-  async startProcessing(id: string, tenantId: string, userId: string) {
-    return this.updateStatus(id, tenantId, 'in_progress', userId);
+  async startProcessing(id: string, tenantId: string, userId: string, department?: string) {
+    return this.updateStatus(id, tenantId, 'in_progress', userId, undefined, department);
   }
 
   async markReady(id: string, tenantId: string, userId: string) {
