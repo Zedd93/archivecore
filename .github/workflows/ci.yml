@@ -67,6 +67,9 @@ jobs:
       - name: Verify order SLA escalations
         run: npm run test:order-sla
 
+      - name: Verify SLA breakdown report
+        run: npm run test:sla-breakdown
+
       - name: Verify offline warehouse scan drafts
         run: npm run test:offline-warehouse-scans
 

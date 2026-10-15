@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { Prisma } from '@prisma/client';
 import {
   BOX_STATUS_LABELS,
   DOC_TYPE_LABELS,
@@ -6,6 +7,14 @@ import {
   ORDER_STATUS_LABELS,
 } from '@archivecore/shared';
 import { findTenantOverCapacityLocations } from './storage-health';
+
+interface SlaBreakdownRow {
+  tenantId: string;
+  priority: string;
+  completed: number;
+  breached: number;
+  activeOverdue: number;
+}
 
 export interface DashboardKPIs {
   totalBoxes: number;
@@ -375,6 +384,43 @@ export class ReportService {
     const slaRate = total > 0 ? Math.round((onTime / total) * 100) : 100;
 
     return { total, onTime, overdue: total - onTime, slaRate };
+  }
+
+  async getSlaBreakdown(tenantId: string | undefined, days: number, now = new Date()) {
+    const since = new Date(now.getTime() - days * 24 * 60 * 60_000);
+    const tenantFilter = tenantId ? Prisma.sql`AND "tenantId" = ${tenantId}::uuid` : Prisma.empty;
+    const rows = await prisma.$queryRaw<SlaBreakdownRow[]>(Prisma.sql`
+      SELECT "tenantId", "priority",
+        COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since})::int AS "completed",
+        COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since} AND "completedAt" > "slaDeadline")::int AS "breached",
+        COUNT(*) FILTER (WHERE "status" IN ('submitted', 'approved', 'in_progress', 'ready') AND "slaDeadline" < ${now})::int AS "activeOverdue"
+      FROM "orders"
+      WHERE (
+        ("status" = 'completed' AND "completedAt" >= ${since} AND "slaDeadline" IS NOT NULL)
+        OR ("status" IN ('submitted', 'approved', 'in_progress', 'ready') AND "slaDeadline" < ${now})
+      ) ${tenantFilter}
+      GROUP BY "tenantId", "priority"
+    `);
+    const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
+    const tenants = tenantIds.length ? await prisma.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      select: { id: true, name: true },
+    }) : [];
+    const names = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+    const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+    const data = rows.map((row) => ({
+      ...row,
+      tenantName: names.get(row.tenantId) || row.tenantId,
+      onTime: row.completed - row.breached,
+      slaRate: row.completed ? Math.round((row.completed - row.breached) / row.completed * 100) : null,
+    })).sort((a, b) => a.tenantName.localeCompare(b.tenantName, 'pl')
+      || (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3));
+    const totals = data.reduce((sum, row) => ({
+      completed: sum.completed + row.completed,
+      breached: sum.breached + row.breached,
+      activeOverdue: sum.activeOverdue + row.activeOverdue,
+    }), { completed: 0, breached: 0, activeOverdue: 0 });
+    return { days, since, asOf: now, data, totals };
   }
 }
 

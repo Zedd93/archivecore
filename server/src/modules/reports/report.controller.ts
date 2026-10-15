@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { reportService } from './report.service';
 import { successResponse, errorResponse } from '../../utils/response';
-import { Permissions } from '@archivecore/shared';
+import { Permissions, RoleCode } from '@archivecore/shared';
 import { buildMonthlyReportPdf, getMonthlyReport, parseReportMonth } from './monthly-report.service';
 
 export class ReportController {
@@ -115,6 +115,18 @@ export class ReportController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const data = await reportService.getSlaPerformance(req.tenantId);
       return successResponse(res, data);
+    } catch (err) { next(err); }
+  }
+
+  async getSlaBreakdown(req: Request, res: Response, next: NextFunction) {
+    try {
+      const allTenants = req.query.scope === 'all';
+      const canViewAll = req.user?.roles.some((role) => role === RoleCode.SUPER_ADMIN || role === RoleCode.DOXART_ADMIN);
+      if (allTenants && !canViewAll) return errorResponse(res, 'Brak uprawnień do raportu wszystkich tenantów', 403);
+      if (!allTenants && !req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const days = req.query.days === undefined ? 180 : Number(req.query.days);
+      if (![30, 90, 180, 365].includes(days)) return errorResponse(res, 'Nieprawidłowy zakres raportu SLA', 400);
+      return successResponse(res, await reportService.getSlaBreakdown(allTenants ? undefined : req.tenantId!, days));
     } catch (err) { next(err); }
   }
 }

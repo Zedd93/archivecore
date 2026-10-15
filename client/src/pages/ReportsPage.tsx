@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import api from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { RoleCode } from '@archivecore/shared';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
 import toast from 'react-hot-toast';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
@@ -15,6 +17,21 @@ interface StorageHealth {
     boxes: Array<{ id: string; boxNumber: string }>;
     folders: Array<{ id: string; folderNumber: string }>;
   };
+}
+
+interface SlaBreakdown {
+  days: number;
+  data: Array<{
+    tenantId: string;
+    tenantName: string;
+    priority: string;
+    completed: number;
+    breached: number;
+    activeOverdue: number;
+    onTime: number;
+    slaRate: number | null;
+  }>;
+  totals: { completed: number; breached: number; activeOverdue: number };
 }
 
 const currentMonth = () => {
@@ -31,9 +48,14 @@ const previousMonth = () => {
 
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const { user, hasRole } = useAuth();
   const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(null);
   const [reportMonth, setReportMonth] = useState(previousMonth);
   const [downloadingReport, setDownloadingReport] = useState(false);
+  const [slaDays, setSlaDays] = useState(180);
+  const [slaScope, setSlaScope] = useState<'tenant' | 'all'>('tenant');
+  const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
+  const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
 
   const downloadMonthlyReport = async () => {
     if (!reportMonth || downloadingReport) return;
@@ -76,6 +98,16 @@ export default function ReportsPage() {
   const { data: sla, isLoading: l3 } = useQuery({
     queryKey: ['report-sla'],
     queryFn: async () => { const { data } = await api.get('/reports/sla'); return data.data; },
+  });
+
+  const { data: slaBreakdown, isLoading: slaBreakdownLoading, isError: slaBreakdownError, refetch: refetchSlaBreakdown } = useQuery<SlaBreakdown>({
+    queryKey: ['report-sla-breakdown', user?.id, canViewAllSla, activeTenantId, slaScope, slaDays],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/sla/breakdown', { params: { days: slaDays, scope: slaScope } });
+      return data.data;
+    },
+    enabled: slaScope === 'all' ? canViewAllSla : Boolean(activeTenantId),
+    refetchInterval: 60_000,
   });
 
   const { data: retention, isLoading: l4 } = useQuery({
@@ -202,6 +234,69 @@ export default function ReportsPage() {
             {t('reports.monthlyDownload')}
           </button>
         </div>
+      </section>
+
+      <section className="card space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><TrendingUp size={20} className="text-primary-600" />{t('reports.slaBreakdownTitle')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('reports.slaBreakdownDescription')}</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <label className="text-sm font-medium text-gray-700">
+            {t('reports.slaPeriod')}
+            <select className="input-field mt-1" value={slaDays} onChange={(event) => setSlaDays(Number(event.target.value))}>
+              {[30, 90, 180, 365].map((days) => <option key={days} value={days}>{t('reports.slaDays', { count: days })}</option>)}
+            </select>
+          </label>
+          {canViewAllSla && <label className="text-sm font-medium text-gray-700">
+            {t('reports.slaScope')}
+            <select className="input-field mt-1" value={slaScope} onChange={(event) => setSlaScope(event.target.value as 'tenant' | 'all')}>
+              <option value="tenant">{t('reports.slaSelectedTenant')}</option>
+              <option value="all">{t('reports.slaAllTenants')}</option>
+            </select>
+          </label>}
+        </div>
+        {slaBreakdownLoading ? <p className="text-sm text-gray-500">{t('common.loading')}</p> : slaBreakdownError ? (
+          <button type="button" className="btn-secondary" onClick={() => { void refetchSlaBreakdown(); }}>{t('common.tryAgain')}</button>
+        ) : slaBreakdown && (
+          slaBreakdown.data.length === 0 ? <p className="text-sm text-gray-500">{t('common.noData')}</p> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-600">
+                    <th scope="col" className="py-2 pr-4">{t('reports.slaTenant')}</th>
+                    <th scope="col" className="py-2 pr-4">{t('reports.slaPriority')}</th>
+                    <th scope="col" className="py-2 pr-4 text-right">{t('reports.slaCompleted')}</th>
+                    <th scope="col" className="py-2 pr-4 text-right">{t('reports.slaBreached')}</th>
+                    <th scope="col" className="py-2 pr-4 text-right">{t('reports.slaActiveOverdue')}</th>
+                    <th scope="col" className="py-2 text-right">{t('reports.slaRate')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {slaBreakdown.data.map((row) => (
+                    <tr key={`${row.tenantId}-${row.priority}`} className="border-b border-gray-100">
+                      <td className="py-2 pr-4 font-medium">{row.tenantName}</td>
+                      <td className="py-2 pr-4">{t(`reports.slaPriority${row.priority === 'urgent' ? 'Urgent' : row.priority === 'high' ? 'High' : 'Normal'}`)}</td>
+                      <td className="py-2 pr-4 text-right">{row.completed}</td>
+                      <td className="py-2 pr-4 text-right text-red-700">{row.breached}</td>
+                      <td className="py-2 pr-4 text-right text-orange-700">{row.activeOverdue}</td>
+                      <td className="py-2 text-right">{row.slaRate === null ? '—' : `${row.slaRate}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="font-semibold text-gray-900">
+                    <th scope="row" colSpan={2} className="pt-3 text-left">{t('reports.slaTotal')}</th>
+                    <td className="pt-3 pr-4 text-right">{slaBreakdown.totals.completed}</td>
+                    <td className="pt-3 pr-4 text-right">{slaBreakdown.totals.breached}</td>
+                    <td className="pt-3 pr-4 text-right">{slaBreakdown.totals.activeOverdue}</td>
+                    <td className="pt-3 text-right">{slaBreakdown.totals.completed ? `${Math.round((slaBreakdown.totals.completed - slaBreakdown.totals.breached) / slaBreakdown.totals.completed * 100)}%` : '—'}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )
+        )}
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
