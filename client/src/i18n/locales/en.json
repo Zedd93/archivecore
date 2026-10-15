@@ -355,6 +355,11 @@
       "details": "Details",
       "approver": "Approver",
       "handler": "Handler",
+      "assignTo": "Assign handler",
+      "selectAssignee": "Select a person",
+      "assign": "Assign",
+      "assignedSuccess": "Order assigned",
+      "assigneesError": "Could not load available handlers",
       "slaDeadline": "SLA Deadline"
     }
   },

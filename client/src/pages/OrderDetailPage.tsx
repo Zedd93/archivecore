@@ -85,6 +85,11 @@ export default function OrderDetailPage() {
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'issue', id || '');
   const { data: order, isLoading } = useDetail('order', '/orders', id);
+  const { data: assignees = [], isError: assigneesError } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
+    queryKey: ['order-assignees', activeTenantId],
+    queryFn: async () => { const { data } = await api.get('/orders/assignees'); return data.data; },
+    enabled: Boolean(id && order && hasPermission('order.process')),
+  });
   const { data: custodyEvents = [], isLoading: custodyLoading, isError: custodyError } = useQuery<CustodyTimelineEvent[]>({
     queryKey: ['order-custody', activeTenantId, id],
     queryFn: async () => { const { data } = await api.get(`/orders/${id}/custody`); return data.data; },
@@ -100,6 +105,8 @@ export default function OrderDetailPage() {
     t('orders.detail.statusChanged')
   );
   const [showAddItem, setShowAddItem] = useState(false);
+  const [assigneeChoice, setAssigneeChoice] = useState('');
+  const [assigning, setAssigning] = useState(false);
   const [selectedBoxes, setSelectedBoxes] = useState<{ id: string; boxNumber: string }[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
@@ -134,6 +141,10 @@ export default function OrderDetailPage() {
   );
 
   useEffect(() => {
+    setAssigneeChoice('');
+  }, [id]);
+
+  useEffect(() => {
     const queue = pickScanQueueRef.current;
     queue?.clear();
     lastCameraCodeRef.current = { code: '', retryAt: 0 };
@@ -150,6 +161,23 @@ export default function OrderDetailPage() {
     approved: t('orders.statusApproved'), in_progress: t('orders.statusInProgress'),
     ready: t('orders.statusReady'), delivered: t('orders.statusIssued'),
     completed: t('orders.statusCompleted'),
+  };
+
+  const assignOrder = async () => {
+    const assigneeId = assigneeChoice || order?.assignedTo;
+    if (!id || !assigneeId || assigneeId === order?.assignedTo) return;
+    setAssigning(true);
+    try {
+      await api.patch(`/orders/${id}/assign`, { assigneeId });
+      setAssigneeChoice('');
+      await queryClient.invalidateQueries({ queryKey: ['order', id] });
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success(t('orders.detail.assignedSuccess'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
+    } finally {
+      setAssigning(false);
+    }
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin" size={32} /></div>;
@@ -792,6 +820,26 @@ export default function OrderDetailPage() {
                 </div>
               )}
             </dl>
+            {hasPermission('order.process') && !['delivered', 'completed', 'rejected', 'cancelled'].includes(order.status) && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <label htmlFor="order-assignee" className="block text-sm font-medium text-gray-700 mb-2">{t('orders.detail.assignTo')}</label>
+                <div className="flex flex-wrap gap-2">
+                  <select id="order-assignee" className="input-field min-w-0 flex-1" value={assigneeChoice || order.assignedTo || ''}
+                    onChange={(event) => setAssigneeChoice(event.target.value)} disabled={assigning || assigneesError}>
+                    <option value="">{t('orders.detail.selectAssignee')}</option>
+                    {assignees.map((assignee) => (
+                      <option key={assignee.id} value={assignee.id}>{assignee.firstName} {assignee.lastName}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn-secondary" onClick={() => { void assignOrder(); }}
+                    disabled={assigning || !assigneeChoice || assigneeChoice === order.assignedTo || assigneesError}>
+                    {assigning && <Loader2 size={16} className="animate-spin" />}
+                    {t('orders.detail.assign')}
+                  </button>
+                </div>
+                {assigneesError && <p className="text-xs text-red-600 mt-2">{t('orders.detail.assigneesError')}</p>}
+              </div>
+            )}
           </div>
 
           {order.notes && (

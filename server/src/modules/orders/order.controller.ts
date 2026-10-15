@@ -197,8 +197,15 @@ export class OrderController {
   async assign(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.assign(req.params.id, req.tenantId, req.body.assigneeId);
+      const order = await orderService.assign(req.params.id, req.tenantId, req.body.assigneeId, req.user!.userId);
       return successResponse(res, order);
+    } catch (err) { next(err); }
+  }
+
+  async listAssignees(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      return successResponse(res, await orderService.listAssignees(req.tenantId));
     } catch (err) { next(err); }
   }
 

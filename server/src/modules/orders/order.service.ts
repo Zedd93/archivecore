@@ -9,6 +9,7 @@ import { webhookService } from '../integrations/webhook.service';
 import { assertDepartmentRequesterAction } from './order-requester-access';
 import { ORDER_HISTORY_ACTIONS, toOrderHistoryEntry } from './order-history';
 import { orderNotificationAudience } from './order-notifications';
+import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -156,7 +157,7 @@ export class OrderService {
         updateData.approver = { connect: { id: userId } };
         break;
       case 'in_progress':
-        updateData.assignee = { connect: { id: userId } };
+        if (!order.assignedTo) updateData.assignee = { connect: { id: userId } };
         break;
       case 'completed':
         updateData.completedAt = new Date();
@@ -958,14 +959,67 @@ export class OrderService {
     return prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } });
   }
 
-  async assign(id: string, tenantId: string, assigneeId: string) {
-    await this.getById(id, tenantId);
-    return prisma.order.update({
-      where: { id },
-      data: { assignedTo: assigneeId },
-      include: {
-        assignee: { select: { id: true, firstName: true, lastName: true } },
+  async listAssignees(tenantId: string) {
+    return prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [{ tenantId }, { tenantId: null }],
+        userRoles: { some: { role: { code: { in: PROCESSING_ROLE_CODES } } } },
       },
+      select: { id: true, firstName: true, lastName: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+  }
+
+  async assign(id: string, tenantId: string, assigneeId: string, actorId: string) {
+    const order = await this.getById(id, tenantId);
+    if (!canAssignOrder(order.status)) {
+      throw Object.assign(new Error('Nie można przypisać zakończonego zlecenia'), { statusCode: 409 });
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const assignee = await tx.user.findFirst({
+        where: {
+          id: assigneeId,
+          isActive: true,
+          OR: [{ tenantId }, { tenantId: null }],
+          userRoles: { some: { role: { code: { in: PROCESSING_ROLE_CODES } } } },
+        },
+        select: { id: true },
+      });
+      if (!assignee) {
+        throw Object.assign(new Error('Wybrany użytkownik nie może realizować zleceń tego tenanta'), { statusCode: 400 });
+      }
+
+      const current = await tx.order.findFirst({ where: { id, tenantId }, select: { assignedTo: true, status: true } });
+      if (!current || !canAssignOrder(current.status)) {
+        throw Object.assign(new Error('Status zlecenia zmienił się. Odśwież stronę.'), { statusCode: 409 });
+      }
+      if (current.assignedTo !== assigneeId) {
+        const changed = await tx.order.updateMany({
+          where: { id, tenantId, status: current.status, assignedTo: current.assignedTo },
+          data: { assignedTo: assigneeId },
+        });
+        if (changed.count !== 1) {
+          throw Object.assign(new Error('Przypisanie zlecenia zmieniło się. Odśwież stronę.'), { statusCode: 409 });
+        }
+        await notificationService.notifyTenantUsers({
+          tenantId,
+          onlyIncludedUsers: true,
+          includeUserIds: [assigneeId],
+          excludeUserIds: [actorId],
+          type: 'order_assignment',
+          title: `Przypisano zlecenie ${order.orderNumber}`,
+          message: `Zlecenie ${order.orderNumber} zostało przypisane do Ciebie.`,
+          entityType: 'order',
+          entityId: id,
+          actionUrl: `/orders/${id}`,
+        }, tx);
+      }
+      return tx.order.findUniqueOrThrow({
+        where: { id },
+        include: { assignee: { select: { id: true, firstName: true, lastName: true } } },
+      });
     });
   }
 

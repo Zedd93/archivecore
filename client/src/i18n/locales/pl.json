@@ -355,6 +355,11 @@
       "details": "Szczegóły",
       "approver": "Zatwierdzający",
       "handler": "Realizujący",
+      "assignTo": "Przypisz realizującego",
+      "selectAssignee": "Wybierz osobę",
+      "assign": "Przypisz",
+      "assignedSuccess": "Zlecenie przypisane",
+      "assigneesError": "Nie udało się pobrać osób do przypisania",
       "slaDeadline": "SLA Deadline"
     }
   },
