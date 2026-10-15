@@ -153,6 +153,9 @@ export class OrderService {
     };
 
     switch (newStatus) {
+      case 'submitted':
+        updateData.slaDeadline = calculateSlaDeadline(order.priority);
+        break;
       case 'approved':
         updateData.approver = { connect: { id: userId } };
         break;

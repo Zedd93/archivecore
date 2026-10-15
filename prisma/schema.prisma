@@ -801,12 +801,25 @@ model Order {
   custodyEvents CustodyEvent[]
   billingEvents BillingEvent[]
   handoverProof OrderHandoverProof?
+  slaEscalations OrderSlaEscalation[]
 
   @@index([tenantId, status])
   @@index([orderNumber])
   @@index([slaDeadline])
   @@index([expectedReturnAt])
   @@map("orders")
+}
+
+model OrderSlaEscalation {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  level     Int
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, level])
+  @@map("order_sla_escalations")
 }
 
 model OrderItem {

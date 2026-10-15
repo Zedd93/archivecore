@@ -3,6 +3,7 @@ import { config } from './config/env';
 import { prisma } from './config/database';
 import { redis } from './config/redis';
 import { webhookService } from './modules/integrations/webhook.service';
+import { orderSlaService } from './modules/orders/order-sla.service';
 
 const log = {
   info: (...args: unknown[]) => { if (config.nodeEnv !== 'test') process.stdout.write(args.join(' ') + '\n'); },
@@ -46,9 +47,22 @@ async function main() {
   webhookTimer.unref();
   deliverWebhooks();
 
+  let checkingSla = false;
+  const checkOrderSla = () => {
+    if (checkingSla) return;
+    checkingSla = true;
+    void orderSlaService.processDue()
+      .catch(() => log.error('Order SLA escalation worker failed; retrying later'))
+      .finally(() => { checkingSla = false; });
+  };
+  const slaTimer = setInterval(checkOrderSla, 60_000);
+  slaTimer.unref();
+  checkOrderSla();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     clearInterval(webhookTimer);
+    clearInterval(slaTimer);
     log.info(`\n📡 Received ${signal}, shutting down...`);
     server.close(async () => {
       await prisma.$disconnect();

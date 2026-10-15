@@ -57,3 +57,29 @@ test('terminal notification writes only active order stakeholders in the same te
   assert.equal(result.count, 1);
   assert.deepEqual(written.map((item) => item.userId), ['requester']);
 });
+
+test('role-scoped escalation excludes users without the required role', async () => {
+  let written;
+  const db = {
+    user: {
+      findMany: async () => [
+        { id: 'manager', userRoles: [{ role: { code: 'TL' } }] },
+        { id: 'employee', userRoles: [{ role: { code: 'TE' } }] },
+      ],
+    },
+    notification: {
+      createMany: async ({ data }) => {
+        written = data;
+        return { count: data.length };
+      },
+    },
+  };
+  await new NotificationService().notifyTenantUsers({
+    tenantId: 'tenant-a',
+    type: 'order_sla_120',
+    title: 'SLA',
+    message: 'Overdue',
+    requiredRoleCodes: ['TL', 'DA'],
+  }, db);
+  assert.deepEqual(written.map((item) => item.userId), ['manager']);
+});

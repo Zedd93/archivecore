@@ -14,6 +14,7 @@ type NotificationPayload = {
 
 type NotifyTenantUsersInput = NotificationPayload & {
   requiredPermissions?: PermissionString[];
+  requiredRoleCodes?: RoleCode[];
   includeUserIds?: string[];
   excludeUserIds?: string[];
   includeGlobalUsers?: boolean;
@@ -51,6 +52,7 @@ export class NotificationService {
 
   async notifyTenantUsers(input: NotifyTenantUsersInput, db: Prisma.TransactionClient = prisma) {
     const requiredPermissions = input.requiredPermissions ?? [];
+    const requiredRoleCodes = input.requiredRoleCodes ?? [];
     const includeUserIds = new Set(input.includeUserIds ?? []);
     const excludeUserIds = new Set(input.excludeUserIds ?? []);
 
@@ -78,6 +80,11 @@ export class NotificationService {
       .filter((user) => !excludeUserIds.has(user.id))
       .filter((user) => {
         if (includeUserIds.has(user.id)) return true;
+        if (requiredRoleCodes.length > 0) {
+          return user.userRoles.some((userRole) =>
+            requiredRoleCodes.includes(userRole.role.code as RoleCode)
+          );
+        }
         if (requiredPermissions.length === 0) return true;
 
         return user.userRoles.some((userRole) => {
