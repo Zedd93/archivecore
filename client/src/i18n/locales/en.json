@@ -228,6 +228,8 @@
     "slaAtRisk": "SLA at risk",
     "slaSummary": "Orders by SLA risk level",
     "slaSummaryError": "Could not load the SLA summary.",
+    "slaAssignAction": "Assign order {{number}}",
+    "slaQuickAction": "SLA action",
     "slaWarning": "Deadline approaching",
     "slaOverdue": "Overdue",
     "slaEscalated": "Seriously overdue",

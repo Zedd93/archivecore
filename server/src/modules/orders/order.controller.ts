@@ -205,7 +205,7 @@ export class OrderController {
   async assign(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const order = await orderService.assign(req.params.id, req.tenantId, req.body.assigneeId, req.user!.userId);
+      const order = await orderService.assign(req.params.id, req.tenantId, req.body.assigneeId, req.user!.userId, req.accessDepartment || undefined);
       return successResponse(res, order);
     } catch (err) { next(err); }
   }

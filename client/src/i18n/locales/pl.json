@@ -228,6 +228,8 @@
     "slaAtRisk": "Zagrożone SLA",
     "slaSummary": "Zlecenia według poziomu zagrożenia SLA",
     "slaSummaryError": "Nie udało się pobrać podsumowania SLA.",
+    "slaAssignAction": "Przypisz zlecenie {{number}}",
+    "slaQuickAction": "Działanie SLA",
     "slaWarning": "Zbliża się termin",
     "slaOverdue": "Termin minął",
     "slaEscalated": "Poważnie po terminie",

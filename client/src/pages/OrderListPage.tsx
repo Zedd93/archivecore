@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useList, useCreate, useDelete } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,8 @@ import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/services/api';
+import { getApiErrorMessage } from '@/utils/apiError';
+import toast from 'react-hot-toast';
 import { Permissions, RoleCode } from '@archivecore/shared';
 import { readOrderDraft } from '@/utils/orderDraft';
 import { Plus, AlertTriangle, Download, Loader2, Trash2 } from 'lucide-react';
@@ -35,11 +37,18 @@ interface SlaSummary {
   total: number;
 }
 
+interface AssignableOrder {
+  id: string;
+  orderNumber: string;
+  assignedTo: string | null;
+}
+
 export default function OrderListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
   const { user, hasPermission, hasRole } = useAuth();
+  const queryClient = useQueryClient();
   const consumedDraft = useRef(false);
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
@@ -48,6 +57,9 @@ export default function OrderListPage() {
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [filters, setFilters] = useState({ search: '', status: '', orderType: '', slaRisk: false, slaLevel: '' });
+  const [assigningOrder, setAssigningOrder] = useState<AssignableOrder | null>(null);
+  const [assigneeChoice, setAssigneeChoice] = useState('');
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     if (consumedDraft.current) return;
@@ -66,7 +78,13 @@ export default function OrderListPage() {
 
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters }, { refetchInterval: 60_000 });
   const canApproveOrders = hasPermission(Permissions.ORDER_APPROVE);
+  const canProcessOrders = hasPermission(Permissions.ORDER_PROCESS);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const { data: assignees = [], isLoading: assigneesLoading, isError: assigneesError } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
+    queryKey: ['order-assignees', activeTenantId],
+    queryFn: async () => { const { data: response } = await api.get('/orders/assignees'); return response.data; },
+    enabled: Boolean(assigningOrder && activeTenantId && canProcessOrders),
+  });
   const { data: slaSummary, isError: slaSummaryError } = useQuery<SlaSummary>({
     queryKey: ['orders', 'sla-summary', activeTenantId],
     queryFn: async () => {
@@ -89,6 +107,27 @@ export default function OrderListPage() {
   const { exportData, isExporting } = useExport({ endpoint: '/export/orders', defaultFilename: 'zlecenia.xlsx' });
   const canDeleteOrders = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
   const selectedItemCount = (createType === 'scan' ? 0 : selectedBoxes.length) + selectedFolders.length + selectedDocuments.length;
+
+  const assignSelectedOrder = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!assigningOrder || !assigneeChoice || assigneeChoice === assigningOrder.assignedTo || assigning) return;
+    setAssigning(true);
+    try {
+      await api.patch(`/orders/${assigningOrder.id}/assign`, { assigneeId: assigneeChoice });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['order', assigningOrder.id] }),
+        queryClient.invalidateQueries({ queryKey: ['order-history'] }),
+      ]);
+      setAssigningOrder(null);
+      setAssigneeChoice('');
+      toast.success(t('orders.detail.assignedSuccess'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'),
@@ -160,6 +199,24 @@ export default function OrderListPage() {
         );
       },
     },
+    ...(canProcessOrders ? [{
+      key: 'slaAction',
+      header: t('orders.slaQuickAction'),
+      render: (item: any) => item.slaLevel && ['submitted', 'approved', 'in_progress', 'ready'].includes(item.status) ? (
+        <button
+          type="button"
+          onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+            event.stopPropagation();
+            setAssigneeChoice('');
+            setAssigningOrder({ id: item.id, orderNumber: item.orderNumber, assignedTo: item.assignedTo });
+          }}
+          className="btn-secondary text-sm"
+          aria-label={t('orders.slaAssignAction', { number: item.orderNumber })}
+        >
+          {t('orders.detail.assign')}
+        </button>
+      ) : null,
+    }] : []),
     ...(canDeleteOrders ? [{
       key: 'actions',
       header: t('common.actions'),
@@ -330,6 +387,38 @@ export default function OrderListPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={Boolean(assigningOrder)}
+        onClose={() => { if (!assigning) { setAssigningOrder(null); setAssigneeChoice(''); } }}
+        title={t('orders.slaAssignAction', { number: assigningOrder?.orderNumber || '' })}
+      >
+        <form onSubmit={(event) => { void assignSelectedOrder(event); }} className="space-y-4">
+          <div>
+            <label htmlFor="sla-order-assignee" className="label-text">{t('orders.detail.assignTo')}</label>
+            <select
+              id="sla-order-assignee"
+              className="input-field"
+              value={assigneeChoice}
+              onChange={(event) => setAssigneeChoice(event.target.value)}
+              disabled={assigning || assigneesLoading || assigneesError}
+              required
+            >
+              <option value="">{t('orders.detail.selectAssignee')}</option>
+              {assignees.map((assignee) => (
+                <option key={assignee.id} value={assignee.id}>{assignee.firstName} {assignee.lastName}</option>
+              ))}
+            </select>
+            {assigneesError && <p className="mt-2 text-sm text-red-600">{t('orders.detail.assigneesError')}</p>}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => { setAssigningOrder(null); setAssigneeChoice(''); }} disabled={assigning}>{t('common.cancel')}</button>
+            <button type="submit" className="btn-primary" disabled={assigning || assigneesLoading || assigneesError || !assigneeChoice || assigneeChoice === assigningOrder?.assignedTo}>
+              {assigning && <Loader2 size={16} className="animate-spin" />}{t('orders.detail.assign')}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Create Modal */}
       <Modal isOpen={showCreate} onClose={() => { setShowCreate(false); resetCreateForm(); }} title={t('orders.createModal.title')} size="lg">

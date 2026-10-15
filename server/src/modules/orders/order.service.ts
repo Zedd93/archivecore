@@ -1018,8 +1018,8 @@ export class OrderService {
     });
   }
 
-  async assign(id: string, tenantId: string, assigneeId: string, actorId: string) {
-    const order = await this.getById(id, tenantId);
+  async assign(id: string, tenantId: string, assigneeId: string, actorId: string, department?: string) {
+    const order = await this.getById(id, tenantId, department);
     if (!canAssignOrder(order.status)) {
       throw Object.assign(new Error('Nie można przypisać zakończonego zlecenia'), { statusCode: 409 });
     }
@@ -1038,13 +1038,17 @@ export class OrderService {
         throw Object.assign(new Error('Wybrany użytkownik nie może realizować zleceń tego tenanta'), { statusCode: 400 });
       }
 
-      const current = await tx.order.findFirst({ where: { id, tenantId }, select: { assignedTo: true, status: true } });
+      const scopedWhere: Prisma.OrderWhereInput = {
+        id, tenantId,
+        ...(department ? { AND: [departmentOrderVisibility(department)] } : {}),
+      };
+      const current = await tx.order.findFirst({ where: scopedWhere, select: { assignedTo: true, status: true } });
       if (!current || !canAssignOrder(current.status)) {
         throw Object.assign(new Error('Status zlecenia zmienił się. Odśwież stronę.'), { statusCode: 409 });
       }
       if (current.assignedTo !== assigneeId) {
         const changed = await tx.order.updateMany({
-          where: { id, tenantId, status: current.status, assignedTo: current.assignedTo },
+          where: { ...scopedWhere, status: current.status, assignedTo: current.assignedTo },
           data: { assignedTo: assigneeId },
         });
         if (changed.count !== 1) {
