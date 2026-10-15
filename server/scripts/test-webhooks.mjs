@@ -74,10 +74,15 @@ test('new webhook secret is only returned once and omitted from audit metadata',
 
 test('ordinary status transitions store webhook events in the order transaction', async () => {
   const originalTransaction = prisma.$transaction;
+  const originalSlaPolicyFind = prisma.tenantSlaPolicy.findUnique;
   const service = new OrderService();
-  const order = { id: 'order-1', tenantId: 'tenant-a', orderNumber: 'Z-1', orderType: 'checkout', status: 'draft', requestedBy: 'user-a', items: [] };
+  const order = { id: 'order-1', tenantId: 'tenant-a', orderNumber: 'Z-1', orderType: 'checkout', priority: 'normal', status: 'draft', requestedBy: 'user-a', items: [] };
   service.getById = async () => order;
   service.notifyOrderStatus = async () => undefined;
+  prisma.tenantSlaPolicy.findUnique = async ({ where }) => {
+    assert.deepEqual(where.tenantId_orderType_priority, { tenantId: 'tenant-a', orderType: 'checkout', priority: 'normal' });
+    return null;
+  };
   let queued;
   prisma.$transaction = async (callback) => callback({
     order: { update: async ({ where }) => {
@@ -93,6 +98,7 @@ test('ordinary status transitions store webhook events in the order transaction'
     assert.equal(JSON.parse(queued.data[0].payloadText).data.status, 'submitted');
   } finally {
     prisma.$transaction = originalTransaction;
+    prisma.tenantSlaPolicy.findUnique = originalSlaPolicyFind;
   }
 });
 
