@@ -1,9 +1,34 @@
 export interface CapacityNode {
   id: string;
   parentId: string | null;
+  tenantId?: string | null;
   fullPath: string;
   capacity: number | null;
   isActive: boolean;
+}
+
+export function findTenantOverCapacityLocations(
+  locations: CapacityNode[],
+  directCounts: Map<string, number>,
+  tenantDirectCounts: Map<string, number>,
+  tenantId: string,
+) {
+  const byId = new Map(locations.map((location) => [location.id, location]));
+  const tenantOccupied = new Set<string>();
+  for (const [id, count] of tenantDirectCounts) {
+    if (count <= 0) continue;
+    let current = byId.get(id);
+    const visited = new Set<string>();
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      tenantOccupied.add(current.id);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+  }
+  return findOverCapacityLocations(locations, directCounts).filter(({ id }) => {
+    const location = byId.get(id);
+    return location?.tenantId === tenantId || (location?.tenantId === null && tenantOccupied.has(id));
+  });
 }
 
 export function findOverCapacityLocations(locations: CapacityNode[], directCounts: Map<string, number>) {

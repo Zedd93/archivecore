@@ -5,7 +5,7 @@ import {
   EMPLOYMENT_STATUS_LABELS,
   ORDER_STATUS_LABELS,
 } from '@archivecore/shared';
-import { findOverCapacityLocations } from './storage-health';
+import { findTenantOverCapacityLocations } from './storage-health';
 
 export interface DashboardKPIs {
   totalBoxes: number;
@@ -232,38 +232,63 @@ export class ReportService {
         SELECT b."id", b."boxNumber", COUNT(*) OVER ()::int AS "total"
         FROM "boxes" b
         WHERE b."tenantId" = ${tenantId}::uuid AND b."deletedAt" IS NULL
-          AND b."status" = 'active' AND b."locationId" IS NULL
+          AND b."status" IN ('active', 'pending_disposal', 'approved_disposal', 'damaged')
+          AND b."locationId" IS NULL
         ORDER BY b."boxNumber", b."id" LIMIT 10
       `,
       prisma.$queryRaw<BoxIssue[]>`
-        SELECT b."id", b."boxNumber", COUNT(*) OVER ()::int AS "total"
-        FROM "boxes" b
-        JOIN "locations" l ON l."id" = b."locationId"
-        WHERE b."tenantId" = ${tenantId}::uuid AND b."deletedAt" IS NULL
-          AND b."status" <> 'disposed'
-          AND l."tenantId" IS NOT NULL AND l."tenantId" <> b."tenantId"
-        ORDER BY b."boxNumber", b."id" LIMIT 10
+        WITH RECURSIVE ancestors AS (
+          SELECT b."id" AS "boxId", b."boxNumber", b."tenantId" AS "boxTenantId",
+                 l."parentId", l."tenantId" AS "locationTenantId", ARRAY[l."id"] AS visited
+          FROM "boxes" b
+          JOIN "locations" l ON l."id" = b."locationId"
+          WHERE b."tenantId" = ${tenantId}::uuid AND b."deletedAt" IS NULL
+            AND b."status" <> 'disposed'
+          UNION ALL
+          SELECT a."boxId", a."boxNumber", a."boxTenantId", parent."parentId",
+                 parent."tenantId", a.visited || parent."id"
+          FROM ancestors a
+          JOIN "locations" parent ON parent."id" = a."parentId"
+          WHERE NOT parent."id" = ANY(a.visited)
+        ), mismatched AS (
+          SELECT DISTINCT "boxId" AS "id", "boxNumber"
+          FROM ancestors
+          WHERE "locationTenantId" IS NOT NULL AND "locationTenantId" <> "boxTenantId"
+        )
+        SELECT "id", "boxNumber", COUNT(*) OVER ()::int AS "total"
+        FROM mismatched
+        ORDER BY "boxNumber", "id" LIMIT 10
       `,
       prisma.$queryRaw<FolderIssue[]>`
         SELECT f."id", f."folderNumber", COUNT(*) OVER ()::int AS "total"
         FROM "folders" f
-        JOIN "boxes" b ON b."id" = f."boxId"
-        WHERE f."tenantId" = ${tenantId}::uuid AND b."tenantId" <> f."tenantId"
+        LEFT JOIN "boxes" b ON b."id" = f."boxId"
+        LEFT JOIN "transfer_list_items" item ON item."folderId" = f."id"
+        LEFT JOIN "transfer_lists" list ON list."id" = item."transferListId"
+        WHERE f."tenantId" = ${tenantId}::uuid
+          AND (b."tenantId" <> f."tenantId" OR list."tenantId" <> f."tenantId")
         ORDER BY f."folderNumber", f."id" LIMIT 10
       `,
       prisma.location.findMany({
-        where: { tenantId },
-        select: { id: true, parentId: true, fullPath: true, capacity: true, isActive: true },
+        select: { id: true, parentId: true, tenantId: true, fullPath: true, capacity: true, isActive: true },
       }),
     ]);
 
-    const counts = locations.length > 0 ? await prisma.box.groupBy({
-      by: ['locationId'],
-      where: { locationId: { in: locations.map((location) => location.id) }, deletedAt: null, status: { not: 'disposed' } },
-      _count: { _all: true },
-    }) : [];
-    const directCounts = new Map(counts.filter((row) => row.locationId).map((row) => [row.locationId!, row._count._all]));
-    const overCapacity = findOverCapacityLocations(locations, directCounts);
+    const locationIds = locations.map((location) => location.id);
+    const [allCounts, tenantCounts] = locations.length > 0 ? await Promise.all([
+      prisma.box.groupBy({
+        by: ['locationId'],
+        where: { locationId: { in: locationIds }, deletedAt: null, status: { not: 'disposed' } },
+        _count: { _all: true },
+      }),
+      prisma.box.groupBy({
+        by: ['locationId'],
+        where: { tenantId, locationId: { in: locationIds }, deletedAt: null, status: { not: 'disposed' } },
+        _count: { _all: true },
+      }),
+    ]) : [[], []];
+    const countMap = (counts: typeof allCounts) => new Map(counts.filter((row) => row.locationId).map((row) => [row.locationId!, row._count._all]));
+    const overCapacity = findTenantOverCapacityLocations(locations, countMap(allCounts), countMap(tenantCounts), tenantId);
 
     return {
       unlocated: { total: unlocated[0]?.total ?? 0, boxes: unlocated.map(({ id, boxNumber }) => ({ id, boxNumber })) },
