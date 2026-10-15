@@ -1134,7 +1134,12 @@
     "resultPlural": "results",
     "exact": "Exact",
     "noResults": "No results for \"{{query}}\"",
-    "noResultsHint": "Try changing the query or expand search types"
+    "noResultsHint": "Try changing the query or expand search types",
+    "addToOrder": "Add to order",
+    "removeFromOrder": "Remove from selection",
+    "orderSelected": "Selected for order: {{count}}",
+    "clearSelection": "Clear selection",
+    "createOrder": "Create order"
   },
 
   "import": {

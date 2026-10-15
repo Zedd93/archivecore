@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useSearch } from '@/hooks/useApi';
-import { Search, Box, FileText, UserCircle, FolderOpen, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { OrderDraftItem, toOrderDraftItem } from '@/utils/orderDraft';
+import { Permissions } from '@archivecore/shared';
+import { Search, Box, FileText, UserCircle, FolderOpen, Loader2, ClipboardList } from 'lucide-react';
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   box: <Box size={18} className="text-blue-500" />,
@@ -19,7 +22,9 @@ export default function SearchPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user, hasPermission } = useAuth();
   const [query, setQuery] = useState(searchParams.get('q') || '');
+  const [orderItems, setOrderItems] = useState<OrderDraftItem[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
 
@@ -43,6 +48,18 @@ export default function SearchPage() {
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+  };
+
+  const toggleOrderItem = (item: OrderDraftItem) => {
+    setOrderItems((items) => items.some((entry) => entry.type === item.type && entry.id === item.id)
+      ? items.filter((entry) => !(entry.type === item.type && entry.id === item.id))
+      : [...items, item]);
+  };
+
+  const openOrder = () => {
+    const tenantId = user?.tenantId || localStorage.getItem('tenantId');
+    if (!tenantId || orderItems.length === 0) return;
+    navigate('/orders', { state: { orderDraft: { tenantId, items: orderItems } } });
   };
 
   const handleResultClick = (result: any) => {
@@ -128,22 +145,33 @@ export default function SearchPage() {
         </div>
       )}
 
+      {hasPermission(Permissions.ORDER_CREATE) && orderItems.length > 0 && (
+        <div className="card flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm text-gray-700">{t('search.orderSelected', { count: orderItems.length })}</span>
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setOrderItems([])}>{t('search.clearSelection')}</button>
+            <button type="button" className="btn-primary" onClick={openOrder}>
+              <ClipboardList size={16} /> {t('search.createOrder')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {results && (
         <div className="space-y-2">
           <p className="text-sm text-gray-500">
             {t('search.resultsCount', { count: results.total, item: results.total === 1 ? t('search.resultSingular') : t('search.resultPlural') })}
           </p>
-          {results.results.map((result: any) => (
-            <div
-              key={`${result.type}-${result.id}`}
-              onClick={() => handleResultClick(result)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResultClick(result); } }}
-              className="card cursor-pointer hover:border-primary-300 hover:shadow-md transition-all p-4"
-              role="button"
-              tabIndex={0}
-              aria-label={`${result.title} - ${t(TYPE_LABEL_KEYS[result.type])}`}
-            >
-              <div className="flex items-start gap-4">
+          {results.results.map((result: any) => {
+            const orderItem = toOrderDraftItem(result);
+            const selected = orderItem && orderItems.some((item) => item.type === orderItem.type && item.id === orderItem.id);
+            return <div key={`${result.type}-${result.id}`} className="card flex flex-col sm:flex-row sm:items-start gap-3 hover:border-primary-300 hover:shadow-md transition-all p-4">
+              <button
+                type="button"
+                onClick={() => handleResultClick(result)}
+                className="flex flex-1 min-w-0 items-start gap-4 text-left"
+                aria-label={`${result.title} - ${t(TYPE_LABEL_KEYS[result.type])}`}
+              >
                 <div className="mt-0.5">{TYPE_ICONS[result.type]}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -164,9 +192,19 @@ export default function SearchPage() {
                 <div className="text-xs text-gray-400">
                   {Math.round(result.relevance * 100)}%
                 </div>
-              </div>
-            </div>
-          ))}
+              </button>
+              {hasPermission(Permissions.ORDER_CREATE) && orderItem && (
+                <button
+                  type="button"
+                  onClick={() => toggleOrderItem(orderItem)}
+                  className={selected ? 'btn-primary shrink-0 justify-center' : 'btn-secondary shrink-0 justify-center'}
+                  aria-pressed={!!selected}
+                >
+                  {selected ? t('search.removeFromOrder') : t('search.addToOrder')}
+                </button>
+              )}
+            </div>;
+          })}
 
           {results.total === 0 && debouncedQuery.length >= 2 && (
             <div className="text-center py-12 text-gray-500">

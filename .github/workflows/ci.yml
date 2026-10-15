@@ -52,6 +52,9 @@ jobs:
       - name: Verify offline PWA fallback
         run: npm run test:offline-shell
 
+      - name: Verify search-to-order selection
+        run: npm run test:order-draft
+
       - name: Verify offline warehouse scan drafts
         run: npm run test:offline-warehouse-scans
 

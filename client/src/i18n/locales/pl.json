@@ -1134,7 +1134,12 @@
     "resultPlural": "wyników",
     "exact": "Dokładne",
     "noResults": "Brak wyników dla \"{{query}}\"",
-    "noResultsHint": "Spróbuj zmienić zapytanie lub rozszerz typy wyszukiwania"
+    "noResultsHint": "Spróbuj zmienić zapytanie lub rozszerz typy wyszukiwania",
+    "addToOrder": "Dodaj do zlecenia",
+    "removeFromOrder": "Usuń z wyboru",
+    "orderSelected": "Wybrano do zlecenia: {{count}}",
+    "clearSelection": "Wyczyść wybór",
+    "createOrder": "Utwórz zlecenie"
   },
 
   "import": {

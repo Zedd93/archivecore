@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useList, useCreate, useDelete } from '@/hooks/useApi';
 import { useExport } from '@/hooks/useExport';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,7 @@ import DocumentPicker from '@/components/ui/DocumentPicker';
 import FolderPicker, { SelectedFolder } from '@/components/ui/FolderPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleCode } from '@archivecore/shared';
+import { readOrderDraft } from '@/utils/orderDraft';
 import { Plus, AlertTriangle, Download, Loader2, Trash2 } from 'lucide-react';
 
 interface SelectedBox {
@@ -27,8 +28,10 @@ interface SelectedDocument {
 
 export default function OrderListPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
+  const consumedDraft = useRef(false);
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [createType, setCreateType] = useState('checkout');
@@ -36,6 +39,21 @@ export default function OrderListPage() {
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [filters, setFilters] = useState({ search: '', status: '', orderType: '' });
+
+  useEffect(() => {
+    if (consumedDraft.current) return;
+    if (!(location.state as { orderDraft?: unknown } | null)?.orderDraft) return;
+    consumedDraft.current = true;
+    const tenantId = user?.tenantId || localStorage.getItem('tenantId');
+    const items = readOrderDraft(location.state, tenantId);
+    if (items.length > 0) {
+      setSelectedBoxes(items.filter((item) => item.type === 'box').map((item) => ({ id: item.id, boxNumber: item.boxNumber || item.title })));
+      setSelectedFolders(items.filter((item) => item.type === 'folder').map((item) => ({ id: item.id, source: item.source === 'transfer_list' ? 'transfer_list' : 'manual', title: item.title })));
+      setSelectedDocuments(items.filter((item) => item.type === 'document').map((item) => ({ id: item.id, title: item.title })));
+      setShowCreate(true);
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, user?.tenantId]);
 
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters });
   const createOrder = useCreate('/orders', ['orders'], t('common.success'));
