@@ -66,6 +66,9 @@ export function buildBillingWorkbook(
     if (!event.unitPrice || !event.netAmount) {
       throw Object.assign(new Error('Pozycja rozliczeniowa nie ma ceny'), { statusCode: 409 });
     }
+    if (!money(event.unitPrice.mul(event.quantity)).eq(event.netAmount)) {
+      throw Object.assign(new Error('Pozycja rozliczeniowa ma kwotę niezgodną z ilością i stawką'), { statusCode: 409 });
+    }
 
     const vatAmount = money(event.netAmount.mul(event.vatRate).div(100));
     const key = JSON.stringify([

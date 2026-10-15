@@ -79,6 +79,12 @@ test('rejects a billing event without a price', () => {
   assert.throws(() => readSheets([missingPrice]), /nie ma ceny/);
 });
 
+test('rejects an event whose net amount does not match quantity times rate', () => {
+  const inconsistent = event('1', 'scan_page', 'Skan strony', '15.00', '23', 5);
+  inconsistent.netAmount = new Prisma.Decimal(3);
+  assert.throws(() => readSheets([inconsistent]), /kwotę niezgodną/);
+});
+
 test('shows an external invoice reference without changing settlement totals', () => {
   const sheets = readSheets([event('1', 'storage_box_month', 'Przechowywanie', '10.00', '23')], 'FV/10/2026');
   assert.deepEqual(sheets.summary.find((row) => row[0] === 'Numer faktury'), ['Numer faktury', 'FV/10/2026']);

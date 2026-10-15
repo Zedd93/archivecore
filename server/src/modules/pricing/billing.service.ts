@@ -284,6 +284,18 @@ export class BillingService {
         throw conflict('Miesiąc rozliczeniowy jest już zamknięty');
       }
 
+      const claimed = await tx.billingPeriod.updateMany({
+        where: { id: period.id, status: BillingPeriodStatus.open },
+        data: {
+          status: BillingPeriodStatus.closed,
+          closedAt: new Date(),
+          closedById: userId,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw conflict('Miesiąc rozliczeniowy został już zamknięty przez innego użytkownika');
+      }
+
       const baseWhere: Prisma.BillingEventWhereInput = {
         tenantId,
         billingPeriod: { gte: start, lt: end },
@@ -330,14 +342,7 @@ export class BillingService {
         });
       }
 
-      const closedPeriod = await tx.billingPeriod.update({
-        where: { id: period.id },
-        data: {
-          status: BillingPeriodStatus.closed,
-          closedAt: new Date(),
-          closedById: userId,
-        },
-      });
+      const closedPeriod = await tx.billingPeriod.findUniqueOrThrow({ where: { id: period.id } });
 
       return {
         ...closedPeriod,

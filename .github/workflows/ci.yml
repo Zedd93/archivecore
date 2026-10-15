@@ -94,6 +94,9 @@ jobs:
       - name: Verify billing repricing
         run: npm run test:billing-repricing
 
+      - name: Verify monthly billing close
+        run: npm run test:billing-close
+
       - name: Verify read-only billing audit
         run: npm run test:billing-amount-audit
 
