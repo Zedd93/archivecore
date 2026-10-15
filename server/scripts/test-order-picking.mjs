@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const { generateQrData, generateFolderQrData } = qr;
 const { matchOrderItemQr } = require('../../client/src/utils/orderPicking.ts');
 const { getOrderItemPickLocation, sortOrderItemsByPickRoute } = require('../../client/src/utils/orderPickRoute.ts');
+const { SerialScanQueue } = require('../../client/src/utils/serialScanQueue.ts');
 const { canMarkReadyAfterPicking } = stateMachine;
 const { updateOrderItemStatusSchema, deliverOrderSchema } = schemas;
 
@@ -32,6 +33,36 @@ test('unknown, corrupted and ambiguous QR codes cannot pick an item', () => {
   const badChecksum = `${boxCode.slice(0, -1)}${boxCode.endsWith('0') ? '1' : '0'}`;
   assert.equal(matchOrderItemQr([], badChecksum).kind, 'invalid');
   assert.equal(matchOrderItemQr([{ id: 'a', itemStatus: 'pending', folderId }, { id: 'b', itemStatus: 'pending', folderId }], folderCode).kind, 'ambiguous');
+});
+
+test('rapid scans wait for the preceding pick to finish', async () => {
+  const nextBoxId = '0d4bd19a-e44c-43b1-bdb5-672682135104';
+  const nextCode = generateQrData('DOX', 'K-2026-000002');
+  const items = [
+    { id: 'first', itemStatus: 'pending', boxId, box: { qrCode: boxCode } },
+    { id: 'second', itemStatus: 'pending', boxId: nextBoxId, box: { qrCode: nextCode } },
+  ];
+  let releaseFirst;
+  const firstPending = new Promise((resolve) => { releaseFirst = resolve; });
+  const picked = [];
+  const errors = [];
+  const queue = new SerialScanQueue(async (code) => {
+    const match = matchOrderItemQr(items, code);
+    assert.equal(match.kind, 'match');
+    if (code === boxCode) await firstPending;
+    match.item.itemStatus = 'picked';
+    picked.push(match.item.id);
+  }, (error) => errors.push(error));
+
+  assert.equal(queue.enqueue(boxCode), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(queue.enqueue(nextCode), true);
+  assert.equal(queue.enqueue(nextCode), false);
+  assert.deepEqual(picked, []);
+  releaseFirst();
+  await queue.whenIdle();
+  assert.deepEqual(picked, ['first', 'second']);
+  assert.deepEqual(errors, []);
 });
 
 test('checkout requires every item picked before it is ready', () => {

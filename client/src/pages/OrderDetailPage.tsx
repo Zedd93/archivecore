@@ -1,5 +1,5 @@
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +23,7 @@ import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 import { matchOrderItemQr } from '@/utils/orderPicking';
 import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
 import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
+import { SerialScanQueue } from '@/utils/serialScanQueue';
 import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX, Upload, Download, MapPin } from 'lucide-react';
 
 // Status flow steps
@@ -124,6 +125,19 @@ export default function OrderDetailPage() {
   const locationRequestRef = useRef(0);
   const pickBusyRef = useRef(false);
   const lastCameraCodeRef = useRef({ code: '', retryAt: 0 });
+  const processPickCodeRef = useRef<(code: string) => Promise<void>>(async () => {});
+  const pickScanQueueRef = useRef<SerialScanQueue | null>(null);
+  pickScanQueueRef.current ??= new SerialScanQueue(
+    (code) => processPickCodeRef.current(code),
+    (error) => showScanFeedback('error', getApiErrorMessage(error, t('common.genericError'))),
+  );
+
+  useEffect(() => {
+    const queue = pickScanQueueRef.current;
+    queue?.clear();
+    lastCameraCodeRef.current = { code: '', retryAt: 0 };
+    return () => queue?.clear();
+  }, [activeTenantId, id]);
 
   const ORDER_TYPE_LABELS: Record<string, string> = {
     checkout: t('orders.typeIssue'), return_order: t('orders.typeReturn'),
@@ -192,7 +206,7 @@ export default function OrderDetailPage() {
     }
   };
 
-  const processPickCode = (rawCode: string) => {
+  const processPickCode = async (rawCode: string) => {
     if (!canPick || pickBusyRef.current || offlineScans.syncing) return;
     const match = matchOrderItemQr<OrderPickScanItem>(order.items, rawCode);
     if (match.kind === 'invalid') {
@@ -229,8 +243,9 @@ export default function OrderDetailPage() {
       if (saved === 'unavailable') allowCameraRetry(rawCode);
       return;
     }
-    void updatePick(item.id, 'picked', label, rawCode);
+    await updatePick(item.id, 'picked', label, rawCode);
   };
+  processPickCodeRef.current = processPickCode;
 
   const syncOfflinePicks = async () => {
     if (!id || pickBusyRef.current || !canPick) return;
@@ -273,9 +288,9 @@ export default function OrderDetailPage() {
 
   const handleCameraCode = (rawCode: string) => {
     const code = rawCode.trim();
-    if (!code || pickBusyRef.current || (lastCameraCodeRef.current.code === code && Date.now() < lastCameraCodeRef.current.retryAt)) return;
+    if (!code || (lastCameraCodeRef.current.code === code && Date.now() < lastCameraCodeRef.current.retryAt)) return;
     lastCameraCodeRef.current = { code, retryAt: Number.POSITIVE_INFINITY };
-    processPickCode(code);
+    pickScanQueueRef.current?.enqueue(code);
   };
 
   const handleAction = async (action: string, proof?: {
