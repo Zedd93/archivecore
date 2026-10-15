@@ -91,6 +91,12 @@ jobs:
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
 
+      - name: Verify billing repricing
+        run: npm run test:billing-repricing
+
+      - name: Verify read-only billing audit
+        run: npm run test:billing-amount-audit
+
       - name: Verify QR formats
         run: npm run test:qr
 

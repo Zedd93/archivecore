@@ -405,47 +405,59 @@ export class BillingService {
     };
     let updatedCount = 0;
     for (const item of priceList.items) {
-      const pendingResult = await db.billingEvent.updateMany({
-        where: {
-          tenantId: priceList.tenantId,
-          serviceCode: item.serviceCode,
-          status: BillingEventStatus.unpriced,
-          occurredAt: eventDateRange,
-          billingPeriod: mutablePeriodWhere,
-        },
-        data: {
-          priceListId: priceList.id,
-          priceListItemId: item.id,
-          serviceName: item.serviceName,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
-          netAmount: item.unitPrice,
-          vatRate: item.vatRate,
-          currency: priceList.currency,
-          status: BillingEventStatus.pending,
-        },
-      });
-      const excludedResult = await db.billingEvent.updateMany({
-        where: {
-          tenantId: priceList.tenantId,
-          serviceCode: item.serviceCode,
-          status: BillingEventStatus.excluded,
-          netAmount: null,
-          occurredAt: eventDateRange,
-          billingPeriod: mutablePeriodWhere,
-        },
-        data: {
-          priceListId: priceList.id,
-          priceListItemId: item.id,
-          serviceName: item.serviceName,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
-          netAmount: item.unitPrice,
-          vatRate: item.vatRate,
-          currency: priceList.currency,
-        },
-      });
-      updatedCount += pendingResult.count + excludedResult.count;
+      const unpricedWhere: Prisma.BillingEventWhereInput = {
+        tenantId: priceList.tenantId,
+        serviceCode: item.serviceCode,
+        status: BillingEventStatus.unpriced,
+        occurredAt: eventDateRange,
+        billingPeriod: mutablePeriodWhere,
+      };
+      const excludedWhere: Prisma.BillingEventWhereInput = {
+        tenantId: priceList.tenantId,
+        serviceCode: item.serviceCode,
+        status: BillingEventStatus.excluded,
+        netAmount: null,
+        occurredAt: eventDateRange,
+        billingPeriod: mutablePeriodWhere,
+      };
+      const [unpricedQuantities, excludedQuantities] = await Promise.all([
+        db.billingEvent.groupBy({ by: ['quantity'], where: unpricedWhere }),
+        db.billingEvent.groupBy({ by: ['quantity'], where: excludedWhere }),
+      ]);
+
+      for (const { quantity } of unpricedQuantities) {
+        const pendingResult = await db.billingEvent.updateMany({
+          where: { ...unpricedWhere, quantity },
+          data: {
+            priceListId: priceList.id,
+            priceListItemId: item.id,
+            serviceName: item.serviceName,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            netAmount: item.unitPrice.mul(quantity),
+            vatRate: item.vatRate,
+            currency: priceList.currency,
+            status: BillingEventStatus.pending,
+          },
+        });
+        updatedCount += pendingResult.count;
+      }
+      for (const { quantity } of excludedQuantities) {
+        const excludedResult = await db.billingEvent.updateMany({
+          where: { ...excludedWhere, quantity },
+          data: {
+            priceListId: priceList.id,
+            priceListItemId: item.id,
+            serviceName: item.serviceName,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            netAmount: item.unitPrice.mul(quantity),
+            vatRate: item.vatRate,
+            currency: priceList.currency,
+          },
+        });
+        updatedCount += excludedResult.count;
+      }
     }
 
     return updatedCount;
