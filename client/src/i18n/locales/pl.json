@@ -257,7 +257,7 @@
     },
     "detail": {
       "notFound": "Zlecenie nie znalezione",
-      "decisionHistory": "Historia decyzji i realizacji",
+      "decisionHistory": "Historia decyzji, realizacji i SLA",
       "submit": "Złóż zlecenie",
       "approve": "Zatwierdź",
       "reject": "Odrzuć",
@@ -1665,6 +1665,9 @@
       "order.assign": "Przypisano zlecenie",
       "order.complete": "Zakończono zlecenie",
       "order.cancel": "Anulowano zlecenie",
+      "order.sla_80": "Zarejestrowano poziom SLA 80%",
+      "order.sla_100": "Zarejestrowano poziom SLA 100%",
+      "order.sla_120": "Zarejestrowano przekroczenie SLA o 20%",
       "order.delete": "Usunięto zlecenie",
       "order_item.return": "Zwrócono pozycję wypożyczenia",
       "hr.create": "Utworzono akta osobowe",

@@ -7,7 +7,7 @@ import { billingService } from '../pricing/billing.service';
 import { departmentOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
 import { assertDepartmentRequesterAction } from './order-requester-access';
-import { ORDER_HISTORY_ACTIONS, toOrderHistoryEntry } from './order-history';
+import { ORDER_HISTORY_ACTIONS, mergeOrderHistory, toOrderHistoryEntry } from './order-history';
 import { orderNotificationAudience } from './order-notifications';
 import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
 import { orderSlaLevel, slaRiskWhere } from './order-sla';
@@ -530,11 +530,10 @@ export class OrderService {
       entityId: id,
       action: { in: ORDER_HISTORY_ACTIONS },
     };
-    const [logs, total] = await Promise.all([
+    const [logs, auditTotal, slaEvents] = await Promise.all([
       prisma.auditLog.findMany({
         where,
-        skip,
-        take,
+        take: skip + take,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
@@ -546,8 +545,15 @@ export class OrderService {
         },
       }),
       prisma.auditLog.count({ where }),
+      prisma.orderSlaEscalation.findMany({
+        where: { orderId: id },
+        select: { id: true, level: true, createdAt: true },
+      }),
     ]);
-    return { data: logs.map(toOrderHistoryEntry), total };
+    return {
+      data: mergeOrderHistory(logs.map(toOrderHistoryEntry), slaEvents, skip, take),
+      total: auditTotal + slaEvents.length,
+    };
   }
 
   async delete(id: string, tenantId: string) {

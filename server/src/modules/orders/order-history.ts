@@ -44,3 +44,33 @@ export function toOrderHistoryEntry(log: OrderAuditEntry) {
     reason,
   };
 }
+
+interface SlaEscalationEntry {
+  id: string;
+  level: number;
+  createdAt: Date;
+}
+
+export function toOrderSlaHistoryEntry(event: SlaEscalationEntry) {
+  return {
+    id: event.id,
+    action: `order.sla_${event.level}`,
+    entityType: 'order',
+    createdAt: event.createdAt,
+    user: null,
+    reason: null,
+  };
+}
+
+type OrderHistoryEntry = ReturnType<typeof toOrderHistoryEntry>;
+
+export function mergeOrderHistory(
+  auditEntries: OrderHistoryEntry[],
+  slaEntries: SlaEscalationEntry[],
+  skip: number,
+  take: number,
+) {
+  return [...auditEntries, ...slaEntries.map(toOrderSlaHistoryEntry)]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
+    .slice(skip, skip + take);
+}

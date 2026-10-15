@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import history from '../src/modules/orders/order-history.ts';
 
-const { toOrderHistoryEntry } = history;
+const { toOrderHistoryEntry, toOrderSlaHistoryEntry, mergeOrderHistory } = history;
 const createdAt = new Date('2026-10-15T08:00:00.000Z');
 
 test('rejection history contains actor, time and reason without raw audit data', () => {
@@ -38,4 +38,31 @@ test('a new cancellation note is shown as its decision reason', () => {
     user: { firstName: 'Jan', lastName: 'Kowalski' },
   });
   assert.equal(entry.reason, 'The request is no longer needed');
+});
+
+test('SLA history includes only the recorded level and no tenant or notification data', () => {
+  const entry = toOrderSlaHistoryEntry({
+    id: 'sla-1', level: 120, createdAt, tenantId: 'private-tenant',
+  });
+  assert.deepEqual(entry, {
+    id: 'sla-1', action: 'order.sla_120', entityType: 'order',
+    createdAt, user: null, reason: null,
+  });
+});
+
+test('audit and SLA events share chronological pagination without duplicates', () => {
+  const logs = [
+    { id: 'audit-3', action: 'order.approve', entityType: 'order', createdAt: new Date('2026-10-15T10:00:00Z'), user: null, reason: null },
+    { id: 'audit-2', action: 'order.submit', entityType: 'order', createdAt: new Date('2026-10-15T08:00:00Z'), user: null, reason: null },
+    { id: 'audit-1', action: 'order.create', entityType: 'order', createdAt: new Date('2026-10-15T06:00:00Z'), user: null, reason: null },
+  ];
+  const events = [
+    { id: 'sla-100', level: 100, createdAt: new Date('2026-10-15T09:00:00Z') },
+    { id: 'sla-80', level: 80, createdAt: new Date('2026-10-15T07:00:00Z') },
+  ];
+  const firstPage = mergeOrderHistory(logs.slice(0, 2), events, 0, 2);
+  const secondPage = mergeOrderHistory(logs, events, 2, 2);
+  const thirdPage = mergeOrderHistory(logs, events, 4, 2);
+  assert.deepEqual([...firstPage, ...secondPage, ...thirdPage].map((entry) => entry.id),
+    ['audit-3', 'sla-100', 'audit-2', 'sla-80', 'audit-1']);
 });

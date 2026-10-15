@@ -257,7 +257,7 @@
     },
     "detail": {
       "notFound": "Order not found",
-      "decisionHistory": "Decision and fulfillment history",
+      "decisionHistory": "Decision, fulfillment and SLA history",
       "submit": "Submit order",
       "approve": "Approve",
       "reject": "Reject",
@@ -1665,6 +1665,9 @@
       "order.assign": "Order assigned",
       "order.complete": "Order completed",
       "order.cancel": "Order cancelled",
+      "order.sla_80": "SLA 80% level recorded",
+      "order.sla_100": "SLA 100% level recorded",
+      "order.sla_120": "SLA exceeded by 20% recorded",
       "order.delete": "Order deleted",
       "price_list.create": "Price list created",
       "price_list.update": "Price list updated",
