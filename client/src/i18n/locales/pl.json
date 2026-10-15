@@ -226,6 +226,8 @@
     "itemCount": "Pozycji",
     "sla": "SLA",
     "slaAtRisk": "Zagrożone SLA",
+    "slaSummary": "Zlecenia według poziomu zagrożenia SLA",
+    "slaSummaryError": "Nie udało się pobrać podsumowania SLA.",
     "slaWarning": "Zbliża się termin",
     "slaOverdue": "Termin minął",
     "slaEscalated": "Poważnie po terminie",

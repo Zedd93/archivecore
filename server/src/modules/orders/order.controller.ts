@@ -25,6 +25,14 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async getSlaSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const summary = await orderService.getSlaSummary(req.tenantId, req.accessDepartment || undefined);
+      return successResponse(res, summary);
+    } catch (err) { next(err); }
+  }
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
@@ -230,7 +238,7 @@ export class OrderController {
   async getOverdueSla(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const orders = await orderService.getOverdueSla(req.tenantId);
+      const orders = await orderService.getOverdueSla(req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, orders);
     } catch (err) { next(err); }
   }

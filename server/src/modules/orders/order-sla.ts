@@ -79,6 +79,28 @@ export function addBusinessMinutes(start: Date, minutes: number): Date {
   return current;
 }
 
+export function subtractBusinessMinutes(end: Date, minutes: number): Date {
+  let remaining = minutes;
+  let current = new Date(end);
+  while (remaining > 0) {
+    const opening = new Date(current);
+    opening.setHours(BUSINESS_HOURS.startHour, 0, 0, 0);
+    const closing = new Date(current);
+    closing.setHours(BUSINESS_HOURS.endHour, 0, 0, 0);
+    if (!BUSINESS_HOURS.workDays.includes(current.getDay()) || current <= opening) {
+      current.setDate(current.getDate() - 1);
+      current.setHours(BUSINESS_HOURS.endHour, 0, 0, 0);
+      continue;
+    }
+    if (current > closing) current = closing;
+    const available = (current.getTime() - opening.getTime()) / 60_000;
+    const step = Math.min(remaining, available);
+    current = new Date(current.getTime() - step * 60_000);
+    remaining -= step;
+  }
+  return current;
+}
+
 export function slaRiskDeadlines(now: Date): Array<{ priority: string; deadline: Date }> {
   return SLA_LEVELS.map((level) => ({
     priority: level.code,
@@ -94,4 +116,33 @@ export function slaRiskWhere(now: Date): Prisma.OrderWhereInput {
       slaDeadline: { lte: deadline },
     })),
   };
+}
+
+function slaSevereWhere(now: Date): Prisma.OrderWhereInput {
+  return {
+    status: { in: [...ACTIVE_SLA_STATUSES] },
+    OR: SLA_LEVELS.map(({ code, hours }) => ({
+      priority: code as OrderPriority,
+      slaDeadline: {
+        lte: subtractBusinessMinutes(now, Math.round(hours * 60 * (SLA_ESCALATION.overduepercent - 100) / 100)),
+      },
+    })),
+  };
+}
+
+export function slaLevelWhere(level: SlaEscalationLevel, now: Date): Prisma.OrderWhereInput {
+  if (level === 80) return { AND: [slaRiskWhere(now), { slaDeadline: { gt: now } }] };
+  if (level === 100) {
+    return {
+      AND: [
+        { status: { in: [...ACTIVE_SLA_STATUSES] }, slaDeadline: { lte: now } },
+        { NOT: slaSevereWhere(now) },
+      ],
+    };
+  }
+  return slaSevereWhere(now);
+}
+
+export function parseSlaLevel(value: unknown): SlaEscalationLevel | null {
+  return value === '80' ? 80 : value === '100' ? 100 : value === '120' ? 120 : null;
 }

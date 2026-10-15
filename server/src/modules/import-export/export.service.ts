@@ -1,7 +1,8 @@
 import * as XLSX from 'xlsx';
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
-import { slaRiskWhere } from '../orders/order-sla';
+import { parseSlaLevel, slaLevelWhere, slaRiskWhere } from '../orders/order-sla';
+import { departmentOrderVisibility } from '../orders/scan-access';
 import {
   BOX_STATUS_LABELS,
   DISPOSAL_STATUS_LABELS,
@@ -242,9 +243,17 @@ export class ExportService {
   }
 
   // ─── ORDERS ────────────────────────────────────────────
-  async exportOrders(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx'): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  async exportOrders(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx', department?: string): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const where: Prisma.OrderWhereInput = { tenantId };
-    if (filters.slaRisk === 'true') where.AND = [slaRiskWhere(new Date())];
+    if (department) where.AND = [departmentOrderVisibility(department)];
+    const now = new Date();
+    if (filters.slaRisk === 'true') {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), slaRiskWhere(now)];
+    }
+    const selectedSlaLevel = parseSlaLevel(filters.slaLevel);
+    if (selectedSlaLevel) {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), slaLevelWhere(selectedSlaLevel, now)];
+    }
     if (filters.status) where.status = filters.status as any;
     if (filters.orderType) where.orderType = filters.orderType as any;
     if (filters.priority) where.priority = filters.priority as any;
@@ -257,7 +266,7 @@ export class ExportService {
 
     const data = await prisma.order.findMany({
       where,
-      orderBy: filters.slaRisk === 'true'
+      orderBy: filters.slaRisk === 'true' || selectedSlaLevel
         ? [{ slaDeadline: 'asc' }, { id: 'asc' }]
         : [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {

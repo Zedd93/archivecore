@@ -6,7 +6,7 @@ const slaModule = await import('../src/modules/orders/order-sla.ts');
 const serviceModule = await import('../src/modules/orders/order-sla.service.ts');
 const orderModule = await import('../src/modules/orders/order.service.ts');
 const exportModule = await import('../src/modules/import-export/export.service.ts');
-const { businessMinutesBetween, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere } = slaModule;
+const { businessMinutesBetween, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere, subtractBusinessMinutes, slaLevelWhere } = slaModule;
 const { OrderSlaService } = serviceModule;
 const { OrderService } = orderModule;
 const { ExportService } = exportModule;
@@ -38,6 +38,18 @@ test('risk filter reaches across weekends and matches the displayed warning', ()
   assert.equal(orderSlaLevel('completed', new Date('2026-10-16T12:00:00Z'), 'urgent', now), null);
   assert.deepEqual(slaRiskWhere(now).status, { in: ['submitted', 'approved', 'in_progress', 'ready'] });
   assert.equal(slaRiskWhere(now).OR.find((item) => item.priority === 'urgent').slaDeadline.lte.toISOString(), urgent.deadline.toISOString());
+});
+
+test('120 percent cutoff matches business-time escalation across a weekend', () => {
+  const now = new Date('2026-10-19T07:00:00Z'); // Monday 09:00 Warsaw
+  const cutoff = subtractBusinessMinutes(now, 96);
+  assert.equal(cutoff.toISOString(), '2026-10-16T13:24:00.000Z'); // Friday 15:24 Warsaw
+  assert.equal(slaEscalationLevel(cutoff, 'urgent', now), 120);
+  assert.equal(slaEscalationLevel(new Date(cutoff.getTime() + 60_000), 'urgent', now), 100);
+  const severe = slaLevelWhere(120, now);
+  assert.equal(severe.OR.find((entry) => entry.priority === 'urgent').slaDeadline.lte.toISOString(), cutoff.toISOString());
+  assert.deepEqual(slaLevelWhere(80, now).AND[1], { slaDeadline: { gt: now } });
+  assert.deepEqual(slaLevelWhere(100, now).AND[0].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
 });
 
 test('submission starts a fresh SLA window instead of using draft creation time', () => {
@@ -127,6 +139,47 @@ test('at-risk order list keeps tenant and department scope while paginating', as
   }
 });
 
+test('SLA summary counts each level within the tenant and department scope', async () => {
+  const originalCount = prisma.order.count;
+  const queries = [];
+  prisma.order.count = async ({ where }) => {
+    queries.push(where);
+    return queries.length;
+  };
+  try {
+    const summary = await new OrderService().getSlaSummary('tenant-a', 'Księgowość');
+    assert.deepEqual(summary, { warning: 1, overdue: 2, escalated: 3, total: 6 });
+    assert.equal(queries.length, 3);
+    for (const query of queries) {
+      assert.equal(query.AND[0].tenantId, 'tenant-a');
+      assert.equal(query.AND[0].AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
+    }
+    assert.ok(queries[0].AND[1].AND);
+    assert.ok(queries[1].AND[1].AND);
+    assert.ok(queries[2].AND[1].OR);
+  } finally {
+    prisma.order.count = originalCount;
+  }
+});
+
+test('level filter uses the same scoped condition and deadline order as the summary', async () => {
+  const originalFindMany = prisma.order.findMany;
+  const originalCount = prisma.order.count;
+  let query;
+  prisma.order.findMany = async (input) => { query = input; return []; };
+  prisma.order.count = async () => 0;
+  try {
+    await new OrderService().list('tenant-a', { slaLevel: '120' }, 0, 20, 'Księgowość');
+    assert.equal(query.where.tenantId, 'tenant-a');
+    assert.equal(query.where.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
+    assert.deepEqual(query.where.AND[1].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.deepEqual(query.orderBy, [{ slaDeadline: 'asc' }, { id: 'asc' }]);
+  } finally {
+    prisma.order.findMany = originalFindMany;
+    prisma.order.count = originalCount;
+  }
+});
+
 test('order export uses the same at-risk filter as the list', async () => {
   const originalFindMany = prisma.order.findMany;
   let exportQuery;
@@ -135,10 +188,40 @@ test('order export uses the same at-risk filter as the list', async () => {
     return [];
   };
   try {
-    await new ExportService().exportOrders('tenant-a', { slaRisk: 'true' }, 'csv');
+    await new ExportService().exportOrders('tenant-a', { slaRisk: 'true' }, 'csv', 'Księgowość');
     assert.equal(exportQuery.where.tenantId, 'tenant-a');
-    assert.deepEqual(exportQuery.where.AND[0].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.equal(exportQuery.where.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
+    assert.deepEqual(exportQuery.where.AND[1].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
     assert.deepEqual(exportQuery.orderBy, [{ slaDeadline: 'asc' }, { id: 'asc' }]);
+  } finally {
+    prisma.order.findMany = originalFindMany;
+  }
+});
+
+test('order export applies the selected SLA level without dropping department scope', async () => {
+  const originalFindMany = prisma.order.findMany;
+  let query;
+  prisma.order.findMany = async (input) => { query = input; return []; };
+  try {
+    await new ExportService().exportOrders('tenant-a', { slaLevel: '100' }, 'csv', 'Księgowość');
+    assert.equal(query.where.tenantId, 'tenant-a');
+    assert.equal(query.where.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
+    assert.deepEqual(query.where.AND[1].AND[0].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.deepEqual(query.orderBy, [{ slaDeadline: 'asc' }, { id: 'asc' }]);
+  } finally {
+    prisma.order.findMany = originalFindMany;
+  }
+});
+
+test('legacy overdue endpoint is limited to active orders in the same department', async () => {
+  const originalFindMany = prisma.order.findMany;
+  let query;
+  prisma.order.findMany = async (input) => { query = input; return []; };
+  try {
+    await new OrderService().getOverdueSla('tenant-a', 'Księgowość');
+    assert.equal(query.where.tenantId, 'tenant-a');
+    assert.deepEqual(query.where.status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.equal(query.where.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
   } finally {
     prisma.order.findMany = originalFindMany;
   }

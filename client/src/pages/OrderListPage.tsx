@@ -28,6 +28,13 @@ interface SelectedDocument {
   source?: 'document' | 'transfer_list_item';
 }
 
+interface SlaSummary {
+  warning: number;
+  overdue: number;
+  escalated: number;
+  total: number;
+}
+
 export default function OrderListPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,7 +47,7 @@ export default function OrderListPage() {
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
-  const [filters, setFilters] = useState({ search: '', status: '', orderType: '', slaRisk: false });
+  const [filters, setFilters] = useState({ search: '', status: '', orderType: '', slaRisk: false, slaLevel: '' });
 
   useEffect(() => {
     if (consumedDraft.current) return;
@@ -60,6 +67,15 @@ export default function OrderListPage() {
   const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters }, { refetchInterval: 60_000 });
   const canApproveOrders = hasPermission(Permissions.ORDER_APPROVE);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const { data: slaSummary, isError: slaSummaryError } = useQuery<SlaSummary>({
+    queryKey: ['orders', 'sla-summary', activeTenantId],
+    queryFn: async () => {
+      const { data: response } = await api.get('/orders/sla-summary');
+      return response.data;
+    },
+    enabled: Boolean(activeTenantId),
+    refetchInterval: 60_000,
+  });
   const { data: awaitingApprovalCount = 0 } = useQuery({
     queryKey: ['orders', 'awaiting-approval', activeTenantId],
     queryFn: async () => {
@@ -231,8 +247,8 @@ export default function OrderListPage() {
           type="button"
           onClick={() => {
             setFilters(filters.status === 'submitted'
-              ? { search: '', status: '', orderType: '', slaRisk: false }
-              : { search: '', status: 'submitted', orderType: '', slaRisk: false });
+              ? { search: '', status: '', orderType: '', slaRisk: false, slaLevel: '' }
+              : { search: '', status: 'submitted', orderType: '', slaRisk: false, slaLevel: '' });
             setPage(1);
           }}
           className={filters.status === 'submitted' ? 'btn-primary' : 'btn-secondary'}
@@ -243,12 +259,37 @@ export default function OrderListPage() {
       )}
       <button
         type="button"
-        onClick={() => { setFilters({ ...filters, slaRisk: !filters.slaRisk }); setPage(1); }}
+        onClick={() => { setFilters({ ...filters, slaRisk: !filters.slaRisk, slaLevel: '' }); setPage(1); }}
         className={filters.slaRisk ? 'btn-primary' : 'btn-secondary'}
         aria-pressed={filters.slaRisk}
       >
         <AlertTriangle size={16} aria-hidden="true" />{t('orders.slaAtRisk')}
       </button>
+      <section aria-label={t('orders.slaSummary')}>
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('orders.slaSummary')}</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {([
+            { level: '80', label: t('orders.slaWarning'), count: slaSummary?.warning, color: 'text-amber-700' },
+            { level: '100', label: t('orders.slaOverdue'), count: slaSummary?.overdue, color: 'text-orange-700' },
+            { level: '120', label: t('orders.slaEscalated'), count: slaSummary?.escalated, color: 'text-red-700' },
+          ] as const).map(({ level, label, count, color }) => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => {
+                setFilters({ search: '', status: '', orderType: '', slaRisk: false, slaLevel: filters.slaLevel === level ? '' : level });
+                setPage(1);
+              }}
+              aria-pressed={filters.slaLevel === level}
+              className={`card text-left border-2 transition-colors hover:border-primary-400 ${filters.slaLevel === level ? 'border-primary-600' : 'border-transparent'}`}
+            >
+              <span className="block text-sm text-gray-600">{label}</span>
+              <span className={`block text-2xl font-bold ${color}`}>{count ?? '—'}</span>
+            </button>
+          ))}
+        </div>
+        {slaSummaryError && <p className="mt-2 text-sm text-red-600">{t('orders.slaSummaryError')}</p>}
+      </section>
       <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <input

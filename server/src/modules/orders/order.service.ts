@@ -10,7 +10,7 @@ import { assertDepartmentRequesterAction } from './order-requester-access';
 import { ORDER_HISTORY_ACTIONS, mergeOrderHistory, toOrderHistoryEntry } from './order-history';
 import { orderNotificationAudience } from './order-notifications';
 import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
-import { orderSlaLevel, slaRiskWhere } from './order-sla';
+import { ACTIVE_SLA_STATUSES, orderSlaLevel, parseSlaLevel, slaLevelWhere, slaRiskWhere } from './order-sla';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -382,6 +382,10 @@ export class OrderService {
         slaRiskWhere(now),
       ];
     }
+    const selectedSlaLevel = parseSlaLevel(filters.slaLevel);
+    if (selectedSlaLevel) {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), slaLevelWhere(selectedSlaLevel, now)];
+    }
 
     if (filters.status) where.status = filters.status as OrderStatus;
     if (filters.orderType) where.orderType = filters.orderType as OrderType;
@@ -400,7 +404,7 @@ export class OrderService {
         where,
         skip,
         take,
-        orderBy: filters.slaRisk === 'true'
+        orderBy: filters.slaRisk === 'true' || selectedSlaLevel
           ? [{ slaDeadline: 'asc' }, { id: 'asc' }]
           : [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
@@ -420,6 +424,23 @@ export class OrderService {
       })),
       total,
     };
+  }
+
+  async getSlaSummary(tenantId: string, department?: string) {
+    const now = new Date();
+    const scope: Prisma.OrderWhereInput = {
+      tenantId,
+      ...(department ? { AND: [departmentOrderVisibility(department)] } : {}),
+    };
+    const countLevel = (level: 80 | 100 | 120) => prisma.order.count({
+      where: {
+        AND: [scope, slaLevelWhere(level, now)],
+      },
+    });
+    const [warning, overdue, escalated] = await Promise.all([
+      countLevel(80), countLevel(100), countLevel(120),
+    ]);
+    return { warning, overdue, escalated, total: warning + overdue + escalated };
   }
 
   async listWarehouseTasks(tenantId: string, department?: string) {
@@ -1049,12 +1070,13 @@ export class OrderService {
     });
   }
 
-  async getOverdueSla(tenantId: string) {
+  async getOverdueSla(tenantId: string, department?: string) {
     return prisma.order.findMany({
       where: {
         tenantId,
-        status: { notIn: ['completed', 'cancelled'] },
+        status: { in: [...ACTIVE_SLA_STATUSES] },
         slaDeadline: { lt: new Date() },
+        ...(department ? { AND: [departmentOrderVisibility(department)] } : {}),
       },
       orderBy: { slaDeadline: 'asc' },
       include: {

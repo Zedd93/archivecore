@@ -226,6 +226,8 @@
     "itemCount": "Items",
     "sla": "SLA",
     "slaAtRisk": "SLA at risk",
+    "slaSummary": "Orders by SLA risk level",
+    "slaSummaryError": "Could not load the SLA summary.",
     "slaWarning": "Deadline approaching",
     "slaOverdue": "Overdue",
     "slaEscalated": "Seriously overdue",
