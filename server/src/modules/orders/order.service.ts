@@ -7,6 +7,7 @@ import { billingService } from '../pricing/billing.service';
 import { departmentOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
 import { assertDepartmentRequesterAction } from './order-requester-access';
+import { ORDER_HISTORY_ACTIONS, toOrderHistoryEntry } from './order-history';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -502,6 +503,39 @@ export class OrderService {
     });
     if (!order) throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 });
     return order;
+  }
+
+  async getHistory(id: string, tenantId: string, skip: number, take: number, department?: string) {
+    const visible = await prisma.order.findFirst({
+      where: { id, tenantId, ...(department ? { AND: [departmentOrderVisibility(department)] } : {}) },
+      select: { id: true },
+    });
+    if (!visible) throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 });
+
+    const where: Prisma.AuditLogWhereInput = {
+      tenantId,
+      entityType: 'order',
+      entityId: id,
+      action: { in: ORDER_HISTORY_ACTIONS },
+    };
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          action: true,
+          createdAt: true,
+          oldValues: true,
+          newValues: true,
+          user: { select: { firstName: true, lastName: true } },
+        },
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+    return { data: logs.map(toOrderHistoryEntry), total };
   }
 
   async delete(id: string, tenantId: string) {

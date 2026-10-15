@@ -96,7 +96,7 @@ export default function OrderDetailPage() {
     enabled: Boolean(id && order?.handoverProof),
   });
   const patchOrder = usePatch(
-    ['order', 'orders', 'warehouse-tasks', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
+    ['order', 'orders', 'order-history', 'warehouse-tasks', 'boxes', 'box', 'dashboard', 'report-boxes-status', 'search'],
     t('orders.detail.statusChanged')
   );
   const [showAddItem, setShowAddItem] = useState(false);
@@ -874,8 +874,8 @@ export default function OrderDetailPage() {
 
           {/* Activity Timeline */}
           <div className="card">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('boxes.changeHistory')}</h3>
-            <ActivityTimeline entityType="order" entityId={order.id} />
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('orders.detail.decisionHistory')}</h3>
+            <ActivityTimeline key={order.id} entityType="order" entityId={order.id} source="order" />
           </div>
         </div>
       </div>

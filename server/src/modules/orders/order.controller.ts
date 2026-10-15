@@ -33,6 +33,16 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async getHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      const { skip, take, page, limit } = parsePagination(req.query as any);
+      const { data, total } = await orderService.getHistory(req.params.id, req.tenantId, skip, take, req.accessDepartment || undefined);
+      return paginatedResponse(res, data, total, page, limit);
+    } catch (err) { next(err); }
+  }
+
   async uploadScan(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

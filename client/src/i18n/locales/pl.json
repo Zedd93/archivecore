@@ -253,6 +253,7 @@
     },
     "detail": {
       "notFound": "Zlecenie nie znalezione",
+      "decisionHistory": "Historia decyzji i realizacji",
       "submit": "Złóż zlecenie",
       "approve": "Zatwierdź",
       "reject": "Odrzuć",
@@ -1629,6 +1630,8 @@
 
   "timeline": {
     "noHistory": "Brak historii zmian",
+    "loadError": "Nie udało się pobrać historii. Spróbuj odświeżyć stronę.",
+    "reason": "Powód",
     "system": "System",
     "justNow": "Przed chwilą",
     "minutesAgo": "{{count}} min temu",
@@ -1643,9 +1646,13 @@
       "box.bulk_move": "Przeniesiono (masowo)",
       "box.bulk_delete": "Usunięto kartony (masowo)",
       "order.create": "Utworzono zlecenie",
+      "order.submit": "Złożono zlecenie",
       "order.update": "Zaktualizowano zlecenie",
       "order.approve": "Zatwierdzono zlecenie",
       "order.reject": "Odrzucono zlecenie",
+      "order.process": "Rozpoczęto realizację",
+      "order.ready": "Przygotowano zlecenie",
+      "order.deliver": "Wydano zlecenie",
       "order.assign": "Przypisano zlecenie",
       "order.complete": "Zakończono zlecenie",
       "order.cancel": "Anulowano zlecenie",

@@ -39,6 +39,7 @@ router.get('/warehouse-tasks', ...auth, requirePermission(Permissions.ORDER_READ
 router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getOverdueSla(req, res, next));
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));
+router.get('/:id/history', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getHistory(req, res, next));
 router.get('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.downloadScan(req, res, next));
 router.get('/:id/custody', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getCustodyByOrder(req, res, next));
 router.get('/:id/handover/photos', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.listHandoverPhotos(req, res, next));

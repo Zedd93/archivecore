@@ -58,6 +58,9 @@ jobs:
       - name: Verify employee order permissions
         run: npm run test:order-requester-access
 
+      - name: Verify client-safe order history
+        run: npm run test:order-history
+
       - name: Verify offline warehouse scan drafts
         run: npm run test:offline-warehouse-scans
 

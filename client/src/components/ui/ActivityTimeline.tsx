@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useList } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
 import { Clock, User, FileText, Box, MapPin, ShieldCheck, Loader2 } from 'lucide-react';
+import Pagination from './Pagination';
 
 interface ActivityTimelineProps {
   entityType: string;
   entityId: string;
+  source?: 'audit' | 'order';
 }
 
 const ACTION_ICONS: Record<string, typeof Box> = {
@@ -16,14 +19,16 @@ const ACTION_ICONS: Record<string, typeof Box> = {
   'import': FileText,
 };
 
-export default function ActivityTimeline({ entityType, entityId }: ActivityTimelineProps) {
+export default function ActivityTimeline({ entityType, entityId, source = 'audit' }: ActivityTimelineProps) {
   const { t } = useTranslation();
-  const { data, isLoading } = useList('audit-timeline', '/audit', {
-    entityType,
-    entityId,
-    limit: 20,
-    page: 1,
-  });
+  const [page, setPage] = useState(1);
+  const isOrderHistory = source === 'order';
+  const { data, isLoading, isError } = useList(
+    isOrderHistory ? 'order-history' : 'audit-timeline',
+    isOrderHistory ? `/orders/${entityId}/history` : '/audit',
+    isOrderHistory ? { orderId: entityId, page, limit: 20 } : { entityType, entityId, limit: 20, page: 1 },
+    isOrderHistory ? { refetchInterval: 10_000 } : undefined,
+  );
 
   const logs = data?.data || [];
 
@@ -55,6 +60,8 @@ export default function ActivityTimeline({ entityType, entityId }: ActivityTimel
       </div>
     );
   }
+
+  if (isError) return <p className="text-sm text-red-600 py-4">{t('timeline.loadError')}</p>;
 
   if (logs.length === 0) {
     return (
@@ -100,11 +107,15 @@ export default function ActivityTimeline({ entityType, entityId }: ActivityTimel
                     }
                   </div>
                 )}
+                {log.reason && <p className="mt-1 text-sm text-gray-600 break-words">{t('timeline.reason')}: {log.reason}</p>}
               </div>
             </div>
           );
         })}
       </div>
+      {isOrderHistory && data?.meta && data.meta.total > 20 && (
+        <div className="mt-4 pl-8"><Pagination page={page} limit={20} total={data.meta.total} onPageChange={setPage} /></div>
+      )}
     </div>
   );
 }
