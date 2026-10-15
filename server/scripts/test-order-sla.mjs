@@ -146,11 +146,11 @@ test('submission starts a fresh SLA window instead of using draft creation time'
 });
 
 test('submitting an order snapshots the selected tenant policy and its thresholds', async () => {
-  const originalGetHours = tenantSlaService.getHours;
+  const originalFindUnique = prisma.tenantSlaPolicy.findUnique;
   const service = new OrderService();
-  tenantSlaService.getHours = async (tenantId, orderType, priority) => {
-    assert.deepEqual([tenantId, orderType, priority], ['tenant-a', 'scan', 'high']);
-    return 3;
+  prisma.tenantSlaPolicy.findUnique = async ({ where }) => {
+    assert.deepEqual(where.tenantId_orderType_priority, { tenantId: 'tenant-a', orderType: 'scan', priority: 'high' });
+    return { hours: 3 };
   };
   try {
     const schedule = await service.getSlaSchedule('tenant-a', 'scan', 'high');
@@ -160,7 +160,7 @@ test('submitting an order snapshots the selected tenant policy and its threshold
     assert.equal(update.slaWarningAt.toISOString(), schedule.warningAt.toISOString());
     assert.equal(update.slaSevereAt.toISOString(), schedule.severeAt.toISOString());
   } finally {
-    tenantSlaService.getHours = originalGetHours;
+    prisma.tenantSlaPolicy.findUnique = originalFindUnique;
   }
 });
 
