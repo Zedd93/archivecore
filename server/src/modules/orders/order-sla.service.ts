@@ -2,9 +2,9 @@ import { PrismaClient, OrderStatus } from '@prisma/client';
 import { RoleCode } from '@archivecore/shared';
 import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
-import { slaEscalationLevel, SlaEscalationLevel } from './order-sla';
+import { ACTIVE_SLA_STATUSES, slaEscalationLevel, SlaEscalationLevel } from './order-sla';
 
-const ACTIVE_STATUSES: OrderStatus[] = ['submitted', 'approved', 'in_progress', 'ready'];
+const ACTIVE_STATUSES: OrderStatus[] = [...ACTIVE_SLA_STATUSES];
 
 const ESCALATION_ROLES: Record<SlaEscalationLevel, RoleCode[]> = {
   80: [RoleCode.OPERATOR_WAREHOUSE, RoleCode.COORDINATOR_ARCHIVE, RoleCode.DOXART_ADMIN],

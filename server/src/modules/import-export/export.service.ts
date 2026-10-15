@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
+import { slaRiskWhere } from '../orders/order-sla';
 import {
   BOX_STATUS_LABELS,
   DISPOSAL_STATUS_LABELS,
@@ -243,6 +244,7 @@ export class ExportService {
   // ─── ORDERS ────────────────────────────────────────────
   async exportOrders(tenantId: string, filters: any, format: 'xlsx' | 'csv' = 'xlsx'): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const where: Prisma.OrderWhereInput = { tenantId };
+    if (filters.slaRisk === 'true') where.AND = [slaRiskWhere(new Date())];
     if (filters.status) where.status = filters.status as any;
     if (filters.orderType) where.orderType = filters.orderType as any;
     if (filters.priority) where.priority = filters.priority as any;
@@ -255,7 +257,9 @@ export class ExportService {
 
     const data = await prisma.order.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: filters.slaRisk === 'true'
+        ? [{ slaDeadline: 'asc' }, { id: 'asc' }]
+        : [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         requester: { select: { firstName: true, lastName: true } },
         approver: { select: { firstName: true, lastName: true } },

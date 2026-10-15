@@ -40,7 +40,7 @@ export default function OrderListPage() {
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
-  const [filters, setFilters] = useState({ search: '', status: '', orderType: '' });
+  const [filters, setFilters] = useState({ search: '', status: '', orderType: '', slaRisk: false });
 
   useEffect(() => {
     if (consumedDraft.current) return;
@@ -57,7 +57,7 @@ export default function OrderListPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate, user?.tenantId]);
 
-  const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters });
+  const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters }, { refetchInterval: 60_000 });
   const canApproveOrders = hasPermission(Permissions.ORDER_APPROVE);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const { data: awaitingApprovalCount = 0 } = useQuery({
@@ -124,12 +124,22 @@ export default function OrderListPage() {
       render: (item) => {
         if (!item.slaDeadline) return '—';
         const deadline = new Date(item.slaDeadline);
-        const now = new Date();
-        const isOverdue = deadline < now && !['completed', 'cancelled'].includes(item.status);
+        const level = item.slaLevel as 80 | 100 | 120 | null;
+        const badge = level === 120
+          ? { label: t('orders.slaEscalated'), color: 'bg-red-100 text-red-800' }
+          : level === 100
+            ? { label: t('orders.slaOverdue'), color: 'bg-orange-100 text-orange-800' }
+            : level === 80
+              ? { label: t('orders.slaWarning'), color: 'bg-amber-100 text-amber-800' }
+              : null;
         return (
-          <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
-            {isOverdue && <AlertTriangle size={14} />}
-            {deadline.toLocaleDateString('pl-PL')} {deadline.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+          <span className="flex flex-col items-start gap-1">
+            <span className={level && level >= 100 ? 'text-red-700 font-medium' : ''}>
+              {deadline.toLocaleDateString('pl-PL')} {deadline.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {badge && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${badge.color}`}>
+              <AlertTriangle size={12} aria-hidden="true" />{badge.label}
+            </span>}
           </span>
         );
       },
@@ -202,7 +212,7 @@ export default function OrderListPage() {
         </div>
         <div className="flex w-full sm:w-auto items-center gap-2">
           <button
-            onClick={() => exportData({ format: 'xlsx', ...filters })}
+            onClick={() => exportData({ format: 'xlsx', ...filters, slaRisk: String(filters.slaRisk) })}
             disabled={isExporting}
             className="btn-secondary flex-1 sm:flex-none"
           >
@@ -220,7 +230,9 @@ export default function OrderListPage() {
         <button
           type="button"
           onClick={() => {
-            setFilters(filters.status === 'submitted' ? { search: '', status: '', orderType: '' } : { search: '', status: 'submitted', orderType: '' });
+            setFilters(filters.status === 'submitted'
+              ? { search: '', status: '', orderType: '', slaRisk: false }
+              : { search: '', status: 'submitted', orderType: '', slaRisk: false });
             setPage(1);
           }}
           className={filters.status === 'submitted' ? 'btn-primary' : 'btn-secondary'}
@@ -229,17 +241,25 @@ export default function OrderListPage() {
           {t('orders.awaitingApproval', { count: awaitingApprovalCount })}
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => { setFilters({ ...filters, slaRisk: !filters.slaRisk }); setPage(1); }}
+        className={filters.slaRisk ? 'btn-primary' : 'btn-secondary'}
+        aria-pressed={filters.slaRisk}
+      >
+        <AlertTriangle size={16} aria-hidden="true" />{t('orders.slaAtRisk')}
+      </button>
       <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <input
             type="text"
             placeholder={t('orders.searchPlaceholder')}
             value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            onChange={(e) => { setFilters({ ...filters, search: e.target.value }); setPage(1); }}
             className="input-field w-full sm:flex-1"
             aria-label={t('orders.searchPlaceholder')}
           />
-          <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="input-field w-full sm:w-40" aria-label={t('orders.allStatuses')}>
+          <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-field w-full sm:w-40" aria-label={t('orders.allStatuses')}>
             <option value="">{t('orders.allStatuses')}</option>
             <option value="draft">{t('orders.statusDraft')}</option>
             <option value="submitted">{t('orders.statusSubmitted')}</option>
@@ -250,7 +270,7 @@ export default function OrderListPage() {
             <option value="completed">{t('orders.statusCompleted')}</option>
             <option value="cancelled">{t('orders.statusCancelled')}</option>
           </select>
-          <select value={filters.orderType} onChange={(e) => setFilters({ ...filters, orderType: e.target.value })} className="input-field w-full sm:w-36" aria-label={t('orders.allTypes')}>
+          <select value={filters.orderType} onChange={(e) => { setFilters({ ...filters, orderType: e.target.value }); setPage(1); }} className="input-field w-full sm:w-36" aria-label={t('orders.allTypes')}>
             <option value="">{t('orders.allTypes')}</option>
             <option value="checkout">{t('orders.typeIssue')}</option>
             <option value="return_order">{t('orders.typeReturn')}</option>

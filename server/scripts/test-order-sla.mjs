@@ -5,9 +5,12 @@ process.env.TZ = 'Europe/Warsaw';
 const slaModule = await import('../src/modules/orders/order-sla.ts');
 const serviceModule = await import('../src/modules/orders/order-sla.service.ts');
 const orderModule = await import('../src/modules/orders/order.service.ts');
-const { businessMinutesBetween, slaEscalationLevel } = slaModule;
+const exportModule = await import('../src/modules/import-export/export.service.ts');
+const { businessMinutesBetween, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere } = slaModule;
 const { OrderSlaService } = serviceModule;
 const { OrderService } = orderModule;
+const { ExportService } = exportModule;
+const { prisma } = await import('../src/config/database.ts');
 
 test('business time excludes the weekend and time outside opening hours', () => {
   const friday = new Date('2026-10-16T13:00:00Z'); // 15:00 Warsaw
@@ -22,6 +25,19 @@ test('80, 100 and 120 percent are based on working time', () => {
   assert.equal(slaEscalationLevel(deadline, 'urgent', deadline), 100);
   assert.equal(slaEscalationLevel(deadline, 'urgent', new Date('2026-10-19T09:35:00Z')), 100);
   assert.equal(slaEscalationLevel(deadline, 'urgent', new Date('2026-10-19T09:36:00Z')), 120);
+});
+
+test('risk filter reaches across weekends and matches the displayed warning', () => {
+  const now = new Date('2026-10-16T13:00:00Z'); // Friday 15:00 Warsaw
+  const urgent = slaRiskDeadlines(now).find((item) => item.priority === 'urgent');
+  assert.ok(urgent);
+  assert.equal(urgent.deadline.toISOString(), '2026-10-19T06:36:00.000Z');
+  assert.equal(businessMinutesBetween(now, urgent.deadline), 96);
+  assert.equal(orderSlaLevel('submitted', urgent.deadline, 'urgent', now), 80);
+  assert.equal(orderSlaLevel('submitted', new Date('2026-10-19T06:37:00Z'), 'urgent', now), null);
+  assert.equal(orderSlaLevel('completed', new Date('2026-10-16T12:00:00Z'), 'urgent', now), null);
+  assert.deepEqual(slaRiskWhere(now).status, { in: ['submitted', 'approved', 'in_progress', 'ready'] });
+  assert.equal(slaRiskWhere(now).OR.find((item) => item.priority === 'urgent').slaDeadline.lte.toISOString(), urgent.deadline.toISOString());
 });
 
 test('submission starts a fresh SLA window instead of using draft creation time', () => {
@@ -75,4 +91,55 @@ test('worker sends one warning and records its level across runs', async () => {
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0].userId, 'operator');
   assert.equal(notifications[0].type, 'order_sla_80');
+});
+
+test('at-risk order list keeps tenant and department scope while paginating', async () => {
+  const originalFindMany = prisma.order.findMany;
+  const originalCount = prisma.order.count;
+  let listQuery;
+  let countWhere;
+  prisma.order.findMany = async (query) => {
+    listQuery = query;
+    return [{
+      id: 'order-1', tenantId: 'tenant-a', status: 'submitted',
+      priority: 'urgent', slaDeadline: new Date(Date.now() - 24 * 60 * 60_000),
+    }];
+  };
+  prisma.order.count = async ({ where }) => {
+    countWhere = where;
+    return 23;
+  };
+  try {
+    const result = await new OrderService().list('tenant-a', { slaRisk: 'true' }, 20, 20, 'Księgowość');
+    assert.equal(result.total, 23);
+    assert.equal(result.data.length, 1);
+    assert.ok(result.data[0].slaLevel === 100 || result.data[0].slaLevel === 120);
+    assert.equal(listQuery.skip, 20);
+    assert.equal(listQuery.take, 20);
+    assert.deepEqual(listQuery.orderBy, [{ slaDeadline: 'asc' }, { id: 'asc' }]);
+    assert.equal(listQuery.where.tenantId, 'tenant-a');
+    assert.equal(listQuery.where.AND[0].AND[1].items.every.OR[0].box.department.equals, 'Księgowość');
+    assert.deepEqual(listQuery.where.AND[1].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.deepEqual(countWhere, listQuery.where);
+  } finally {
+    prisma.order.findMany = originalFindMany;
+    prisma.order.count = originalCount;
+  }
+});
+
+test('order export uses the same at-risk filter as the list', async () => {
+  const originalFindMany = prisma.order.findMany;
+  let exportQuery;
+  prisma.order.findMany = async (query) => {
+    exportQuery = query;
+    return [];
+  };
+  try {
+    await new ExportService().exportOrders('tenant-a', { slaRisk: 'true' }, 'csv');
+    assert.equal(exportQuery.where.tenantId, 'tenant-a');
+    assert.deepEqual(exportQuery.where.AND[0].status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.deepEqual(exportQuery.orderBy, [{ slaDeadline: 'asc' }, { id: 'asc' }]);
+  } finally {
+    prisma.order.findMany = originalFindMany;
+  }
 });

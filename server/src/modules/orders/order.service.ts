@@ -10,6 +10,7 @@ import { assertDepartmentRequesterAction } from './order-requester-access';
 import { ORDER_HISTORY_ACTIONS, toOrderHistoryEntry } from './order-history';
 import { orderNotificationAudience } from './order-notifications';
 import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
+import { orderSlaLevel, slaRiskWhere } from './order-sla';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -374,6 +375,14 @@ export class OrderService {
     const where: Prisma.OrderWhereInput = { tenantId };
     if (department) where.AND = [departmentOrderVisibility(department)];
 
+    const now = new Date();
+    if (filters.slaRisk === 'true') {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        slaRiskWhere(now),
+      ];
+    }
+
     if (filters.status) where.status = filters.status as OrderStatus;
     if (filters.orderType) where.orderType = filters.orderType as OrderType;
     if (filters.priority) where.priority = filters.priority as OrderPriority;
@@ -391,7 +400,9 @@ export class OrderService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: filters.slaRisk === 'true'
+          ? [{ slaDeadline: 'asc' }, { id: 'asc' }]
+          : [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
           requester: { select: { id: true, firstName: true, lastName: true, email: true } },
           approver: { select: { id: true, firstName: true, lastName: true } },
@@ -402,7 +413,13 @@ export class OrderService {
       prisma.order.count({ where }),
     ]);
 
-    return { data, total };
+    return {
+      data: data.map((order) => ({
+        ...order,
+        slaLevel: orderSlaLevel(order.status, order.slaDeadline, order.priority, now),
+      })),
+      total,
+    };
   }
 
   async listWarehouseTasks(tenantId: string, department?: string) {
