@@ -8,6 +8,7 @@ import { departmentOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
 import { assertDepartmentRequesterAction } from './order-requester-access';
 import { ORDER_HISTORY_ACTIONS, toOrderHistoryEntry } from './order-history';
+import { orderNotificationAudience } from './order-notifications';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -127,22 +128,12 @@ export class OrderService {
     }
   }
 
-  private async notifyOrderStatus(order: any, newStatus: OrderStatus, actorId: string) {
-    const permissionsByStatus: Partial<Record<OrderStatus, (typeof Permissions)[keyof typeof Permissions][]>> = {
-      submitted: [Permissions.ORDER_APPROVE],
-      approved: [Permissions.ORDER_PROCESS],
-      in_progress: [Permissions.ORDER_PROCESS],
-      ready: [Permissions.ORDER_PROCESS],
-      delivered: [Permissions.ORDER_COMPLETE],
-      completed: [Permissions.ORDER_READ],
-      rejected: [Permissions.ORDER_READ],
-      cancelled: [Permissions.ORDER_READ],
-    };
-    const requiredPermissions = permissionsByStatus[newStatus] ?? [Permissions.ORDER_READ];
+  private async notifyOrderStatus(order: any, newStatus: OrderStatus, actorId: string, db: Prisma.TransactionClient) {
+    const audience = orderNotificationAudience(newStatus);
 
     await notificationService.notifyTenantUsers({
       tenantId: order.tenantId,
-      requiredPermissions,
+      ...audience,
       includeUserIds: [order.requestedBy, order.assignedTo, order.approvedBy].filter(Boolean),
       excludeUserIds: [actorId],
       type: 'order_status',
@@ -151,7 +142,7 @@ export class OrderService {
       entityType: 'order',
       entityId: order.id,
       actionUrl: `/orders/${order.id}`,
-    });
+    }, db);
   }
 
   private getStatusUpdateData(order: any, newStatus: OrderStatus, userId: string, notes?: string): Prisma.OrderUpdateInput {
@@ -667,10 +658,9 @@ export class OrderService {
         });
       }
       await webhookService.enqueueOrderStatus(tx, changed, order.status, newStatus);
+      await this.notifyOrderStatus(changed, newStatus, userId, tx);
       return changed;
     });
-
-    await this.notifyOrderStatus(updated, newStatus, userId);
 
     return updated;
   }
@@ -818,8 +808,8 @@ export class OrderService {
         });
       }
       await webhookService.enqueueOrderStatus(tx, order, order.status, 'delivered');
+      await this.notifyOrderStatus(order, 'delivered', userId, tx);
     });
-    await this.notifyOrderStatus(order, 'delivered', userId);
 
     return this.getById(id, tenantId);
   }

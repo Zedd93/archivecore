@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { ROLE_PERMISSIONS, PermissionString, RoleCode } from '@archivecore/shared';
+import { Prisma } from '@prisma/client';
 
 type NotificationPayload = {
   tenantId?: string | null;
@@ -16,6 +17,7 @@ type NotifyTenantUsersInput = NotificationPayload & {
   includeUserIds?: string[];
   excludeUserIds?: string[];
   includeGlobalUsers?: boolean;
+  onlyIncludedUsers?: boolean;
 };
 
 export class NotificationService {
@@ -47,19 +49,24 @@ export class NotificationService {
     });
   }
 
-  async notifyTenantUsers(input: NotifyTenantUsersInput) {
+  async notifyTenantUsers(input: NotifyTenantUsersInput, db: Prisma.TransactionClient = prisma) {
     const requiredPermissions = input.requiredPermissions ?? [];
     const includeUserIds = new Set(input.includeUserIds ?? []);
     const excludeUserIds = new Set(input.excludeUserIds ?? []);
 
-    const users = await prisma.user.findMany({
+    const users = await db.user.findMany({
       where: {
         isActive: true,
-        OR: [
-          ...(input.tenantId ? [{ tenantId: input.tenantId }] : []),
-          ...(input.includeGlobalUsers === false ? [] : [{ tenantId: null }]),
-          ...(includeUserIds.size > 0 ? [{ id: { in: [...includeUserIds] } }] : []),
-        ],
+        ...(input.onlyIncludedUsers && input.tenantId
+          ? { AND: [{ OR: [{ tenantId: input.tenantId }, { tenantId: null }] }] }
+          : {}),
+        OR: input.onlyIncludedUsers
+          ? [{ id: { in: [...includeUserIds] } }]
+          : [
+              ...(input.tenantId ? [{ tenantId: input.tenantId }] : []),
+              ...(input.includeGlobalUsers === false ? [] : [{ tenantId: null }]),
+              ...(includeUserIds.size > 0 ? [{ id: { in: [...includeUserIds] } }] : []),
+            ],
       },
       select: {
         id: true,
@@ -85,7 +92,7 @@ export class NotificationService {
     const uniqueUserIds = [...new Set(targetUserIds)];
     if (uniqueUserIds.length === 0) return { count: 0 };
 
-    const result = await prisma.notification.createMany({
+    const result = await db.notification.createMany({
       data: uniqueUserIds.map((userId) => ({
         userId,
         tenantId: input.tenantId ?? null,

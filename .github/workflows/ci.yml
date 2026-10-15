@@ -60,6 +60,8 @@ jobs:
 
       - name: Verify client-safe order history
         run: npm run test:order-history
+      - name: Verify order decision notifications
+        run: npm run test:order-notifications
 
       - name: Verify offline warehouse scan drafts
         run: npm run test:offline-warehouse-scans
