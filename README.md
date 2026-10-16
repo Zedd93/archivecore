@@ -35,7 +35,7 @@ Multi-tenant archive management system for organizations. Manage physical docume
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20
 - Docker & Docker Compose
 
 ### Setup
@@ -130,6 +130,24 @@ See `.env.example` for all required variables. Key ones:
 | `JWT_REFRESH_SECRET` | Secret for signing refresh tokens |
 | `ENCRYPTION_KEY` | 32-byte key for PESEL encryption |
 | `MINIO_*` | MinIO/S3 storage credentials |
+
+### Loan Return Emails (Native Server)
+
+Return reminders always appear in the application. To also send them by email, set
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, and
+`PUBLIC_APP_URL` in the server's root `.env`. Use port 587 with `SMTP_SECURE=false`
+for mandatory STARTTLS, or port 465 with `SMTP_SECURE=true` for implicit TLS.
+`PUBLIC_APP_URL` must be the HTTPS origin of the application, for example
+`https://archivecore.doxart.pl`. Never commit SMTP credentials.
+
+For the native Windows deployment, stop `archivecore-server`, update dependencies,
+apply Prisma migrations, build, then start it again. The existing
+`C:\Apps\update.ps1` should perform these steps. When SMTP is incomplete, email
+delivery stays disabled and new reminders remain in-app only. Temporary SMTP
+failures are retried from the database queue; emails are skipped if the loan was
+returned or the reminder is no longer timely.
+Check `node --version` on the server before updating: email delivery requires
+Node.js 20 or newer.
 
 ## API
 

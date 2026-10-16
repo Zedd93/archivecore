@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { ROLE_PERMISSIONS, PermissionString, RoleCode } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
+import { smtpSettings } from './email-transport';
 
 type NotificationPayload = {
   tenantId?: string | null;
@@ -19,9 +20,12 @@ type NotifyTenantUsersInput = NotificationPayload & {
   excludeUserIds?: string[];
   includeGlobalUsers?: boolean;
   onlyIncludedUsers?: boolean;
+  queueEmail?: boolean;
 };
 
 export class NotificationService {
+  constructor(private readonly emailEnabled: () => boolean = () => smtpSettings() !== null) {}
+
   async list(userId: string, limit = 20) {
     const take = Math.min(Math.max(limit, 1), 50);
     const [items, unreadCount] = await Promise.all([
@@ -98,6 +102,20 @@ export class NotificationService {
 
     const uniqueUserIds = [...new Set(targetUserIds)];
     if (uniqueUserIds.length === 0) return { count: 0 };
+
+    if (input.queueEmail && this.emailEnabled()) {
+      for (const userId of uniqueUserIds) {
+        await db.notification.create({
+          data: {
+            userId, tenantId: input.tenantId ?? null, type: input.type,
+            title: input.title, message: input.message,
+            entityType: input.entityType, entityId: input.entityId, actionUrl: input.actionUrl,
+            emailDelivery: { create: {} },
+          },
+        });
+      }
+      return { count: uniqueUserIds.length };
+    }
 
     const result = await db.notification.createMany({
       data: uniqueUserIds.map((userId) => ({

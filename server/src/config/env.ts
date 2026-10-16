@@ -41,4 +41,14 @@ export const config = {
     endpoint: process.env.GUS_BIR_ENDPOINT || 'https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc',
     timeoutMs: parseInt(process.env.GUS_BIR_TIMEOUT_MS || '10000', 10),
   },
+
+  smtp: {
+    host: process.env.SMTP_HOST || '',
+    port: Number(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    password: process.env.SMTP_PASSWORD || '',
+    from: process.env.SMTP_FROM || '',
+    publicUrl: process.env.PUBLIC_APP_URL || '',
+  },
 };

@@ -433,11 +433,30 @@ model Notification {
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailDelivery NotificationEmailDelivery?
 
   @@index([userId, readAt, createdAt])
   @@index([tenantId, createdAt])
   @@index([entityType, entityId])
   @@map("notifications")
+}
+
+model NotificationEmailDelivery {
+  id             String    @id @default(uuid()) @db.Uuid
+  notificationId String    @unique @db.Uuid
+  status         String    @default("pending") @db.VarChar(20)
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  leaseUntil     DateTime?
+  lastError      String?   @db.VarChar(255)
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseUntil])
+  @@map("notification_email_deliveries")
 }
 
 model Role {

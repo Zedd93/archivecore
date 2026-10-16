@@ -82,6 +82,7 @@ test('upcoming notice is one-time and addressed only to this tenant requester', 
   assert.equal(state.notifications[0].type, 'loan_return_upcoming');
   assert.equal(state.notifications[0].tenantId, 'tenant-a');
   assert.equal(state.notifications[0].onlyIncludedUsers, true);
+  assert.equal(state.notifications[0].queueEmail, true);
   assert.deepEqual(state.notifications[0].includeUserIds, ['requester-a']);
   assert.equal(state.notifications[0].actionUrl, '/orders/8a4b7d9a-89e2-4f5f-9c75-cf3f37e1543e');
   assert.deepEqual(state.queries[0].where.items, { some: { itemStatus: 'delivered' } });

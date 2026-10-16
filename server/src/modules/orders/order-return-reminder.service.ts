@@ -103,6 +103,7 @@ export class OrderReturnReminderService {
           ? `Sprawdź wypożyczenie ${order.orderNumber} i zwróć pozostałe pozycje w terminie.`
           : `Wypożyczenie ${order.orderNumber} ma niewrócone pozycje. Sprawdź je i odnotuj zwrot.`,
         entityType: 'order', entityId: order.id, actionUrl: `/orders/${order.id}`,
+        queueEmail: true,
         includeUserIds: order.requester.tenantId === order.tenantId || order.requester.tenantId === null
           ? [order.requestedBy] : [],
         ...(kind === 'upcoming'

@@ -6,6 +6,8 @@ import { webhookService } from './modules/integrations/webhook.service';
 import { orderSlaService } from './modules/orders/order-sla.service';
 import { slaTargetAlertService } from './modules/reports/sla-target-alert.service';
 import { orderReturnReminderService } from './modules/orders/order-return-reminder.service';
+import { emailDeliveryService } from './modules/notifications/email-delivery.service';
+import { smtpSettings } from './modules/notifications/email-transport';
 
 const log = {
   info: (...args: unknown[]) => { if (config.nodeEnv !== 'test') process.stdout.write(args.join(' ') + '\n'); },
@@ -17,6 +19,7 @@ async function main() {
   log.info('║         ArchiveCore Server v1.0          ║');
   log.info('╚══════════════════════════════════════════╝');
   log.info(`Environment: ${config.nodeEnv}`);
+  log.info(`Email reminders: ${smtpSettings() ? 'enabled' : 'disabled (SMTP not configured)'}`);
 
   // Test database connection
   try {
@@ -85,12 +88,21 @@ async function main() {
   returnTimer.unref();
   checkReturns();
 
+  const deliverEmails = () => {
+    void emailDeliveryService.processDue()
+      .catch((error) => log.error('Email delivery worker failed; retrying later:', error));
+  };
+  const emailTimer = setInterval(deliverEmails, 60_000);
+  emailTimer.unref();
+  deliverEmails();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     clearInterval(webhookTimer);
     clearInterval(slaTimer);
     clearInterval(slaTargetTimer);
     clearInterval(returnTimer);
+    clearInterval(emailTimer);
     log.info(`\n📡 Received ${signal}, shutting down...`);
     server.close(async () => {
       await prisma.$disconnect();
