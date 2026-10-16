@@ -537,6 +537,38 @@ export class OrderService {
     return order;
   }
 
+  async getScanBilling(id: string, tenantId: string, department?: string) {
+    const order = await this.getById(id, tenantId, department);
+    if (order.orderType !== 'scan') throw Object.assign(new Error('To nie jest zlecenie skanu'), { statusCode: 400 });
+    const events = await prisma.billingEvent.findMany({
+      where: { orderId: id, tenantId, serviceCode: 'scan_page', sourceType: 'order_delivery' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, orderItemId: true, quantity: true, unitPrice: true, netAmount: true, currency: true, status: true },
+    });
+    const delivered = order.status === 'delivered' || order.status === 'completed';
+    const itemIds = new Set(order.items.map((item) => item.id));
+    const complete = delivered && order.items.length > 0 && events.length === order.items.length
+      && events.every((event) => event.orderItemId && itemIds.has(event.orderItemId)
+        && event.currency === events[0].currency
+        && (event.status === 'excluded' || (event.status !== 'unpriced' && event.netAmount !== null
+          && event.unitPrice !== null && event.unitPrice.mul(event.quantity).toDecimalPlaces(2).eq(event.netAmount))));
+    const totalNet = complete ? events.reduce((total, event) =>
+      event.status === 'excluded' ? total : total.plus(event.netAmount!), new Prisma.Decimal(0)).toString() : null;
+    return {
+      complete,
+      totalNet,
+      currency: events[0]?.currency || 'PLN',
+      events: events.map((event) => ({
+        id: event.id,
+        orderItemId: event.orderItemId,
+        quantity: event.quantity.toString(),
+        unitPrice: event.unitPrice?.toString() || null,
+        netAmount: event.netAmount?.toString() || null,
+        status: event.status,
+      })),
+    };
+  }
+
   async getHistory(id: string, tenantId: string, skip: number, take: number, department?: string) {
     const visible = await prisma.order.findFirst({
       where: { id, tenantId, ...(department ? { AND: [departmentOrderVisibility(department)] } : {}) },

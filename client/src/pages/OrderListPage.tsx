@@ -54,7 +54,7 @@ interface QuickTransition {
 export default function OrderListPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, hasPermission, hasRole } = useAuth();
   const queryClient = useQueryClient();
   const consumedDraft = useRef(false);
@@ -62,6 +62,7 @@ export default function OrderListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createType, setCreateType] = useState('checkout');
   const [createPriority, setCreatePriority] = useState('normal');
+  const [scanEstimatedPages, setScanEstimatedPages] = useState('');
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
@@ -108,6 +109,13 @@ export default function OrderListPage() {
   const canApproveOrders = hasPermission(Permissions.ORDER_APPROVE);
   const canProcessOrders = hasPermission(Permissions.ORDER_PROCESS);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const { data: scanRate, isLoading: scanRateLoading, error: scanRateError } = useQuery<{
+    serviceName: string; unitPrice: string; vatRate: string; currency: string; validFrom: string;
+  } | null>({
+    queryKey: ['scan-rate', activeTenantId],
+    queryFn: async () => { const { data: response } = await api.get('/orders/scan-rate'); return response.data; },
+    enabled: showCreate && createType === 'scan' && Boolean(activeTenantId) && hasPermission(Permissions.BILLING_VIEW),
+  });
   const { data: assignees = [], isLoading: assigneesLoading, isError: assigneesError } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
     queryKey: ['order-assignees', activeTenantId],
     queryFn: async () => { const { data: response } = await api.get('/orders/assignees'); return response.data; },
@@ -135,6 +143,12 @@ export default function OrderListPage() {
   const { exportData, isExporting } = useExport({ endpoint: '/export/orders', defaultFilename: 'zlecenia.xlsx' });
   const canDeleteOrders = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
   const selectedItemCount = (createType === 'scan' ? 0 : selectedBoxes.length) + selectedFolders.length + selectedDocuments.length;
+  const estimatedPageCount = Number(scanEstimatedPages);
+  const estimatedNet = scanRate && Number.isInteger(estimatedPageCount) && estimatedPageCount > 0 && estimatedPageCount <= 5000
+    ? estimatedPageCount * Number(scanRate.unitPrice) : null;
+  const scanMoney = (amount: number, currency: string) => new Intl.NumberFormat(i18n.language.startsWith('en') ? 'en-US' : 'pl-PL', {
+    style: 'currency', currency,
+  }).format(amount);
 
   const assignSelectedOrder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -343,6 +357,7 @@ export default function OrderListPage() {
     setSelectedDocuments([]);
     setCreateType('checkout');
     setCreatePriority('normal');
+    setScanEstimatedPages('');
   };
 
   return (
@@ -548,6 +563,18 @@ export default function OrderListPage() {
           </div>
           <OrderSlaPreview tenantId={activeTenantId} orderType={createType} priority={createPriority} enabled={showCreate} />
           {createType === 'scan' && <p className="text-sm text-gray-600">{t('orders.createModal.scanHint')}</p>}
+          {createType === 'scan' && hasPermission(Permissions.BILLING_VIEW) && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2 text-sm">
+            <h3 className="font-medium text-blue-950">{t('orders.createModal.scanPriceTitle')}</h3>
+            {!activeTenantId ? <p>{t('orders.createModal.scanPriceSelectTenant')}</p> : scanRateLoading ? <p>{t('orders.createModal.scanPriceLoading')}</p> : scanRateError ?
+              <p className="text-red-700">{getApiErrorMessage(scanRateError, t('orders.createModal.scanPriceError'))}</p> : scanRate ? <>
+                <p>{t('orders.createModal.scanPricePerPage', { price: scanMoney(Number(scanRate.unitPrice), scanRate.currency) })}</p>
+                <label htmlFor="scan-estimated-pages" className="label-text">{t('orders.createModal.scanEstimatedPages')}</label>
+                <input id="scan-estimated-pages" type="number" min="1" max="5000" step="1" className="input-field max-w-36"
+                  value={scanEstimatedPages} onChange={(event) => setScanEstimatedPages(event.target.value)} />
+                {estimatedNet !== null && <p className="font-medium">{t('orders.createModal.scanEstimatedNet', { amount: scanMoney(estimatedNet, scanRate.currency) })}</p>}
+                <p className="text-xs text-blue-900">{t('orders.createModal.scanPriceDisclaimer')}</p>
+              </> : <p>{t('orders.createModal.scanPriceMissing')}</p>}
+          </div>}
           {createType !== 'scan' && <div>
             <label className="label-text">{t('orders.createModal.boxIds')}</label>
             <BoxPicker

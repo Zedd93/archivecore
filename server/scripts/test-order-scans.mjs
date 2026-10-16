@@ -207,6 +207,102 @@ test('scan billing uses the PDF page count, not one event per file', async () =>
   }
 });
 
+test('scan rate preview shows only the tenant per-page rate effective today', async () => {
+  const originalFindFirst = prisma.priceList.findFirst;
+  let capturedWhere;
+  prisma.priceList.findFirst = async ({ where }) => {
+    capturedWhere = where;
+    return {
+      currency: 'PLN', validFrom: new Date('2026-10-01T00:00:00Z'),
+      items: [{ serviceCode: 'scan_page', serviceName: 'Skanowanie', unitPrice: new Prisma.Decimal('0.75'), vatRate: new Prisma.Decimal(23) }],
+    };
+  };
+  try {
+    const rate = await billingService.previewScanRate(tenantId, new Date('2026-10-16T16:00:00Z'));
+    assert.equal(capturedWhere.tenantId, tenantId);
+    assert.equal(capturedWhere.validFrom.lte.toISOString(), '2026-10-16T00:00:00.000Z');
+    assert.equal(rate.unitPrice, '0.75');
+    assert.equal(rate.currency, 'PLN');
+    prisma.priceList.findFirst = async () => ({ currency: 'PLN', items: [] });
+    assert.equal(await billingService.previewScanRate(tenantId), null);
+  } finally { prisma.priceList.findFirst = originalFindFirst; }
+});
+
+test('scan billing totals the recorded page events without exposing other tenant orders', async () => {
+  const service = new OrderService();
+  const originalGetById = service.getById;
+  const originalFindMany = prisma.billingEvent.findMany;
+  let capturedWhere;
+  service.getById = async (id, tenant, department) => {
+    assert.deepEqual([id, tenant, department], [orderId, tenantId, 'Księgowość']);
+    return { orderType: 'scan', status: 'delivered', items: [{ id: itemId }, { id: 'second-item' }] };
+  };
+  prisma.billingEvent.findMany = async ({ where }) => {
+    capturedWhere = where;
+    return [
+      { id: 'event-1', orderItemId: itemId, quantity: new Prisma.Decimal(2), unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('1.50'), currency: 'PLN', status: 'pending' },
+      { id: 'event-2', orderItemId: 'second-item', quantity: new Prisma.Decimal(3), unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('2.25'), currency: 'PLN', status: 'invoiced' },
+    ];
+  };
+  try {
+    const result = await service.getScanBilling(orderId, tenantId, 'Księgowość');
+    assert.deepEqual(capturedWhere, { orderId, tenantId, serviceCode: 'scan_page', sourceType: 'order_delivery' });
+    assert.equal(result.complete, true);
+    assert.equal(result.totalNet, '3.75');
+    assert.deepEqual(result.events.map((event) => event.quantity), ['2', '3']);
+  } finally {
+    service.getById = originalGetById;
+    prisma.billingEvent.findMany = originalFindMany;
+  }
+});
+
+test('scan billing does not report a partial amount as the final total', async () => {
+  const service = new OrderService();
+  const originalGetById = service.getById;
+  const originalFindMany = prisma.billingEvent.findMany;
+  service.getById = async () => ({ orderType: 'scan', status: 'completed', items: [{ id: itemId }, { id: 'second-item' }] });
+  prisma.billingEvent.findMany = async () => [
+    { id: 'event-1', orderItemId: itemId, quantity: new Prisma.Decimal(2), unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('1.50'), currency: 'PLN', status: 'pending' },
+    { id: 'event-2', orderItemId: 'second-item', quantity: new Prisma.Decimal(3), unitPrice: null, netAmount: null, currency: 'PLN', status: 'unpriced' },
+  ];
+  try {
+    const result = await service.getScanBilling(orderId, tenantId);
+    assert.equal(result.complete, false);
+    assert.equal(result.totalNet, null);
+    prisma.billingEvent.findMany = async () => [
+      { id: 'event-1', orderItemId: itemId, quantity: new Prisma.Decimal(2), unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('1.50'), currency: 'PLN', status: 'pending' },
+      { id: 'event-2', orderItemId: 'second-item', quantity: new Prisma.Decimal(3), unitPrice: null, netAmount: null, currency: 'PLN', status: 'excluded' },
+    ];
+    const excluded = await service.getScanBilling(orderId, tenantId);
+    assert.equal(excluded.complete, true);
+    assert.equal(excluded.totalNet, '1.5');
+    prisma.billingEvent.findMany = async () => [
+      { id: 'event-1', orderItemId: itemId, quantity: new Prisma.Decimal(2), unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('2.00'), currency: 'PLN', status: 'pending' },
+      { id: 'event-2', orderItemId: 'second-item', quantity: new Prisma.Decimal(3), unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('2.25'), currency: 'PLN', status: 'pending' },
+    ];
+    const inconsistent = await service.getScanBilling(orderId, tenantId);
+    assert.equal(inconsistent.complete, false);
+    assert.equal(inconsistent.totalNet, null);
+  } finally {
+    service.getById = originalGetById;
+    prisma.billingEvent.findMany = originalFindMany;
+  }
+});
+
+test('scan billing checks order visibility before reading financial events', async () => {
+  const service = new OrderService();
+  const originalGetById = service.getById;
+  const originalFindMany = prisma.billingEvent.findMany;
+  service.getById = async () => { throw Object.assign(new Error('Zlecenie nie znalezione'), { statusCode: 404 }); };
+  prisma.billingEvent.findMany = async () => { throw new Error('financial query must not run'); };
+  try {
+    await assert.rejects(service.getScanBilling(orderId, tenantId, 'Kadry'), { statusCode: 404 });
+  } finally {
+    service.getById = originalGetById;
+    prisma.billingEvent.findMany = originalFindMany;
+  }
+});
+
 test('delivering a scan does not move boxes or create custody events', async () => {
   const service = new OrderService();
   const order = {

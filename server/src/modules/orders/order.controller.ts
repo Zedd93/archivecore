@@ -4,6 +4,7 @@ import { custodyService } from './custody.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
 import { orderScanService } from './order-scan.service';
+import { billingService } from '../pricing/billing.service';
 import { orderHandoverPhotoService } from './order-handover-photo.service';
 import { z } from 'zod';
 import { OrderPriority, OrderType } from '@prisma/client';
@@ -40,6 +41,23 @@ export class OrderController {
       const preview = await orderService.previewSla(req.tenantId, req.query.orderType as OrderType, req.query.priority as OrderPriority);
       res.setHeader('Cache-Control', 'private, no-store');
       return successResponse(res, preview);
+    } catch (err) { next(err); }
+  }
+
+  async previewScanRate(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, await billingService.previewScanRate(req.tenantId));
+    } catch (err) { next(err); }
+  }
+
+  async getScanBilling(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, await orderService.getScanBilling(req.params.id, req.tenantId, req.accessDepartment || undefined));
     } catch (err) { next(err); }
   }
 

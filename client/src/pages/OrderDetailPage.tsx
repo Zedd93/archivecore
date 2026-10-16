@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDetail, usePatch } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
-import { RoleCode } from '@archivecore/shared';
+import { Permissions, RoleCode } from '@archivecore/shared';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
@@ -80,12 +80,23 @@ type CustodyTimelineEvent = {
 export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'issue', id || '');
   const { data: order, isLoading } = useDetail('order', '/orders', id);
+  const { data: scanBilling, isLoading: scanBillingLoading, error: scanBillingError } = useQuery<{
+    complete: boolean;
+    totalNet: string | null;
+    currency: string;
+    events: Array<{ id: string; orderItemId: string | null; quantity: string; unitPrice: string | null; netAmount: string | null; status: string }>;
+  }>({
+    queryKey: ['order-scan-billing', activeTenantId, id],
+    queryFn: async () => { const { data: response } = await api.get(`/orders/${id}/scan-billing`); return response.data; },
+    enabled: Boolean(id && order?.orderType === 'scan' && ['delivered', 'completed'].includes(order.status)
+      && hasPermission(Permissions.BILLING_VIEW)),
+  });
   const { data: assignees = [], isError: assigneesError } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
     queryKey: ['order-assignees', activeTenantId],
     queryFn: async () => { const { data } = await api.get('/orders/assignees'); return data.data; },
@@ -206,6 +217,9 @@ export default function OrderDetailPage() {
   const handledCount = order.items?.filter((item: any) => ['picked', 'delivered', 'returned'].includes(item.itemStatus)).length ?? 0;
   const remainingCount = (order.items?.length ?? 0) - handledCount;
   const missingScanCount = order.orderType === 'scan' ? order.items.filter((item: any) => !item.scanFile).length : 0;
+  const scanMoney = (amount: number) => new Intl.NumberFormat(i18n.language.startsWith('en') ? 'en-US' : 'pl-PL', {
+    style: 'currency', currency: scanBilling?.currency || 'PLN',
+  }).format(amount);
   const displayItems = canPick ? sortOrderItemsByPickRoute(order.items || []) : order.items || [];
   const handoverBoxes = [...new Map<string, { id: string; number: string }>((order.items || [])
     .filter((item: any) => item.boxId && item.box)
@@ -605,6 +619,26 @@ export default function OrderDetailPage() {
           </div>
         </div>
       )}
+
+      {order.orderType === 'scan' && ['delivered', 'completed'].includes(order.status) && hasPermission(Permissions.BILLING_VIEW) &&
+        <div className="card space-y-3">
+          <h2 className="text-lg font-semibold">{t('orders.detail.scanBillingTitle')}</h2>
+          {scanBillingLoading ? <Loader2 className="animate-spin" size={18} /> : scanBillingError ?
+            <p className="text-sm text-red-700">{getApiErrorMessage(scanBillingError, t('orders.detail.scanBillingError'))}</p> : <>
+              {scanBilling?.events.map((event) => {
+                const item = order.items.find((entry: any) => entry.id === event.orderItemId);
+                const label = item?.folder?.title || item?.document?.title || item?.transferListItem?.folderTitle || t('orders.detail.scanBillingItem');
+                return <div key={event.id} className="flex flex-wrap justify-between gap-2 border-b border-gray-100 pb-2 text-sm">
+                  <span className="min-w-0 break-words">{label} · {t('orders.detail.scanBillingPages', { count: Number(event.quantity) })}</span>
+                  <span>{event.unitPrice !== null ? t('orders.detail.scanBillingRate', { amount: scanMoney(Number(event.unitPrice)) }) : '—'} · {event.netAmount !== null && event.status !== 'excluded' ? scanMoney(Number(event.netAmount)) : '—'} · {t(`admin.pricing.eventStatuses.${event.status}`)}</span>
+                </div>;
+              })}
+              {scanBilling?.complete && scanBilling.totalNet !== null ?
+                <p className="font-semibold">{t('orders.detail.scanBillingTotal', { amount: scanMoney(Number(scanBilling.totalNet)) })}</p> :
+                <p className="text-sm text-amber-700">{t('orders.detail.scanBillingIncomplete')}</p>}
+              <p className="text-xs text-gray-500">{t('orders.detail.scanBillingHint')}</p>
+            </>}
+        </div>}
 
       {/* Actions */}
       <div className="card">

@@ -38,10 +38,12 @@ router.get('/', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, n
 router.get('/warehouse-tasks', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.listWarehouseTasks(req, res, next));
 router.get('/sla-summary', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getSlaSummary(req, res, next));
 router.get('/sla-preview', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(previewOrderSlaQuerySchema, 'query'), (req, res, next) => orderController.previewSla(req, res, next));
+router.get('/scan-rate', ...auth, requirePermission(Permissions.ORDER_CREATE), requirePermission(Permissions.BILLING_VIEW), (req, res, next) => orderController.previewScanRate(req, res, next));
 router.get('/assignees', ...auth, requirePermission(Permissions.ORDER_PROCESS), (req, res, next) => orderController.listAssignees(req, res, next));
 router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getOverdueSla(req, res, next));
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));
+router.get('/:id/scan-billing', ...auth, requirePermission(Permissions.ORDER_READ), requirePermission(Permissions.BILLING_VIEW), (req, res, next) => orderController.getScanBilling(req, res, next));
 router.get('/:id/history', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getHistory(req, res, next));
 router.get('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.downloadScan(req, res, next));
 router.get('/:id/custody', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getCustodyByOrder(req, res, next));

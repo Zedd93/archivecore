@@ -69,6 +69,19 @@ export class BillingService {
     });
   }
 
+  async previewScanRate(tenantId: string, at = new Date()) {
+    const priceList = await this.findPriceList(tenantId, startOfUtcDay(at));
+    const rate = priceList?.items.find((item) => item.serviceCode === 'scan_page');
+    if (!priceList || !rate) return null;
+    return {
+      serviceName: rate.serviceName,
+      unitPrice: rate.unitPrice.toString(),
+      vatRate: rate.vatRate.toString(),
+      currency: priceList.currency,
+      validFrom: priceList.validFrom,
+    };
+  }
+
   private async assertPeriodOpen(tenantId: string, periodStart: Date, db: typeof prisma | Prisma.TransactionClient = prisma) {
     const period = await db.billingPeriod.findUnique({
       where: { tenantId_periodStart: { tenantId, periodStart } },
