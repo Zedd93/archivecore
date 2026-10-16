@@ -9,7 +9,7 @@ export class AttachmentController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!req.file) return errorResponse(res, 'Wybierz plik PDF', 400);
-      const result = await scanBatchService.preview(req.file, req.tenantId, req.accessDepartment || undefined);
+      const result = await scanBatchService.preview(req.file, req.tenantId, req.accessDepartment || undefined, req.body.overrides);
       return successResponse(res, result);
     } catch (err) { next(err); }
   }
@@ -20,6 +20,7 @@ export class AttachmentController {
       if (!req.file) return errorResponse(res, 'Wybierz plik PDF', 400);
       const result = await scanBatchService.commit(
         req.file, req.tenantId, req.user!.userId, String(req.body.checksumSha256 || ''), req.accessDepartment || undefined,
+        req.body.overrides, String(req.body.planHash || ''),
       );
       return successResponse(res, result, 201);
     } catch (err) { next(err); }

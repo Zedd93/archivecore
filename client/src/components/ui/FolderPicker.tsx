@@ -23,6 +23,7 @@ interface FolderPickerProps {
   placeholder?: string;
   className?: string;
   maxSelected?: number;
+  disabled?: boolean;
 }
 
 export default function FolderPicker({
@@ -32,10 +33,12 @@ export default function FolderPicker({
   placeholder,
   className = '',
   maxSelected,
+  disabled = false,
 }: FolderPickerProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const tenantId = localStorage.getItem('tenantId') || '';
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,7 +67,7 @@ export default function FolderPicker({
   }, []);
 
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['folder-picker', debouncedSearch],
+    queryKey: ['folder-picker', tenantId, debouncedSearch],
     queryFn: async () => {
       if (!debouncedSearch.trim()) return [];
       const { data } = await api.get('/folders', {
@@ -115,6 +118,7 @@ export default function FolderPicker({
               </span>
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => removeFolder(folder)}
                 className="hover:text-red-600"
                 aria-label={t('common.remove', 'Usuń')}
@@ -133,6 +137,7 @@ export default function FolderPicker({
             id={id}
             type="text"
             value={search}
+            disabled={disabled}
             onChange={(e) => handleSearchChange(e.target.value)}
             onFocus={() => {
               if (search) setOpen(true);
@@ -158,6 +163,7 @@ export default function FolderPicker({
               <button
                 key={`${folder.source}-${folder.id}`}
                 type="button"
+                disabled={disabled}
                 onClick={() => selectFolder(folder)}
                 className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0"
               >

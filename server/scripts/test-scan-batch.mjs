@@ -10,11 +10,11 @@ const folderA = '11111111-1111-4111-8111-111111111111';
 const folderB = '22222222-2222-4222-8222-222222222222';
 const codes = [generateFolderQrData(folderA), null, null, generateFolderQrData(folderB), null];
 
-async function makeFile(withQrImages = false) {
+async function makeFile(withQrImages = false, unreadablePages = []) {
   const pdf = await PDFDocument.create();
   for (let index = 0; index < codes.length; index++) {
     const page = pdf.addPage([500 + index, 700]);
-    if (withQrImages && codes[index]) {
+    if (withQrImages && codes[index] && !unreadablePages.includes(index + 1)) {
       const image = await pdf.embedPng(await QRCode.toBuffer(codes[index], { width: 400, margin: 3 }));
       page.drawImage(image, { x: 50, y: 200, width: 400, height: 400 });
     } else {
@@ -76,6 +76,52 @@ test('scan batch rejects missing or invalid QR, empty segments and inaccessible 
   await assert.rejects(new ScanBatchService(inaccessible.db, storage, async () => codes).preview(file, 'tenant-a'), { statusCode: 403 });
 });
 
+test('manual separator recovers a missing or unreadable QR without overriding a valid code', async () => {
+  const file = await makeFile();
+  const { db } = makeDb();
+  const missingFirst = [null, null, null, codes[3], null];
+  const service = new ScanBatchService(db, { uploadFile: async () => {}, deleteFile: async () => {} }, async () => missingFirst);
+  await assert.rejects(service.preview(file, 'tenant-a'), { statusCode: 422 });
+  const preview = await service.preview(file, 'tenant-a', undefined, JSON.stringify([{ page: 1, folderId: folderA }]));
+  assert.deepEqual(preview.segments.map(({ folderId, source, coverPage }) => ({ folderId, source, coverPage })), [
+    { folderId: folderA, source: 'manual', coverPage: 1 },
+    { folderId: folderB, source: 'qr', coverPage: 4 },
+  ]);
+  assert.match(preview.planHash, /^[a-f0-9]{64}$/);
+
+  const unreadable = new ScanBatchService(db, { uploadFile: async () => {}, deleteFile: async () => {} }, async () => [codes[0], null, null, 'ACF:bad:code', null]);
+  await assert.rejects(unreadable.preview(file, 'tenant-a'), { statusCode: 422 });
+  const repaired = await unreadable.preview(file, 'tenant-a', undefined, [{ page: 4, folderId: folderB }]);
+  assert.equal(repaired.segments[1].source, 'manual');
+  await assert.rejects(new ScanBatchService(db, { uploadFile: async () => {}, deleteFile: async () => {} }, async () => codes)
+    .preview(file, 'tenant-a', undefined, [{ page: 4, folderId: folderA }]), { statusCode: 409 });
+});
+
+test('manual separators reject duplicate, out-of-range and unauthorized selections', async () => {
+  const file = await makeFile();
+  const { db } = makeDb({ allowedIds: [folderA] });
+  const service = new ScanBatchService(db, { uploadFile: async () => {}, deleteFile: async () => {} }, async () => [null, null, null, null, null]);
+  await assert.rejects(service.preview(file, 'tenant-a', undefined, [{ page: 1, folderId: folderA }, { page: 1, folderId: folderB }]), { statusCode: 400 });
+  await assert.rejects(service.preview(file, 'tenant-a', undefined, [{ page: 6, folderId: folderA }]), { statusCode: 400 });
+  await assert.rejects(service.preview(file, 'tenant-a', undefined, [{ page: 1, folderId: folderB }]), { statusCode: 403 });
+  await assert.rejects(service.preview(file, 'tenant-a', undefined, '[{"page":"1","folderId":"not-a-uuid"}]'), { statusCode: 400 });
+});
+
+test('manual assignment cannot change between preview and commit', async () => {
+  const file = await makeFile();
+  const { db, created } = makeDb();
+  const uploaded = [];
+  const service = new ScanBatchService(db, { uploadFile: async (key) => { uploaded.push(key); }, deleteFile: async () => {} }, async () => [codes[0], null, null, null, null]);
+  const reviewed = [{ page: 4, folderId: folderB }];
+  const preview = await service.preview(file, 'tenant-a', undefined, reviewed);
+  await assert.rejects(service.commit(file, 'tenant-a', 'user-a', preview.checksumSha256, undefined, reviewed), { statusCode: 409 });
+  await assert.rejects(service.commit(file, 'tenant-a', 'user-a', preview.checksumSha256, undefined, [{ page: 4, folderId: folderA }], preview.planHash), { statusCode: 409 });
+  assert.equal(uploaded.length, 0);
+  const result = await service.commit(file, 'tenant-a', 'user-a', preview.checksumSha256, undefined, JSON.stringify(reviewed), preview.planHash);
+  assert.equal(result.attachments.length, 2);
+  assert.deepEqual(created.map((item) => item.folderId), [folderA, folderB]);
+});
+
 test('scan batch commits separate PDFs only after matching the reviewed checksum', async () => {
   const file = await makeFile();
   const { db, created } = makeDb();
@@ -122,4 +168,15 @@ test('real PDF rendering recognizes ArchiveCore folder QR labels', { skip: proce
   const service = new ScanBatchService(db);
   const preview = await service.preview(file, 'tenant-a');
   assert.deepEqual(preview.segments.map((segment) => segment.folderId), [folderA, folderB]);
+});
+
+test('real PDF rendering supports a manually identified unreadable cover page', { skip: process.env.SCAN_BATCH_RENDER_TEST !== '1' }, async () => {
+  const file = await makeFile(true, [4]);
+  const { db } = makeDb();
+  const service = new ScanBatchService(db);
+  const preview = await service.preview(file, 'tenant-a', undefined, [{ page: 4, folderId: folderB }]);
+  assert.deepEqual(preview.segments.map(({ folderId, source, firstPage, lastPage }) => ({ folderId, source, firstPage, lastPage })), [
+    { folderId: folderA, source: 'qr', firstPage: 2, lastPage: 3 },
+    { folderId: folderB, source: 'manual', firstPage: 5, lastPage: 5 },
+  ]);
 });

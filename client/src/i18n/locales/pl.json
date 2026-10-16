@@ -1338,12 +1338,21 @@
     "coverPage": "Separator",
     "folder": "Teczka",
     "documentPages": "Strony dokumentu",
-    "reviewWarning": "Sprawdź wszystkie przypisania z oryginalnym plikiem. Nieczytelny kod, brak teczki albo brak dostępu zatrzyma cały wsad. Podgląd niczego jeszcze nie zapisuje.",
+    "reviewWarning": "Sprawdź wszystkie przypisania z oryginalnym plikiem, szczególnie ręczne separatory. Brak teczki albo brak dostępu zatrzyma cały wsad. Podgląd niczego jeszcze nie zapisuje.",
     "confirm": "Sprawdziłem przypisania i zgadzam się na zapis skanów do wskazanych teczek.",
     "save": "Zapisz skany w teczkach",
     "saved": "Skany przypisano do teczek",
     "savedTitle": "Zapisane pliki",
-    "allowPopup": "Zezwól przeglądarce na otwarcie nowej karty, aby pobrać plik"
+    "allowPopup": "Zezwól przeglądarce na otwarcie nowej karty, aby pobrać plik",
+    "openPdf": "Otwórz oryginalny PDF",
+    "manualTitle": "Nieczytelny separator?",
+    "manualHint": "Otwórz PDF i wskaż numer strony z nieczytelną etykietą oraz teczkę z listy. Ta strona zostanie wyłączona z zapisywanego skanu. Nierozpoznana etykieta może zostać uznana za treść poprzedniej teczki, więc sprawdź podgląd. Poprawnych QR nie można nadpisać.",
+    "page": "Strona",
+    "pickFolder": "Wyszukaj teczkę",
+    "addSeparator": "Dodaj ręczny separator",
+    "removeSeparator": "Usuń",
+    "manualBadge": "Ręcznie",
+    "incompleteManual": "Uzupełnij różne numery stron (1–20) i wybierz teczki dla wszystkich ręcznych separatorów"
   },
 
   "settings": {
