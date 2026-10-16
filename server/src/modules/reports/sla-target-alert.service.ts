@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { RoleCode } from '@archivecore/shared';
 import { prisma } from '../../config/database';
-import { notificationService } from '../notifications/notification.service';
+import { NotificationService, notificationService } from '../notifications/notification.service';
 
 const WINDOW_DAYS = 30;
 const MIN_COMPLETED = 5;
@@ -12,7 +12,10 @@ type SlaCountRow = { tenantId: string; completed: number; breached: number };
 class NoAlertRecipientError extends Error {}
 
 export class SlaTargetAlertService {
-  constructor(private readonly db: PrismaClient = prisma) {}
+  constructor(
+    private readonly db: PrismaClient = prisma,
+    private readonly notifier: Pick<NotificationService, 'notifyTenantUsers'> = notificationService,
+  ) {}
 
   async processDue(now = new Date()) {
     const since = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60_000);
@@ -67,7 +70,7 @@ export class SlaTargetAlertService {
       });
       if (claimed.count === 0) return false;
 
-      const result = await notificationService.notifyTenantUsers({
+      const result = await this.notifier.notifyTenantUsers({
         tenantId: tenant.id,
         type: 'tenant_sla_target_below',
         title: 'SLA poniżej celu',

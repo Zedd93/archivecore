@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 const { SlaTargetAlertService } = await import('../src/modules/reports/sla-target-alert.service.ts');
-const { NotificationService, notificationService } = await import('../src/modules/notifications/notification.service.ts');
+const { NotificationService } = await import('../src/modules/notifications/notification.service.ts');
 
 test('SLA target alert reaches only managers of that client and global admins', async () => {
   let written;
@@ -40,7 +40,6 @@ test('SLA target alert is sent once per breach and rearms after recovery or insu
   ];
   let recipients = 1;
   const notifications = [];
-  const originalNotify = notificationService.notifyTenantUsers;
   const alertState = {
     upsert: async ({ where }) => {
       if (!states.has(where.tenantId)) states.set(where.tenantId, { isBelow: false, lastNotifiedAt: null });
@@ -85,14 +84,14 @@ test('SLA target alert is sent once per breach and rearms after recovery or insu
       }
     },
   };
-  notificationService.notifyTenantUsers = async (payload, tx) => {
+  const notifier = { notifyTenantUsers: async (payload, tx) => {
     assert.ok(tx.tenantSlaTargetAlertState);
     notifications.push(payload);
     return { count: recipients };
-  };
+  } };
 
-  try {
-    const service = new SlaTargetAlertService(db);
+  {
+    const service = new SlaTargetAlertService(db, notifier);
     assert.equal(await service.processDue(now), 1);
     assert.equal(states.get('tenant-a').isBelow, true);
     assert.equal(states.get('tenant-a').lastNotifiedAt, now);
@@ -121,7 +120,5 @@ test('SLA target alert is sent once per breach and rearms after recovery or insu
     recipients = 1;
     assert.equal(await service.processDue(now), 1);
     assert.equal(notifications.length, 4);
-  } finally {
-    notificationService.notifyTenantUsers = originalNotify;
   }
 });
