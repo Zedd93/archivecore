@@ -25,6 +25,7 @@ interface SlaBreakdown {
   data: Array<{
     tenantId: string;
     tenantName: string;
+    orderType: string;
     priority: string;
     completed: number;
     breached: number;
@@ -34,6 +35,14 @@ interface SlaBreakdown {
   }>;
   totals: { completed: number; breached: number; activeOverdue: number };
 }
+
+const SLA_ORDER_TYPES = [
+  { code: 'checkout', labelKey: 'orders.typeIssue' },
+  { code: 'return_order', labelKey: 'orders.typeReturn' },
+  { code: 'transfer', labelKey: 'orders.typeTransfer' },
+  { code: 'disposal', labelKey: 'orders.typeDestruction' },
+  { code: 'scan', labelKey: 'orders.typeScan' },
+] as const;
 
 const currentMonth = () => {
   const now = new Date();
@@ -55,8 +64,10 @@ export default function ReportsPage() {
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [slaDays, setSlaDays] = useState(180);
   const [slaScope, setSlaScope] = useState<'tenant' | 'all'>('tenant');
+  const [slaOrderType, setSlaOrderType] = useState('');
   const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const orderTypeLabels = Object.fromEntries(SLA_ORDER_TYPES.map(({ code, labelKey }) => [code, t(labelKey)]));
   const { exportData: exportSlaBreakdown, isExporting: slaExporting } = useExport({
     endpoint: '/reports/sla/breakdown/export',
     defaultFilename: 'raport_sla.xlsx',
@@ -106,9 +117,9 @@ export default function ReportsPage() {
   });
 
   const { data: slaBreakdown, isLoading: slaBreakdownLoading, isError: slaBreakdownError, refetch: refetchSlaBreakdown } = useQuery<SlaBreakdown>({
-    queryKey: ['report-sla-breakdown', user?.id, canViewAllSla, activeTenantId, slaScope, slaDays],
+    queryKey: ['report-sla-breakdown', user?.id, canViewAllSla, activeTenantId, slaScope, slaDays, slaOrderType],
     queryFn: async () => {
-      const { data } = await api.get('/reports/sla/breakdown', { params: { days: slaDays, scope: slaScope } });
+      const { data } = await api.get('/reports/sla/breakdown', { params: { days: slaDays, scope: slaScope, orderType: slaOrderType || undefined } });
       return data.data;
     },
     enabled: slaScope === 'all' ? canViewAllSla : Boolean(activeTenantId),
@@ -260,11 +271,18 @@ export default function ReportsPage() {
               <option value="all">{t('reports.slaAllTenants')}</option>
             </select>
           </label>}
+          <label className="text-sm font-medium text-gray-700">
+            {t('reports.slaOrderType')}
+            <select className="input-field mt-1" value={slaOrderType} onChange={(event) => setSlaOrderType(event.target.value)}>
+              <option value="">{t('reports.slaAllOrderTypes')}</option>
+              {SLA_ORDER_TYPES.map(({ code, labelKey }) => <option key={code} value={code}>{t(labelKey)}</option>)}
+            </select>
+          </label>
           {hasPermission(Permissions.REPORT_EXPORT) && <div className="flex flex-wrap items-end gap-2">
-            <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'xlsx', scope: slaScope, days: String(slaDays) }); }}>
+            <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'xlsx', scope: slaScope, days: String(slaDays), ...(slaOrderType ? { orderType: slaOrderType } : {}) }); }}>
               {slaExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}{t('reports.slaExportXlsx')}
             </button>
-            <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'csv', scope: slaScope, days: String(slaDays) }); }}>
+            <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'csv', scope: slaScope, days: String(slaDays), ...(slaOrderType ? { orderType: slaOrderType } : {}) }); }}>
               {t('reports.slaExportCsv')}
             </button>
           </div>}
@@ -278,6 +296,7 @@ export default function ReportsPage() {
                 <thead>
                   <tr className="border-b text-left text-gray-600">
                     <th scope="col" className="py-2 pr-4">{t('reports.slaTenant')}</th>
+                    <th scope="col" className="py-2 pr-4">{t('reports.slaOrderType')}</th>
                     <th scope="col" className="py-2 pr-4">{t('reports.slaPriority')}</th>
                     <th scope="col" className="py-2 pr-4 text-right">{t('reports.slaCompleted')}</th>
                     <th scope="col" className="py-2 pr-4 text-right">{t('reports.slaBreached')}</th>
@@ -287,8 +306,9 @@ export default function ReportsPage() {
                 </thead>
                 <tbody>
                   {slaBreakdown.data.map((row) => (
-                    <tr key={`${row.tenantId}-${row.priority}`} className="border-b border-gray-100">
+                    <tr key={`${row.tenantId}-${row.orderType}-${row.priority}`} className="border-b border-gray-100">
                       <td className="py-2 pr-4 font-medium">{row.tenantName}</td>
+                      <td className="py-2 pr-4">{orderTypeLabels[row.orderType] || row.orderType}</td>
                       <td className="py-2 pr-4">{t(`reports.slaPriority${row.priority === 'urgent' ? 'Urgent' : row.priority === 'high' ? 'High' : 'Normal'}`)}</td>
                       <td className="py-2 pr-4 text-right">{row.completed}</td>
                       <td className="py-2 pr-4 text-right text-red-700">{row.breached}</td>
@@ -299,7 +319,7 @@ export default function ReportsPage() {
                 </tbody>
                 <tfoot>
                   <tr className="font-semibold text-gray-900">
-                    <th scope="row" colSpan={2} className="pt-3 text-left">{t('reports.slaTotal')}</th>
+                    <th scope="row" colSpan={3} className="pt-3 text-left">{t('reports.slaTotal')}</th>
                     <td className="pt-3 pr-4 text-right">{slaBreakdown.totals.completed}</td>
                     <td className="pt-3 pr-4 text-right">{slaBreakdown.totals.breached}</td>
                     <td className="pt-3 pr-4 text-right">{slaBreakdown.totals.activeOverdue}</td>

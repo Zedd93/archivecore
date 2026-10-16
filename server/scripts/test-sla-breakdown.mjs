@@ -9,15 +9,15 @@ const { reportController } = require('../dist/modules/reports/report.controller.
 const { buildSlaBreakdownExport } = require('../dist/modules/reports/sla-breakdown-export.js');
 const XLSX = require('xlsx');
 
-test('SLA breakdown groups by tenant and priority, with tenant filtering', async () => {
+test('SLA breakdown groups by tenant, order type and priority, with scoped filters', async () => {
   const originalQueryRaw = prisma.$queryRaw;
   const originalFindMany = prisma.tenant.findMany;
   let query;
   prisma.$queryRaw = async (sql) => {
     query = sql;
     return [
-      { tenantId: 'tenant-a', priority: 'normal', completed: 5, breached: 2, activeOverdue: 1 },
-      { tenantId: 'tenant-a', priority: 'urgent', completed: 0, breached: 0, activeOverdue: 3 },
+      { tenantId: 'tenant-a', orderType: 'checkout', priority: 'normal', completed: 5, breached: 2, activeOverdue: 1 },
+      { tenantId: 'tenant-a', orderType: 'scan', priority: 'urgent', completed: 0, breached: 0, activeOverdue: 3 },
     ];
   };
   prisma.tenant.findMany = async () => [{ id: 'tenant-a', name: 'Firma A' }];
@@ -26,17 +26,24 @@ test('SLA breakdown groups by tenant and priority, with tenant filtering', async
     const now = new Date('2026-10-15T12:00:00.000Z');
     const result = await new ReportService().getSlaBreakdown('tenant-a', 30, now);
     assert.match(query.sql, /"tenantId" = \?::uuid/);
+    assert.match(query.sql, /GROUP BY "tenantId", "orderType", "priority"/);
     assert.ok(query.values.includes('tenant-a'));
     assert.ok(query.values.some((value) => value instanceof Date && value.getTime() === now.getTime()));
     assert.equal(result.since.toISOString(), '2026-09-15T12:00:00.000Z');
-    assert.deepEqual(result.data.map(({ priority, onTime, slaRate }) => ({ priority, onTime, slaRate })), [
-      { priority: 'urgent', onTime: 0, slaRate: null },
-      { priority: 'normal', onTime: 3, slaRate: 60 },
+    assert.deepEqual(result.data.map(({ orderType, priority, onTime, slaRate }) => ({ orderType, priority, onTime, slaRate })), [
+      { orderType: 'checkout', priority: 'normal', onTime: 3, slaRate: 60 },
+      { orderType: 'scan', priority: 'urgent', onTime: 0, slaRate: null },
     ]);
     assert.deepEqual(result.totals, { completed: 5, breached: 2, activeOverdue: 4 });
 
     await new ReportService().getSlaBreakdown(undefined, 30, now);
     assert.doesNotMatch(query.sql, /"tenantId" = \?::uuid/);
+    assert.doesNotMatch(query.sql, /AND "orderType" = \?::"OrderType"/);
+
+    const filtered = await new ReportService().getSlaBreakdown('tenant-a', 30, now, 'scan');
+    assert.match(query.sql, /AND "orderType" = \?::"OrderType"/);
+    assert.ok(query.values.includes('scan'));
+    assert.equal(filtered.orderType, 'scan');
   } finally {
     prisma.$queryRaw = originalQueryRaw;
     prisma.tenant.findMany = originalFindMany;
@@ -46,7 +53,8 @@ test('SLA breakdown groups by tenant and priority, with tenant filtering', async
 test('SLA breakdown blocks all-client access for tenant roles and rejects invalid periods', async () => {
   const original = reportService.getSlaBreakdown;
   let called = false;
-  reportService.getSlaBreakdown = async () => { called = true; return {}; };
+  let requestedType;
+  reportService.getSlaBreakdown = async (_tenantId, _days, _now, orderType) => { called = true; requestedType = orderType; return {}; };
   const response = () => ({
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
@@ -64,10 +72,16 @@ test('SLA breakdown blocks all-client access for tenant roles and rejects invali
     assert.equal(invalid.statusCode, 400);
     assert.equal(called, false);
 
+    const invalidType = response();
+    await reportController.getSlaBreakdown({ query: { orderType: 'unknown' }, tenantId: 'tenant-a', user: { roles: ['TK'] } }, invalidType, next);
+    assert.equal(invalidType.statusCode, 400);
+    assert.equal(called, false);
+
     const allowed = response();
-    await reportController.getSlaBreakdown({ query: { scope: 'all' }, tenantId: null, user: { roles: ['SA'] } }, allowed, next);
+    await reportController.getSlaBreakdown({ query: { scope: 'all', orderType: 'checkout' }, tenantId: null, user: { roles: ['SA'] } }, allowed, next);
     assert.equal(allowed.statusCode, 200);
     assert.equal(called, true);
+    assert.equal(requestedType, 'checkout');
   } finally {
     reportService.getSlaBreakdown = original;
   }
@@ -78,9 +92,10 @@ test('SLA export produces a readable Excel and UTF-8 CSV with the same totals', 
     days: 30,
     since: new Date('2026-09-15T12:00:00.000Z'),
     asOf: new Date('2026-10-15T12:00:00.000Z'),
+    orderType: null,
     data: [
-      { tenantId: 'a', tenantName: 'Spółdzielnia Żory', priority: 'urgent', completed: 5, breached: 2, activeOverdue: 1, onTime: 3, slaRate: 60 },
-      { tenantId: 'b', tenantName: '=2+2', priority: 'normal', completed: 0, breached: 0, activeOverdue: 2, onTime: 0, slaRate: null },
+      { tenantId: 'a', tenantName: 'Spółdzielnia Żory', orderType: 'checkout', priority: 'urgent', completed: 5, breached: 2, activeOverdue: 1, onTime: 3, slaRate: 60 },
+      { tenantId: 'b', tenantName: '=2+2', orderType: 'scan', priority: 'normal', completed: 0, breached: 0, activeOverdue: 2, onTime: 0, slaRate: null },
     ],
     totals: { completed: 5, breached: 2, activeOverdue: 3 },
   };
@@ -89,16 +104,17 @@ test('SLA export produces a readable Excel and UTF-8 CSV with the same totals', 
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets.SLA, { header: 1 });
   assert.match(excel.filename, /^raport_sla_2026-10-15T12-00-00-000Z\.xlsx$/);
   assert.equal(rows[3][1], 'Wszyscy klienci');
-  assert.deepEqual(rows[5], ['Klient', 'Priorytet', 'Zakończone', 'Po terminie', 'Aktywne po terminie', 'W terminie (%)']);
-  assert.deepEqual(rows[6], ['Spółdzielnia Żory', 'Maksymalny', 5, 2, 1, 60]);
+  assert.equal(rows[4][1], 'Wszystkie');
+  assert.deepEqual(rows[6], ['Klient', 'Rodzaj zlecenia', 'Priorytet', 'Zakończone', 'Po terminie', 'Aktywne po terminie', 'W terminie (%)']);
+  assert.deepEqual(rows[7], ['Spółdzielnia Żory', 'Wydanie', 'Maksymalny', 5, 2, 1, 60]);
   assert.equal(workbook.Sheets.SLA.A8.t, 's');
-  assert.deepEqual(rows[8], ['Razem', '', 5, 2, 3, 60]);
+  assert.deepEqual(rows[9], ['Razem', '', '', 5, 2, 3, 60]);
 
   const csv = buildSlaBreakdownExport(report, 'tenant', 'csv');
   const content = csv.buffer.toString('utf8');
   assert.ok(content.startsWith('\uFEFF'));
-  assert.match(content, /Spółdzielnia Żory;Maksymalny;5;2;1;60/);
-  assert.match(content, /'=2\+2;Normalny;0;0;2/);
+  assert.match(content, /Spółdzielnia Żory;Wydanie;Maksymalny;5;2;1;60/);
+  assert.match(content, /'=2\+2;Skan na żądanie;Normalny;0;0;2/);
   assert.match(content, /Wybrany klient/);
   assert.match(csv.filename, /\.csv$/);
 });
@@ -107,10 +123,12 @@ test('SLA export shares report scope checks and rejects unsupported formats', as
   const original = reportService.getSlaBreakdown;
   const originalAudit = prisma.auditLog.create;
   let called = false;
+  let requestedType;
   let audit;
-  reportService.getSlaBreakdown = async () => {
+  reportService.getSlaBreakdown = async (_tenantId, _days, _now, orderType) => {
     called = true;
-    return { days: 30, since: new Date('2026-09-15T12:00:00.000Z'), asOf: new Date('2026-10-15T12:00:00.000Z'), data: [], totals: { completed: 0, breached: 0, activeOverdue: 0 } };
+    requestedType = orderType;
+    return { days: 30, since: new Date('2026-09-15T12:00:00.000Z'), asOf: new Date('2026-10-15T12:00:00.000Z'), orderType: orderType ?? null, data: [], totals: { completed: 0, breached: 0, activeOverdue: 0 } };
   };
   prisma.auditLog.create = async (query) => { audit = query.data; return { id: 'audit-1' }; };
   const response = () => ({
@@ -134,12 +152,19 @@ test('SLA export shares report scope checks and rejects unsupported formats', as
     assert.equal(called, false);
     assert.equal(audit, undefined);
 
+    const invalidType = response();
+    await reportController.exportSlaBreakdown({ query: { orderType: 'other' }, tenantId: 'tenant-a', user: { roles: ['TK'] } }, invalidType, next);
+    assert.equal(invalidType.statusCode, 400);
+    assert.equal(called, false);
+
     const allowed = response();
-    await reportController.exportSlaBreakdown({ query: { scope: 'all', days: '30', format: 'csv' }, tenantId: null, user: { roles: ['SA'], userId: 'admin-1' }, headers: {}, ip: '127.0.0.1' }, allowed, next);
+    await reportController.exportSlaBreakdown({ query: { scope: 'all', days: '30', orderType: 'scan', format: 'csv' }, tenantId: null, user: { roles: ['SA'], userId: 'admin-1' }, headers: {}, ip: '127.0.0.1' }, allowed, next);
     assert.equal(called, true);
+    assert.equal(requestedType, 'scan');
     assert.equal(audit.action, 'report.sla.export');
     assert.equal(audit.userId, 'admin-1');
-    assert.deepEqual(audit.newValues, { scope: 'all', days: 30, format: 'csv', rows: 0, asOf: '2026-10-15T12:00:00.000Z' });
+    assert.deepEqual(audit.newValues, { scope: 'all', days: 30, orderType: 'scan', format: 'csv', rows: 0, asOf: '2026-10-15T12:00:00.000Z' });
+    assert.match(allowed.body.toString('utf8'), /Rodzaj zlecenia;Skan na żądanie/);
     assert.equal(allowed.headers['Content-Type'], 'text/csv; charset=utf-8');
     assert.equal(allowed.headers['Content-Length'], allowed.body.length);
     assert.equal(allowed.headers['Cache-Control'], 'no-store');

@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { Prisma } from '@prisma/client';
+import { OrderType, Prisma } from '@prisma/client';
 import {
   BOX_STATUS_LABELS,
   DOC_TYPE_LABELS,
@@ -10,6 +10,7 @@ import { findTenantOverCapacityLocations } from './storage-health';
 
 interface SlaBreakdownRow {
   tenantId: string;
+  orderType: OrderType;
   priority: string;
   completed: number;
   breached: number;
@@ -386,11 +387,12 @@ export class ReportService {
     return { total, onTime, overdue: total - onTime, slaRate };
   }
 
-  async getSlaBreakdown(tenantId: string | undefined, days: number, now = new Date()) {
+  async getSlaBreakdown(tenantId: string | undefined, days: number, now = new Date(), orderType?: OrderType) {
     const since = new Date(now.getTime() - days * 24 * 60 * 60_000);
     const tenantFilter = tenantId ? Prisma.sql`AND "tenantId" = ${tenantId}::uuid` : Prisma.empty;
+    const orderTypeFilter = orderType ? Prisma.sql`AND "orderType" = ${orderType}::"OrderType"` : Prisma.empty;
     const rows = await prisma.$queryRaw<SlaBreakdownRow[]>(Prisma.sql`
-      SELECT "tenantId", "priority",
+      SELECT "tenantId", "orderType", "priority",
         COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since})::int AS "completed",
         COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since} AND "completedAt" > "slaDeadline")::int AS "breached",
         COUNT(*) FILTER (WHERE "status" IN ('submitted', 'approved', 'in_progress', 'ready') AND "slaDeadline" < ${now})::int AS "activeOverdue"
@@ -398,8 +400,8 @@ export class ReportService {
       WHERE (
         ("status" = 'completed' AND "completedAt" >= ${since} AND "slaDeadline" IS NOT NULL)
         OR ("status" IN ('submitted', 'approved', 'in_progress', 'ready') AND "slaDeadline" < ${now})
-      ) ${tenantFilter}
-      GROUP BY "tenantId", "priority"
+      ) ${tenantFilter} ${orderTypeFilter}
+      GROUP BY "tenantId", "orderType", "priority"
     `);
     const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
     const tenants = tenantIds.length ? await prisma.tenant.findMany({
@@ -407,6 +409,7 @@ export class ReportService {
       select: { id: true, name: true },
     }) : [];
     const names = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+    const orderTypeOrder: Record<string, number> = { checkout: 0, return_order: 1, transfer: 2, disposal: 3, scan: 4 };
     const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
     const data = rows.map((row) => ({
       ...row,
@@ -414,13 +417,14 @@ export class ReportService {
       onTime: row.completed - row.breached,
       slaRate: row.completed ? Math.round((row.completed - row.breached) / row.completed * 100) : null,
     })).sort((a, b) => a.tenantName.localeCompare(b.tenantName, 'pl')
+      || (orderTypeOrder[a.orderType] ?? 5) - (orderTypeOrder[b.orderType] ?? 5)
       || (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3));
     const totals = data.reduce((sum, row) => ({
       completed: sum.completed + row.completed,
       breached: sum.breached + row.breached,
       activeOverdue: sum.activeOverdue + row.activeOverdue,
     }), { completed: 0, breached: 0, activeOverdue: 0 });
-    return { days, since, asOf: now, data, totals };
+    return { days, since, asOf: now, orderType: orderType ?? null, data, totals };
   }
 }
 
