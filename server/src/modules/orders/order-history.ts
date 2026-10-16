@@ -5,6 +5,8 @@ export const ORDER_HISTORY_ACTIONS = [
   'order.reject',
   'order.process',
   'order.ready',
+  'order.scan_quote.prepare',
+  'order.scan_quote.approve',
   'order.deliver',
   'order.complete',
   'order.cancel',

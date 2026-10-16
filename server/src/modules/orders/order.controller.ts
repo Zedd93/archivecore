@@ -61,6 +61,32 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async getScanQuote(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, await orderService.getScanQuote(req.params.id, req.tenantId, req.accessDepartment || undefined));
+    } catch (err) { next(err); }
+  }
+
+  async prepareScanQuote(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      return successResponse(res, await orderService.prepareExistingScanQuote(req.params.id, req.tenantId), 201);
+    } catch (err) { next(err); }
+  }
+
+  async approveScanQuote(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
+      if (req.user!.tenantId !== req.tenantId) return errorResponse(res, 'Wycena może być zatwierdzona wyłącznie przez użytkownika tego klienta', 403);
+      return successResponse(res, await orderService.approveScanQuote(req.params.id, req.tenantId, req.user!.userId));
+    } catch (err) { next(err); }
+  }
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

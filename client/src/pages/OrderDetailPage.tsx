@@ -81,7 +81,7 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, hasRole } = useAuth();
   const queryClient = useQueryClient();
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'issue', id || '');
@@ -97,6 +97,23 @@ export default function OrderDetailPage() {
     enabled: Boolean(id && order?.orderType === 'scan' && ['delivered', 'completed'].includes(order.status)
       && hasPermission(Permissions.BILLING_VIEW)),
   });
+  const { data: scanQuote, isLoading: scanQuoteLoading, error: scanQuoteError } = useQuery<{
+    pageCount: number;
+    unitPrice: string;
+    netAmount: string;
+    grossAmount: string;
+    vatRate: string;
+    currency: string;
+    createdAt: string;
+    approvedAt: string | null;
+    approvedBy: { firstName: string; lastName: string } | null;
+  } | null>({
+    queryKey: ['order-scan-quote', activeTenantId, id],
+    queryFn: async () => { const { data } = await api.get(`/orders/${id}/scan-quote`); return data.data; },
+    enabled: Boolean(id && order?.orderType === 'scan' && ['ready', 'delivered', 'completed'].includes(order.status)
+      && hasPermission(Permissions.BILLING_VIEW)),
+  });
+  const [scanQuotePending, setScanQuotePending] = useState(false);
   const { data: assignees = [], isError: assigneesError } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
     queryKey: ['order-assignees', activeTenantId],
     queryFn: async () => { const { data } = await api.get('/orders/assignees'); return data.data; },
@@ -217,8 +234,8 @@ export default function OrderDetailPage() {
   const handledCount = order.items?.filter((item: any) => ['picked', 'delivered', 'returned'].includes(item.itemStatus)).length ?? 0;
   const remainingCount = (order.items?.length ?? 0) - handledCount;
   const missingScanCount = order.orderType === 'scan' ? order.items.filter((item: any) => !item.scanFile).length : 0;
-  const scanMoney = (amount: number) => new Intl.NumberFormat(i18n.language.startsWith('en') ? 'en-US' : 'pl-PL', {
-    style: 'currency', currency: scanBilling?.currency || 'PLN',
+  const scanMoney = (amount: number, currency = scanBilling?.currency || scanQuote?.currency || 'PLN') => new Intl.NumberFormat(i18n.language.startsWith('en') ? 'en-US' : 'pl-PL', {
+    style: 'currency', currency,
   }).format(amount);
   const displayItems = canPick ? sortOrderItemsByPickRoute(order.items || []) : order.items || [];
   const handoverBoxes = [...new Map<string, { id: string; number: string }>((order.items || [])
@@ -362,9 +379,26 @@ export default function OrderDetailPage() {
   }) => {
     await patchOrder.mutateAsync({ url: `/orders/${id}/${action}`, ...(proof ? { proof } : {}) });
     await queryClient.invalidateQueries({ queryKey: ['order', id] });
+    await queryClient.invalidateQueries({ queryKey: ['order-scan-quote', activeTenantId, id] });
+    await queryClient.invalidateQueries({ queryKey: ['order-scan-billing', activeTenantId, id] });
     await queryClient.invalidateQueries({ queryKey: ['order-custody', activeTenantId, id] });
     await queryClient.invalidateQueries({ queryKey: ['box'] });
     await queryClient.invalidateQueries({ queryKey: ['boxes'] });
+  };
+
+  const handleScanQuote = async (approve: boolean) => {
+    if (!id || scanQuotePending) return;
+    setScanQuotePending(true);
+    try {
+      if (approve) await api.patch(`/orders/${id}/scan-quote/approve`);
+      else await api.post(`/orders/${id}/scan-quote`);
+      await queryClient.invalidateQueries({ queryKey: ['order-scan-quote', activeTenantId, id] });
+      toast.success(t(approve ? 'orders.detail.scanQuoteApprovedToast' : 'orders.detail.scanQuotePreparedToast'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('common.genericError')));
+    } finally {
+      setScanQuotePending(false);
+    }
   };
 
   const closeHandover = () => {
@@ -620,6 +654,36 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {order.orderType === 'scan' && ['ready', 'delivered', 'completed'].includes(order.status) && hasPermission(Permissions.BILLING_VIEW) &&
+        <div className="card space-y-3">
+          <h2 className="text-lg font-semibold">{t('orders.detail.scanQuoteTitle')}</h2>
+          {scanQuoteLoading ? <Loader2 className="animate-spin" size={18} /> : scanQuoteError ?
+            <p className="text-sm text-red-700">{getApiErrorMessage(scanQuoteError, t('orders.detail.scanQuoteError'))}</p> : scanQuote ? <>
+              <p className="text-sm">{t('orders.detail.scanQuoteCalculation', { pages: scanQuote.pageCount, rate: scanMoney(Number(scanQuote.unitPrice), scanQuote.currency) })}</p>
+              <p className="font-semibold">{t('orders.detail.scanQuoteAmount', { amount: scanMoney(Number(scanQuote.netAmount), scanQuote.currency) })}</p>
+              <p className="text-sm text-gray-600">{t('orders.detail.scanQuoteVat', { rate: scanQuote.vatRate })}</p>
+              <p className="font-semibold">{t('orders.detail.scanQuoteGross', { amount: scanMoney(Number(scanQuote.grossAmount), scanQuote.currency) })}</p>
+              {scanQuote.approvedAt ?
+                <p className="text-sm text-green-700">{t('orders.detail.scanQuoteApproved', {
+                  name: scanQuote.approvedBy ? `${scanQuote.approvedBy.firstName} ${scanQuote.approvedBy.lastName}` : '—',
+                  date: new Date(scanQuote.approvedAt).toLocaleString(i18n.language.startsWith('en') ? 'en-US' : 'pl-PL'),
+                })}</p> : <>
+                  <p className="text-sm text-amber-700">{t('orders.detail.scanQuoteAwaiting')}</p>
+                  {order.status === 'ready' && Boolean(user?.tenantId) && (hasRole(RoleCode.TENANT_LEADERSHIP) || hasRole(RoleCode.ADMIN_TENANT)) && hasPermission(Permissions.ORDER_APPROVE) &&
+                    <button type="button" className="btn-primary" onClick={() => handleScanQuote(true)} disabled={scanQuotePending}>
+                      <CheckCircle size={16} /> {t('orders.detail.scanQuoteApprove')}
+                    </button>}
+                </>}
+              <p className="text-xs text-gray-500">{t('orders.detail.scanQuoteHint')}</p>
+            </> : <>
+              <p className="text-sm text-amber-700">{t('orders.detail.scanQuoteMissing')}</p>
+              {order.status === 'ready' && hasPermission(Permissions.ORDER_PROCESS) &&
+                <button type="button" className="btn-secondary" onClick={() => handleScanQuote(false)} disabled={scanQuotePending}>
+                  {t('orders.detail.scanQuotePrepare')}
+                </button>}
+            </>}
+        </div>}
+
       {order.orderType === 'scan' && ['delivered', 'completed'].includes(order.status) && hasPermission(Permissions.BILLING_VIEW) &&
         <div className="card space-y-3">
           <h2 className="text-lg font-semibold">{t('orders.detail.scanBillingTitle')}</h2>
@@ -688,7 +752,7 @@ export default function OrderDetailPage() {
                 setIsLocating(false);
                 setShowHandover(true);
               } else void handleAction('deliver');
-            }} className="btn-primary" disabled={patchOrder.isPending}>
+            }} className="btn-primary" disabled={patchOrder.isPending || (order.orderType === 'scan' && (!scanQuote || !scanQuote.approvedAt))}>
               <Truck size={16} /> {t(order.orderType === 'scan' ? 'orders.detail.scanDelivered' : 'orders.detail.deliver')}
             </button>
           )}

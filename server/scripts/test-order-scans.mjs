@@ -207,6 +207,120 @@ test('scan billing uses the PDF page count, not one event per file', async () =>
   }
 });
 
+test('a prepared scan quote freezes the rate and exact page counts', async () => {
+  const originalFindFirst = prisma.priceList.findFirst;
+  prisma.priceList.findFirst = async () => ({
+    id: 'list-id', currency: 'PLN',
+    items: [{ id: 'rate-id', serviceCode: 'scan_page', serviceName: 'Skan strony', unit: 'page', unitPrice: new Prisma.Decimal('0.75'), vatRate: new Prisma.Decimal(23) }],
+  });
+  try {
+    const quote = await billingService.prepareScanQuote(tenantId, [
+      { id: 'item-b', scanFile: { pageCount: 3 } }, { id: 'item-a', scanFile: { pageCount: 2 } },
+    ]);
+    assert.equal(quote.pageCount, 5);
+    assert.equal(quote.netAmount.toString(), '3.75');
+    assert.deepEqual(quote.itemPages.map((item) => item.itemId), ['item-a', 'item-b']);
+    prisma.priceList.findFirst = async () => ({
+      id: 'new-list', currency: 'PLN',
+      items: [{ id: 'new-rate', serviceCode: 'scan_page', serviceName: 'Skan', unit: 'page', unitPrice: new Prisma.Decimal('2.00'), vatRate: new Prisma.Decimal(23) }],
+    });
+    const originalFindUnique = prisma.billingPeriod.findUnique;
+    prisma.billingPeriod.findUnique = async () => null;
+    try {
+      const events = await billingService.buildOrderDeliveryEvents({
+        id: orderId, tenantId, orderNumber: 'Z-1', orderType: 'scan', scanQuote: quote,
+        items: [{ id: 'item-b', scanFile: { pageCount: 3 } }, { id: 'item-a', scanFile: { pageCount: 2 } }],
+      }, new Date());
+      assert.equal(events.reduce((sum, event) => sum.plus(event.netAmount), new Prisma.Decimal(0)).toString(), '3.75');
+      assert.ok(events.every((event) => event.priceListItemId === 'rate-id'));
+    } finally { prisma.billingPeriod.findUnique = originalFindUnique; }
+  } finally { prisma.priceList.findFirst = originalFindFirst; }
+});
+
+test('a scan cannot be delivered without client approval or when quoted pages differ', async () => {
+  const service = new OrderService();
+  const originalFindUnique = prisma.orderScanQuote.findUnique;
+  service.getById = async () => ({
+    id: orderId, tenantId, orderType: 'scan', status: 'ready',
+    items: [{ id: itemId, scanFile: { pageCount: 2 } }],
+  });
+  try {
+    prisma.orderScanQuote.findUnique = async () => null;
+    await assert.rejects(service.deliver(orderId, tenantId, userId), { statusCode: 409 });
+    prisma.orderScanQuote.findUnique = async () => ({ approvedAt: null, itemPages: [{ itemId, pageCount: 2 }] });
+    await assert.rejects(service.deliver(orderId, tenantId, userId), { statusCode: 409 });
+    prisma.orderScanQuote.findUnique = async () => ({
+      approvedAt: new Date(), itemPages: [{ itemId, pageCount: 1 }],
+      unitPrice: new Prisma.Decimal('0.75'), pageCount: 1, netAmount: new Prisma.Decimal('0.75'),
+    });
+    await assert.rejects(service.deliver(orderId, tenantId, userId), { statusCode: 409 });
+  } finally { prisma.orderScanQuote.findUnique = originalFindUnique; }
+});
+
+test('client quote approval is recorded once against the ready order', async () => {
+  const service = new OrderService();
+  const originalFindUnique = prisma.orderScanQuote.findUnique;
+  const originalTransaction = prisma.$transaction;
+  let approvals = 0;
+  let approvalData;
+  service.getById = async () => ({
+    id: orderId, tenantId, orderType: 'scan', status: 'ready',
+    items: [{ id: itemId, scanFile: { pageCount: 2 } }],
+  });
+  const quote = {
+    itemPages: [{ itemId, pageCount: 2 }], pageCount: 2,
+    unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('1.50'),
+    vatRate: new Prisma.Decimal(23), currency: 'PLN', createdAt: new Date(), approvedAt: null, approvedBy: null,
+  };
+  prisma.orderScanQuote.findUnique = async () => quote;
+  prisma.$transaction = async (callback) => callback({
+    order: { update: async ({ where }) => {
+      assert.deepEqual(where, { id: orderId, tenantId, status: 'ready' });
+      return {};
+    } },
+    orderScanQuote: { updateMany: async ({ where, data }) => {
+      assert.deepEqual(where, { orderId, approvedAt: null });
+      approvalData = data;
+      approvals++;
+      return { count: approvals === 1 ? 1 : 0 };
+    } },
+  });
+  try {
+    const approved = await service.approveScanQuote(orderId, tenantId, userId);
+    assert.equal(approved.grossAmount, '1.85');
+    assert.equal(approvalData.approvedById, userId);
+    assert.ok(approvalData.approvedAt instanceof Date);
+    await assert.rejects(service.approveScanQuote(orderId, tenantId, userId), { statusCode: 409 });
+  } finally {
+    prisma.orderScanQuote.findUnique = originalFindUnique;
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('pre-update ready scan orders can receive a quote without changing their status', async () => {
+  const service = new OrderService();
+  const originalPrepare = billingService.prepareScanQuote;
+  const originalTransaction = prisma.$transaction;
+  let created;
+  service.getById = async () => ({ id: orderId, tenantId, orderType: 'scan', status: 'ready', items: [{ id: itemId, scanFile: { pageCount: 2 } }] });
+  service.getScanQuote = async () => ({ pageCount: 2 });
+  billingService.prepareScanQuote = async () => ({ pageCount: 2, unitPrice: new Prisma.Decimal('0.75') });
+  prisma.$transaction = async (callback) => callback({
+    order: { update: async ({ where }) => {
+      assert.deepEqual(where, { id: orderId, tenantId, status: 'ready' });
+    } },
+    orderScanQuote: { create: async ({ data }) => { created = data; } },
+  });
+  try {
+    await service.prepareExistingScanQuote(orderId, tenantId);
+    assert.equal(created.orderId, orderId);
+    assert.equal(created.pageCount, 2);
+  } finally {
+    billingService.prepareScanQuote = originalPrepare;
+    prisma.$transaction = originalTransaction;
+  }
+});
+
 test('scan rate preview shows only the tenant per-page rate effective today', async () => {
   const originalFindFirst = prisma.priceList.findFirst;
   let capturedWhere;
@@ -319,6 +433,7 @@ test('delivering a scan does not move boxes or create custody events', async () 
     boxUpdate: prisma.box.updateMany,
     transaction: prisma.$transaction,
     notify: notificationService.notifyTenantUsers,
+    quoteFind: prisma.orderScanQuote.findUnique,
   };
   let updatedItems = 0;
   let webhookPayload;
@@ -334,6 +449,10 @@ test('delivering a scan does not move boxes or create custody events', async () 
     webhookDelivery: { createMany: async ({ data }) => { webhookPayload = JSON.parse(data[0].payloadText); return { count: 1 }; } },
   });
   notificationService.notifyTenantUsers = async () => undefined;
+  prisma.orderScanQuote.findUnique = async () => ({
+    approvedAt: new Date(), itemPages: [{ itemId, pageCount: 2 }],
+    pageCount: 2, unitPrice: new Prisma.Decimal('0.75'), netAmount: new Prisma.Decimal('1.50'),
+  });
   try {
     await service.deliver(orderId, tenantId, userId);
     assert.equal(updatedItems, 1);
@@ -347,5 +466,6 @@ test('delivering a scan does not move boxes or create custody events', async () 
     prisma.box.updateMany = originals.boxUpdate;
     prisma.$transaction = originals.transaction;
     notificationService.notifyTenantUsers = originals.notify;
+    prisma.orderScanQuote.findUnique = originals.quoteFind;
   }
 });

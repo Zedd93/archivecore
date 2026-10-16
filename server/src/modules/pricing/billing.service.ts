@@ -2,6 +2,7 @@ import { BillingEventStatus, BillingPeriodStatus, Prisma, PriceListStatus } from
 import { PRICING_SERVICES, PricingServiceCode } from '@archivecore/shared';
 import { v5 as uuidv5 } from 'uuid';
 import { prisma } from '../../config/database';
+import { scanItemPages } from '../orders/scan-quote';
 
 const serviceCatalog = new Map(PRICING_SERVICES.map((service) => [service.code, service]));
 
@@ -82,6 +83,29 @@ export class BillingService {
     };
   }
 
+  async prepareScanQuote(tenantId: string, items: Array<{ id: string; scanFile?: { pageCount: number } | null }>, at = new Date()) {
+    const pages = scanItemPages(items);
+    if (pages.length === 0 || pages.some((item) => item.pageCount < 1)) {
+      throw conflict('Dodaj skan PDF do każdej pozycji przed wyceną zlecenia');
+    }
+    const priceList = await this.findPriceList(tenantId, startOfUtcDay(at));
+    const rate = priceList?.items.find((item) => item.serviceCode === 'scan_page');
+    if (!priceList || !rate) throw conflict('Brak stawki skanowania w aktywnym cenniku klienta');
+    const pageCount = pages.reduce((total, item) => total + item.pageCount, 0);
+    return {
+      priceListId: priceList.id,
+      priceListItemId: rate.id,
+      serviceName: rate.serviceName,
+      unit: rate.unit,
+      itemPages: pages,
+      pageCount,
+      unitPrice: rate.unitPrice,
+      netAmount: rate.unitPrice.mul(pageCount),
+      vatRate: rate.vatRate,
+      currency: priceList.currency,
+    };
+  }
+
   private async assertPeriodOpen(tenantId: string, periodStart: Date, db: typeof prisma | Prisma.TransactionClient = prisma) {
     const period = await db.billingPeriod.findUnique({
       where: { tenantId_periodStart: { tenantId, periodStart } },
@@ -94,7 +118,8 @@ export class BillingService {
   async buildOrderDeliveryEvents(order: any, occurredAt: Date): Promise<Prisma.BillingEventCreateManyInput[]> {
     const eventDate = startOfUtcDay(occurredAt);
     await this.assertPeriodOpen(order.tenantId, billingPeriodFor(occurredAt));
-    const priceList = await this.findPriceList(order.tenantId, eventDate);
+    const quote = order.orderType === 'scan' ? order.scanQuote : null;
+    const priceList = quote ? null : await this.findPriceList(order.tenantId, eventDate);
 
     const rates = new Map(priceList?.items.map((item) => [item.serviceCode, item]) || []);
 
@@ -106,29 +131,30 @@ export class BillingService {
       if (!catalogEntry) return [];
 
       const rate = rates.get(serviceCode);
+      const quotedScan = serviceCode === 'scan_page' && quote;
       const quantity = new Prisma.Decimal(order.orderType === 'scan' ? item.scanFile?.pageCount ?? 0 : 1);
       if (quantity.lte(0)) return [];
 
       return [{
         tenantId: order.tenantId,
-        priceListId: priceList?.id,
-        priceListItemId: rate?.id,
+        priceListId: quotedScan ? quote.priceListId : priceList?.id,
+        priceListItemId: quotedScan ? quote.priceListItemId : rate?.id,
         orderId: order.id,
         orderItemId: item.id,
         serviceCode,
-        serviceName: rate?.serviceName || catalogEntry.defaultName,
-        unit: rate?.unit || catalogEntry.unit,
+        serviceName: quotedScan ? quote.serviceName : rate?.serviceName || catalogEntry.defaultName,
+        unit: quotedScan ? quote.unit : rate?.unit || catalogEntry.unit,
         quantity,
-        unitPrice: rate?.unitPrice,
-        netAmount: rate ? rate.unitPrice.mul(quantity) : null,
-        vatRate: rate?.vatRate || new Prisma.Decimal(23),
-        currency: priceList?.currency || 'PLN',
+        unitPrice: quotedScan ? quote.unitPrice : rate?.unitPrice,
+        netAmount: quotedScan ? quote.unitPrice.mul(quantity) : rate ? rate.unitPrice.mul(quantity) : null,
+        vatRate: quotedScan ? quote.vatRate : rate?.vatRate || new Prisma.Decimal(23),
+        currency: quotedScan ? quote.currency : priceList?.currency || 'PLN',
         sourceType: 'order_delivery',
         sourceId: item.id,
         description: `${order.orderNumber}: ${getOrderItemLabel(item)}`,
         occurredAt,
         billingPeriod: billingPeriodFor(occurredAt),
-        status: rate ? BillingEventStatus.pending : BillingEventStatus.unpriced,
+        status: quotedScan || rate ? BillingEventStatus.pending : BillingEventStatus.unpriced,
       }];
     });
   }

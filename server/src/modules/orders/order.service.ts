@@ -13,6 +13,7 @@ import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
 import { ACTIVE_SLA_STATUSES, createSlaSchedule, orderSlaLevel, parseSlaLevel, slaHours, slaLevelWhere, slaRiskWhere } from './order-sla';
 import { slaReportWhere } from './sla-report-filter';
 import { tenantSlaService } from '../tenants/tenant-sla.service';
+import { scanQuoteMatchesItems } from './scan-quote';
 import PDFDocument from 'pdfkit';
 
 function validateHandoverSignature(data?: string) {
@@ -569,6 +570,77 @@ export class OrderService {
     };
   }
 
+  async getScanQuote(id: string, tenantId: string, department?: string) {
+    const order = await this.getById(id, tenantId, department);
+    if (order.orderType !== 'scan') throw Object.assign(new Error('To nie jest zlecenie skanu'), { statusCode: 400 });
+    const quote = await prisma.orderScanQuote.findUnique({
+      where: { orderId: id },
+      include: { approvedBy: { select: { firstName: true, lastName: true } } },
+    });
+    return quote && {
+      pageCount: quote.pageCount,
+      unitPrice: quote.unitPrice.toString(),
+      netAmount: quote.netAmount.toString(),
+      vatRate: quote.vatRate.toString(),
+      grossAmount: quote.netAmount.mul(new Prisma.Decimal(1).plus(quote.vatRate.div(100))).toDecimalPlaces(2).toString(),
+      currency: quote.currency,
+      createdAt: quote.createdAt,
+      approvedAt: quote.approvedAt,
+      approvedBy: quote.approvedBy,
+    };
+  }
+
+  async prepareExistingScanQuote(id: string, tenantId: string) {
+    const order = await this.getById(id, tenantId);
+    if (order.orderType !== 'scan' || order.status !== 'ready') {
+      throw Object.assign(new Error('Wycenę można przygotować tylko dla gotowego zlecenia skanu'), { statusCode: 409 });
+    }
+    const quote = await billingService.prepareScanQuote(tenantId, order.items);
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({ where: { id, tenantId, status: 'ready' }, data: { updatedAt: new Date() } });
+        await tx.orderScanQuote.create({ data: { orderId: id, ...quote } });
+      });
+    } catch (error) {
+      if (['P2002', 'P2025'].includes((error as { code?: string })?.code || '')) {
+        throw Object.assign(new Error('Zlecenie lub wycena zmieniły się. Odśwież stronę.'), { statusCode: 409 });
+      }
+      throw error;
+    }
+    return this.getScanQuote(id, tenantId);
+  }
+
+  async approveScanQuote(id: string, tenantId: string, userId: string) {
+    const order = await this.getById(id, tenantId);
+    if (order.orderType !== 'scan' || order.status !== 'ready') {
+      throw Object.assign(new Error('Można zaakceptować tylko wycenę gotowego zlecenia skanu'), { statusCode: 409 });
+    }
+    const quote = await prisma.orderScanQuote.findUnique({ where: { orderId: id } });
+    if (!quote) throw Object.assign(new Error('Zlecenie nie ma wyceny skanowania'), { statusCode: 409 });
+    if (!scanQuoteMatchesItems(quote.itemPages, order.items)
+      || !quote.unitPrice.mul(quote.pageCount).eq(quote.netAmount)) {
+      throw Object.assign(new Error('Liczba stron zmieniła się od wyceny. Skontaktuj się z obsługą.'), { statusCode: 409 });
+    }
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({ where: { id, tenantId, status: 'ready' }, data: { updatedAt: new Date() } });
+        const changed = await tx.orderScanQuote.updateMany({
+          where: { orderId: id, approvedAt: null },
+          data: { approvedById: userId, approvedAt: new Date() },
+        });
+        if (changed.count !== 1) {
+          throw Object.assign(new Error('Wycena została już zatwierdzona'), { statusCode: 409 });
+        }
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') {
+        throw Object.assign(new Error('Status zlecenia zmienił się. Odśwież stronę.'), { statusCode: 409 });
+      }
+      throw error;
+    }
+    return this.getScanQuote(id, tenantId);
+  }
+
   async getHistory(id: string, tenantId: string, skip: number, take: number, department?: string) {
     const visible = await prisma.order.findFirst({
       where: { id, tenantId, ...(department ? { AND: [departmentOrderVisibility(department)] } : {}) },
@@ -715,6 +787,9 @@ export class OrderService {
       ? await this.getSlaSchedule(tenantId, order.orderType, order.priority)
       : undefined;
     const updateData = this.getStatusUpdateData(order, newStatus, userId, notes, schedule);
+    const scanQuote = order.orderType === 'scan' && newStatus === OrderStatus.ready
+      ? await billingService.prepareScanQuote(tenantId, order.items)
+      : null;
 
     const updated = await prisma.$transaction(async (tx) => {
       let changed;
@@ -740,6 +815,7 @@ export class OrderService {
         }
         throw error;
       }
+      if (scanQuote) await tx.orderScanQuote.create({ data: { orderId: id, ...scanQuote } });
       if (newStatus === OrderStatus.completed) {
         await tx.orderItem.updateMany({
           where: {
@@ -809,6 +885,19 @@ export class OrderService {
       );
     }
 
+    const scanQuote = order.orderType === 'scan'
+      ? await prisma.orderScanQuote.findUnique({ where: { orderId: id } })
+      : null;
+    if (order.orderType === 'scan') {
+      if (!scanQuote?.approvedAt) {
+        throw Object.assign(new Error('Przed udostępnieniem skanów klient musi zatwierdzić wycenę'), { statusCode: 409 });
+      }
+      if (!scanQuoteMatchesItems(scanQuote.itemPages, order.items)
+        || !scanQuote.unitPrice.mul(scanQuote.pageCount).eq(scanQuote.netAmount)) {
+        throw Object.assign(new Error('Wycena skanu nie odpowiada aktualnym pozycjom zlecenia'), { statusCode: 409 });
+      }
+    }
+
     const deliveredAt = new Date();
     const nextItemStatus = order.orderType === 'return_order' ? OrderItemStatus.returned : OrderItemStatus.delivered;
     const custodyTargets = (order.orderType === 'scan' ? [] : order.items)
@@ -830,13 +919,20 @@ export class OrderService {
       : order.orderType === 'return_order'
         ? 'active'
         : undefined;
-    const billingEvents = await billingService.buildOrderDeliveryEvents(order, deliveredAt);
+    const billingEvents = await billingService.buildOrderDeliveryEvents({ ...order, scanQuote }, deliveredAt);
 
     await prisma.$transaction(async (tx) => {
-      await tx.order.update({
-        where: { id },
-        data: this.getStatusUpdateData(order, 'delivered', userId),
-      });
+      try {
+        await tx.order.update({
+          where: { id, tenantId, status: 'ready' },
+          data: this.getStatusUpdateData(order, 'delivered', userId),
+        });
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'P2025') {
+          throw Object.assign(new Error('Status zlecenia zmienił się. Odśwież stronę.'), { statusCode: 409 });
+        }
+        throw error;
+      }
       await tx.orderItem.updateMany({
         where: {
           orderId: id,

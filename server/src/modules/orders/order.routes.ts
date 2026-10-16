@@ -44,6 +44,7 @@ router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));
 router.get('/:id/scan-billing', ...auth, requirePermission(Permissions.ORDER_READ), requirePermission(Permissions.BILLING_VIEW), (req, res, next) => orderController.getScanBilling(req, res, next));
+router.get('/:id/scan-quote', ...auth, requirePermission(Permissions.ORDER_READ), requirePermission(Permissions.BILLING_VIEW), (req, res, next) => orderController.getScanQuote(req, res, next));
 router.get('/:id/history', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getHistory(req, res, next));
 router.get('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.downloadScan(req, res, next));
 router.get('/:id/custody', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getCustodyByOrder(req, res, next));
@@ -56,6 +57,7 @@ router.post('/', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(
 router.post('/:id/items', ...auth, requirePermission(Permissions.ORDER_CREATE, Permissions.ORDER_PROCESS), validate(addOrderItemSchema), auditLog('order_item', 'order_item.create'), (req, res, next) => orderController.addItem(req, res, next));
 router.post('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_PROCESS), uploadScanFile, auditLog('order_scan_file', 'order_scan.upload'), (req, res, next) => orderController.uploadScan(req, res, next));
 router.post('/:id/items/:itemId/scan/from-attachment', ...auth, requirePermission(Permissions.ORDER_PROCESS), requirePermission(Permissions.ATTACHMENT_READ), auditLog('order_scan_file', 'order_scan.upload'), (req, res, next) => orderController.attachExistingScan(req, res, next));
+router.post('/:id/scan-quote', ...auth, requirePermission(Permissions.ORDER_PROCESS), requirePermission(Permissions.BILLING_VIEW), auditLog('order', 'order.scan_quote.prepare'), (req, res, next) => orderController.prepareScanQuote(req, res, next));
 router.post('/:id/handover/photos', ...auth, requirePermission(Permissions.ORDER_PROCESS), uploadHandoverPhoto, auditLog('order_handover_photo', 'order.handover_photo.upload'), (req, res, next) => orderController.uploadHandoverPhoto(req, res, next));
 
 // Status transitions
@@ -64,6 +66,7 @@ router.patch('/:id/approve', ...auth, requirePermission(Permissions.ORDER_APPROV
 router.patch('/:id/reject', ...auth, requirePermission(Permissions.ORDER_APPROVE), validate(rejectOrderSchema), auditLog('order', 'order.reject'), (req, res, next) => orderController.reject(req, res, next));
 router.patch('/:id/process', ...auth, requirePermission(Permissions.ORDER_PROCESS), auditLog('order', 'order.process'), (req, res, next) => orderController.startProcessing(req, res, next));
 router.patch('/:id/ready', ...auth, requirePermission(Permissions.ORDER_PROCESS), auditLog('order', 'order.ready'), (req, res, next) => orderController.markReady(req, res, next));
+router.patch('/:id/scan-quote/approve', ...auth, requirePermission(Permissions.ORDER_APPROVE), requirePermission(Permissions.BILLING_VIEW), requireRole(RoleCode.TENANT_LEADERSHIP, RoleCode.ADMIN_TENANT), auditLog('order', 'order.scan_quote.approve'), (req, res, next) => orderController.approveScanQuote(req, res, next));
 router.patch('/:id/deliver', ...auth, requirePermission(Permissions.ORDER_PROCESS), validate(deliverOrderSchema), auditLog('order', 'order.deliver'), (req, res, next) => orderController.deliver(req, res, next));
 router.patch('/:id/complete', ...auth, requirePermission(Permissions.ORDER_COMPLETE), auditLog('order', 'order.complete'), (req, res, next) => orderController.complete(req, res, next));
 router.patch('/:id/cancel', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(cancelOrderSchema), auditLog('order', 'order.cancel'), (req, res, next) => orderController.cancel(req, res, next));
