@@ -117,6 +117,42 @@ test('SLA breakdown groups by tenant, order type and priority, with scoped filte
   }
 });
 
+test('monthly SLA trend keeps empty months and uses the same tenant and order-type scope', async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  let query;
+  prisma.$queryRaw = async (sql) => {
+    query = sql;
+    return [
+      { month: '2026-08', completed: 2, breached: 0 },
+      { month: '2026-09', completed: 0, breached: 0 },
+      { month: '2026-10', completed: 5, breached: 2 },
+    ];
+  };
+  try {
+    const now = new Date('2026-10-15T12:00:00.000Z');
+    const trend = await new ReportService().getSlaTrend('tenant-a', 90, now, 'checkout');
+    assert.equal(trend.since.toISOString(), '2026-07-17T12:00:00.000Z');
+    assert.deepEqual(trend.months.map(({ month, onTime, slaRate }) => ({ month, onTime, slaRate })), [
+      { month: '2026-08', onTime: 2, slaRate: 100 },
+      { month: '2026-09', onTime: 0, slaRate: null },
+      { month: '2026-10', onTime: 3, slaRate: 60 },
+    ]);
+    assert.match(query.sql, /generate_series/);
+    assert.match(query.sql, /AT TIME ZONE 'Europe\/Warsaw'/);
+    assert.match(query.sql, /"tenantId" = \?::uuid/);
+    assert.match(query.sql, /"orderType" = \?::"OrderType"/);
+    assert.match(query.sql, /"completedAt" > "slaDeadline"/);
+    assert.ok(query.values.includes('tenant-a'));
+    assert.ok(query.values.includes('checkout'));
+
+    await new ReportService().getSlaTrend(undefined, 30, now);
+    assert.doesNotMatch(query.sql, /"tenantId" = \?::uuid/);
+    assert.doesNotMatch(query.sql, /"orderType" = \?::"OrderType"/);
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+  }
+});
+
 test('SLA breakdown blocks all-client access for tenant roles and rejects invalid periods', async () => {
   const original = reportService.getSlaBreakdown;
   let called = false;
@@ -151,6 +187,38 @@ test('SLA breakdown blocks all-client access for tenant roles and rejects invali
     assert.equal(requestedType, 'checkout');
   } finally {
     reportService.getSlaBreakdown = original;
+  }
+});
+
+test('monthly SLA trend reuses report scope and period authorization', async () => {
+  const original = reportService.getSlaTrend;
+  let requested;
+  reportService.getSlaTrend = async (tenantId, days, _now, orderType) => {
+    requested = { tenantId, days, orderType };
+    return { months: [] };
+  };
+  const response = () => ({
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  });
+  const next = (error) => { throw error; };
+  try {
+    const denied = response();
+    await reportController.getSlaTrend({ query: { scope: 'all' }, tenantId: 'tenant-a', user: { roles: ['TK'] } }, denied, next);
+    assert.equal(denied.statusCode, 403);
+    assert.equal(requested, undefined);
+
+    const invalid = response();
+    await reportController.getSlaTrend({ query: { days: '10' }, tenantId: 'tenant-a', user: { roles: ['TK'] } }, invalid, next);
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(requested, undefined);
+
+    const allowed = response();
+    await reportController.getSlaTrend({ query: { scope: 'all', days: '90', orderType: 'checkout' }, tenantId: null, user: { roles: ['SA'] } }, allowed, next);
+    assert.equal(allowed.statusCode, 200);
+    assert.deepEqual(requested, { tenantId: undefined, days: 90, orderType: 'checkout' });
+  } finally {
+    reportService.getSlaTrend = original;
   }
 });
 

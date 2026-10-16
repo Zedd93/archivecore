@@ -7,11 +7,11 @@ import { buildSlaBreakdownExport } from './sla-breakdown-export';
 import { prisma } from '../../config/database';
 import { OrderType } from '@prisma/client';
 
-type SlaBreakdownOptions =
+type SlaReportOptions =
   | { ok: true; scope: 'all' | 'tenant'; tenantId: string | undefined; days: number; orderType: OrderType | undefined }
   | { ok: false; error: string; status: number };
 
-function parseSlaBreakdownOptions(req: Request): SlaBreakdownOptions {
+function parseSlaReportOptions(req: Request): SlaReportOptions {
   const scope: 'all' | 'tenant' = req.query.scope === 'all' ? 'all' : 'tenant';
   const canViewAll = req.user?.roles.some((role) => role === RoleCode.SUPER_ADMIN || role === RoleCode.DOXART_ADMIN);
   if (scope === 'all' && !canViewAll) return { ok: false, error: 'Brak uprawnień do raportu wszystkich tenantów', status: 403 };
@@ -141,15 +141,23 @@ export class ReportController {
 
   async getSlaBreakdown(req: Request, res: Response, next: NextFunction) {
     try {
-      const options = parseSlaBreakdownOptions(req);
+      const options = parseSlaReportOptions(req);
       if (!options.ok) return errorResponse(res, options.error, options.status);
       return successResponse(res, await reportService.getSlaBreakdown(options.tenantId, options.days, new Date(), options.orderType));
     } catch (err) { next(err); }
   }
 
+  async getSlaTrend(req: Request, res: Response, next: NextFunction) {
+    try {
+      const options = parseSlaReportOptions(req);
+      if (!options.ok) return errorResponse(res, options.error, options.status);
+      return successResponse(res, await reportService.getSlaTrend(options.tenantId, options.days, new Date(), options.orderType));
+    } catch (err) { next(err); }
+  }
+
   async exportSlaBreakdown(req: Request, res: Response, next: NextFunction) {
     try {
-      const options = parseSlaBreakdownOptions(req);
+      const options = parseSlaReportOptions(req);
       if (!options.ok) return errorResponse(res, options.error, options.status);
       const format = req.query.format === undefined ? 'xlsx' : req.query.format;
       if (format !== 'xlsx' && format !== 'csv') return errorResponse(res, 'Nieprawidłowy format eksportu', 400);

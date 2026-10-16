@@ -38,6 +38,10 @@ interface SlaBreakdown {
   totals: { completed: number; breached: number; activeOverdue: number };
 }
 
+interface SlaTrend {
+  months: Array<{ month: string; completed: number; breached: number; onTime: number; slaRate: number | null }>;
+}
+
 const SLA_ORDER_TYPES = [
   { code: 'checkout', labelKey: 'orders.typeIssue' },
   { code: 'return_order', labelKey: 'orders.typeReturn' },
@@ -59,7 +63,7 @@ const previousMonth = () => {
 };
 
 export default function ReportsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, hasPermission, hasRole } = useAuth();
   const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(null);
   const [reportMonth, setReportMonth] = useState(previousMonth);
@@ -138,6 +142,15 @@ export default function ReportsPage() {
     queryKey: ['report-sla-breakdown', user?.id, canViewAllSla, activeTenantId, slaScope, slaDays, slaOrderType],
     queryFn: async () => {
       const { data } = await api.get('/reports/sla/breakdown', { params: { days: slaDays, scope: slaScope, orderType: slaOrderType || undefined } });
+      return data.data;
+    },
+    enabled: slaScope === 'all' ? canViewAllSla : Boolean(activeTenantId),
+    refetchInterval: 60_000,
+  });
+  const { data: slaTrend, isLoading: slaTrendLoading, isError: slaTrendError, refetch: refetchSlaTrend } = useQuery<SlaTrend>({
+    queryKey: ['report-sla-trend', user?.id, canViewAllSla, activeTenantId, slaScope, slaDays, slaOrderType],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/sla/trend', { params: { days: slaDays, scope: slaScope, orderType: slaOrderType || undefined } });
       return data.data;
     },
     enabled: slaScope === 'all' ? canViewAllSla : Boolean(activeTenantId),
@@ -348,6 +361,44 @@ export default function ReportsPage() {
             </div>
           )
         )}
+        <div className="border-t border-gray-200 pt-4">
+          <h3 className="text-base font-semibold text-gray-900">{t('reports.slaTrendTitle')}</h3>
+          <p className="mt-1 text-sm text-gray-500">{t('reports.slaTrendDescription')}</p>
+          {slaTrendLoading ? <p className="mt-3 text-sm text-gray-500">{t('common.loading')}</p> : slaTrendError ? (
+            <button type="button" className="btn-secondary mt-3" onClick={() => { void refetchSlaTrend(); }}>{t('common.tryAgain')}</button>
+          ) : slaTrend && (
+            slaTrend.months.every((month) => month.completed === 0) ? <p className="mt-3 text-sm text-gray-500">{t('reports.slaTrendEmpty')}</p> : (
+              <div className="mt-4 overflow-x-auto pb-2">
+                <div className="grid min-w-[480px] gap-3" style={{ gridTemplateColumns: `repeat(${slaTrend.months.length}, minmax(5.5rem, 1fr))` }}>
+                  {slaTrend.months.map((month) => {
+                    const label = new Intl.DateTimeFormat(i18n.language.startsWith('en') ? 'en' : 'pl', {
+                      month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw',
+                    }).format(new Date(`${month.month}-15T12:00:00Z`));
+                    return <div key={month.month} className="min-w-0 text-center text-xs text-gray-700">
+                      <span className="block font-semibold text-sm text-gray-900">{month.slaRate === null ? '—' : `${month.slaRate}%`}</span>
+                      <div
+                        className="mt-2 flex h-4 overflow-hidden rounded-full bg-gray-100"
+                        role="img"
+                        aria-label={t('reports.slaTrendBarLabel', { month: label, completed: month.completed, onTime: month.onTime, breached: month.breached })}
+                      >
+                        {month.completed > 0 && <>
+                          <span className="bg-emerald-500" style={{ width: `${month.onTime / month.completed * 100}%` }} />
+                          <span className="bg-red-500" style={{ width: `${month.breached / month.completed * 100}%` }} />
+                        </>}
+                      </div>
+                      <span className="mt-2 block">{label}</span>
+                      <span className="block text-gray-500">{t('reports.slaTrendCount', { count: month.completed })}</span>
+                    </div>;
+                  })}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                  <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{t('reports.slaTrendOnTime')}</span>
+                  <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />{t('reports.slaBreached')}</span>
+                </div>
+              </div>
+            )
+          )}
+        </div>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

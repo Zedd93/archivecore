@@ -17,6 +17,12 @@ interface SlaBreakdownRow {
   activeOverdue: number;
 }
 
+interface SlaTrendRow {
+  month: string;
+  completed: number;
+  breached: number;
+}
+
 export interface DashboardKPIs {
   totalBoxes: number;
   totalFolders: number;
@@ -425,6 +431,42 @@ export class ReportService {
       activeOverdue: sum.activeOverdue + row.activeOverdue,
     }), { completed: 0, breached: 0, activeOverdue: 0 });
     return { days, since, asOf: now, orderType: orderType ?? null, data, totals };
+  }
+
+  async getSlaTrend(tenantId: string | undefined, days: number, now = new Date(), orderType?: OrderType) {
+    const since = new Date(now.getTime() - days * 24 * 60 * 60_000);
+    const tenantFilter = tenantId ? Prisma.sql`AND "tenantId" = ${tenantId}::uuid` : Prisma.empty;
+    const orderTypeFilter = orderType ? Prisma.sql`AND "orderType" = ${orderType}::"OrderType"` : Prisma.empty;
+    const rows = await prisma.$queryRaw<SlaTrendRow[]>(Prisma.sql`
+      WITH monthly AS (
+        SELECT to_char("completedAt" AT TIME ZONE 'Europe/Warsaw', 'YYYY-MM') AS "month",
+          COUNT(*)::int AS "completed",
+          COUNT(*) FILTER (WHERE "completedAt" > "slaDeadline")::int AS "breached"
+        FROM "orders"
+        WHERE "status" = 'completed' AND "slaDeadline" IS NOT NULL
+          AND "completedAt" >= ${since} AND "completedAt" <= ${now}
+          ${tenantFilter} ${orderTypeFilter}
+        GROUP BY 1
+      )
+      SELECT to_char(months.month, 'YYYY-MM') AS "month",
+        COALESCE(monthly."completed", 0)::int AS "completed",
+        COALESCE(monthly."breached", 0)::int AS "breached"
+      FROM generate_series(
+        date_trunc('month', ${since} AT TIME ZONE 'Europe/Warsaw'),
+        date_trunc('month', ${now} AT TIME ZONE 'Europe/Warsaw'),
+        interval '1 month'
+      ) AS months(month)
+      LEFT JOIN monthly ON monthly."month" = to_char(months.month, 'YYYY-MM')
+      ORDER BY months.month
+    `);
+    return {
+      days, since, asOf: now, orderType: orderType ?? null,
+      months: rows.map((row) => ({
+        ...row,
+        onTime: row.completed - row.breached,
+        slaRate: row.completed ? Math.round((row.completed - row.breached) / row.completed * 100) : null,
+      })),
+    };
   }
 }
 
