@@ -61,6 +61,12 @@ export class TenantController {
     } catch (err) { next(err); }
   }
 
+  async updateSlaTarget(req: Request, res: Response, next: NextFunction) {
+    try {
+      return successResponse(res, await tenantSlaService.updateTarget(req.params.id, req.body.slaTargetPercent));
+    } catch (err) { next(err); }
+  }
+
   async resetSlaPolicies(req: Request, res: Response, next: NextFunction) {
     try {
       return successResponse(res, await tenantSlaService.reset(req.params.id));

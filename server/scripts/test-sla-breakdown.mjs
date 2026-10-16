@@ -87,7 +87,7 @@ test('SLA breakdown groups by tenant, order type and priority, with scoped filte
       { tenantId: 'tenant-a', orderType: 'scan', priority: 'urgent', completed: 0, breached: 0, activeOverdue: 3 },
     ];
   };
-  prisma.tenant.findMany = async () => [{ id: 'tenant-a', name: 'Firma A' }];
+  prisma.tenant.findMany = async () => [{ id: 'tenant-a', name: 'Firma A', slaTargetPercent: 97 }];
 
   try {
     const now = new Date('2026-10-15T12:00:00.000Z');
@@ -98,15 +98,25 @@ test('SLA breakdown groups by tenant, order type and priority, with scoped filte
     assert.ok(query.values.includes('tenant-a'));
     assert.ok(query.values.some((value) => value instanceof Date && value.getTime() === now.getTime()));
     assert.equal(result.since.toISOString(), '2026-09-15T12:00:00.000Z');
+    assert.equal(result.slaTargetPercent, 97);
     assert.deepEqual(result.data.map(({ orderType, priority, onTime, slaRate }) => ({ orderType, priority, onTime, slaRate })), [
       { orderType: 'checkout', priority: 'normal', onTime: 3, slaRate: 60 },
       { orderType: 'scan', priority: 'urgent', onTime: 0, slaRate: null },
     ]);
     assert.deepEqual(result.totals, { completed: 5, breached: 2, activeOverdue: 4 });
 
-    await new ReportService().getSlaBreakdown(undefined, 30, now);
+    const allTenantsReport = await new ReportService().getSlaBreakdown(undefined, 30, now);
+    assert.equal(allTenantsReport.slaTargetPercent, null);
     assert.doesNotMatch(query.sql, /"tenantId" = \?::uuid/);
     assert.doesNotMatch(query.sql, /AND "orderType" = \?::"OrderType"/);
+
+    prisma.$queryRaw = async () => [];
+    const emptyTenantReport = await new ReportService().getSlaBreakdown('tenant-a', 30, now);
+    assert.equal(emptyTenantReport.slaTargetPercent, 97);
+    prisma.$queryRaw = async (sql) => {
+      query = sql;
+      return [{ tenantId: 'tenant-a', orderType: 'checkout', priority: 'normal', completed: 5, breached: 2, activeOverdue: 1 }];
+    };
 
     const filtered = await new ReportService().getSlaBreakdown('tenant-a', 30, now, 'scan');
     assert.match(query.sql, /AND "orderType" = \?::"OrderType"/);
@@ -167,8 +177,8 @@ test('tenant SLA trend compares monthly rates without losing empty months or yea
     ];
   };
   prisma.tenant.findMany = async () => [
-    { id: 'tenant-a', name: 'Alfa' },
-    { id: 'tenant-b', name: 'Beta' },
+    { id: 'tenant-a', name: 'Alfa', slaTargetPercent: 97 },
+    { id: 'tenant-b', name: 'Beta', slaTargetPercent: 90 },
   ];
   try {
     const now = new Date('2026-01-01T00:30:00.000Z');
@@ -178,6 +188,7 @@ test('tenant SLA trend compares monthly rates without losing empty months or yea
       { tenantName: 'Alfa', completed: 4, breached: 1, slaRate: 75 },
       { tenantName: 'Beta', completed: 3, breached: 1, slaRate: 67 },
     ]);
+    assert.deepEqual(trend.data.map(({ slaTargetPercent }) => slaTargetPercent), [97, 90]);
     assert.deepEqual(trend.data[0].months, [
       { month: '2025-12', completed: 0, breached: 0, slaRate: null },
       { month: '2026-01', completed: 4, breached: 1, slaRate: 75 },
@@ -305,6 +316,7 @@ test('SLA export produces a readable Excel and UTF-8 CSV with the same totals', 
     since: new Date('2026-09-15T12:00:00.000Z'),
     asOf: new Date('2026-10-15T12:00:00.000Z'),
     orderType: null,
+    slaTargetPercent: null,
     data: [
       { tenantId: 'a', tenantName: 'Spółdzielnia Żory', orderType: 'checkout', priority: 'urgent', completed: 5, breached: 2, activeOverdue: 1, onTime: 3, slaRate: 60 },
       { tenantId: 'b', tenantName: '=2+2', orderType: 'scan', priority: 'normal', completed: 0, breached: 0, activeOverdue: 2, onTime: 0, slaRate: null },
@@ -321,6 +333,7 @@ test('SLA export produces a readable Excel and UTF-8 CSV with the same totals', 
   assert.deepEqual(rows[7], ['Spółdzielnia Żory', 'Wydanie', 'Maksymalny', 5, 2, 1, 60]);
   assert.equal(workbook.Sheets.SLA.A8.t, 's');
   assert.deepEqual(rows[9], ['Razem', '', '', 5, 2, 3, 60]);
+  assert.deepEqual(XLSX.utils.sheet_to_json(XLSX.read(buildSlaBreakdownExport({ ...report, slaTargetPercent: 97 }, 'tenant', 'xlsx').buffer, { type: 'buffer' }).Sheets.SLA, { header: 1 })[10], ['Cel SLA klienta (%)', 97]);
 
   const csv = buildSlaBreakdownExport(report, 'tenant', 'csv');
   const content = csv.buffer.toString('utf8');
@@ -339,11 +352,11 @@ test('tenant trend export preserves monthly samples, totals and CSV formula safe
     orderType: 'checkout',
     months: ['2026-09', '2026-10'],
     data: [
-      { tenantId: 'a', tenantName: 'Spółdzielnia Żory', completed: 3, breached: 1, slaRate: 67, months: [
+      { tenantId: 'a', tenantName: 'Spółdzielnia Żory', completed: 3, breached: 1, slaRate: 67, slaTargetPercent: 97, months: [
         { month: '2026-09', completed: 2, breached: 0, slaRate: 100 },
         { month: '2026-10', completed: 1, breached: 1, slaRate: 0 },
       ] },
-      { tenantId: 'b', tenantName: '=2+2', completed: 1, breached: 0, slaRate: 100, months: [
+      { tenantId: 'b', tenantName: '=2+2', completed: 1, breached: 0, slaRate: 100, slaTargetPercent: 90, months: [
         { month: '2026-09', completed: 0, breached: 0, slaRate: null },
         { month: '2026-10', completed: 1, breached: 0, slaRate: 100 },
       ] },
@@ -354,17 +367,17 @@ test('tenant trend export preserves monthly samples, totals and CSV formula safe
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets['Klienci SLA'], { header: 1, defval: '' });
   assert.match(excel.filename, /^raport_sla_klienci_2026-10-15T12-00-00-000Z\.xlsx$/);
   assert.equal(rows[2][1], 'Wydanie');
-  assert.deepEqual(rows[5], ['Klient', '2026-09 SLA (%)', '2026-09 zleceń', '2026-10 SLA (%)', '2026-10 zleceń', 'Razem zleceń', 'Po terminie', 'W terminie (%)']);
-  assert.deepEqual(rows[6], ['Spółdzielnia Żory', 100, 2, 0, 1, 3, 1, 67]);
-  assert.deepEqual(rows[7], ['=2+2', '', 0, 100, 1, 1, 0, 100]);
+  assert.deepEqual(rows[5], ['Klient', '2026-09 SLA (%)', '2026-09 zleceń', '2026-10 SLA (%)', '2026-10 zleceń', 'Razem zleceń', 'Po terminie', 'W terminie (%)', 'Cel SLA (%)']);
+  assert.deepEqual(rows[6], ['Spółdzielnia Żory', 100, 2, 0, 1, 3, 1, 67, 97]);
+  assert.deepEqual(rows[7], ['=2+2', '', 0, 100, 1, 1, 0, 100, 90]);
   assert.equal(workbook.Sheets['Klienci SLA'].A8.t, 's');
-  assert.deepEqual(rows[8], ['Razem', 100, 2, 50, 2, 4, 1, 75]);
+  assert.deepEqual(rows[8], ['Razem', 100, 2, 50, 2, 4, 1, 75, '']);
 
   const csv = buildSlaTenantTrendExport(report, 'csv');
   const content = csv.buffer.toString('utf8');
   assert.ok(content.startsWith('\uFEFF'));
-  assert.match(content, /Spółdzielnia Żory;100;2;0;1;3;1;67/);
-  assert.match(content, /'=2\+2;;0;100;1;1;0;100/);
+  assert.match(content, /Spółdzielnia Żory;100;2;0;1;3;1;67;97/);
+  assert.match(content, /'=2\+2;;0;100;1;1;0;100;90/);
   assert.match(content, /Razem;100;2;50;2;4;1;75/);
   assert.match(csv.filename, /\.csv$/);
 });

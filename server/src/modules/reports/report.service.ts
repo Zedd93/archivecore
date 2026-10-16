@@ -436,12 +436,13 @@ export class ReportService {
       ) ${tenantFilter} ${orderTypeFilter}
       GROUP BY "tenantId", "orderType", "priority"
     `);
-    const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
+    const tenantIds = [...new Set([...rows.map((row) => row.tenantId), ...(tenantId ? [tenantId] : [])])];
     const tenants = tenantIds.length ? await prisma.tenant.findMany({
       where: { id: { in: tenantIds } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, slaTargetPercent: true },
     }) : [];
     const names = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+    const targets = new Map(tenants.map((tenant) => [tenant.id, tenant.slaTargetPercent]));
     const orderTypeOrder: Record<string, number> = { checkout: 0, return_order: 1, transfer: 2, disposal: 3, scan: 4 };
     const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
     const data = rows.map((row) => ({
@@ -457,7 +458,7 @@ export class ReportService {
       breached: sum.breached + row.breached,
       activeOverdue: sum.activeOverdue + row.activeOverdue,
     }), { completed: 0, breached: 0, activeOverdue: 0 });
-    return { days, since, asOf: now, orderType: orderType ?? null, data, totals };
+    return { days, since, asOf: now, orderType: orderType ?? null, slaTargetPercent: tenantId ? targets.get(tenantId) ?? 95 : null, data, totals };
   }
 
   async getSlaTrend(tenantId: string | undefined, days: number, now = new Date(), orderType?: OrderType) {
@@ -513,9 +514,10 @@ export class ReportService {
     const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
     const tenants = tenantIds.length ? await prisma.tenant.findMany({
       where: { id: { in: tenantIds } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, slaTargetPercent: true },
     }) : [];
     const names = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+    const targets = new Map(tenants.map((tenant) => [tenant.id, tenant.slaTargetPercent]));
     const byTenant = new Map<string, Map<string, SlaTenantTrendRow>>();
     for (const row of rows) {
       if (!byTenant.has(row.tenantId)) byTenant.set(row.tenantId, new Map());
@@ -537,6 +539,7 @@ export class ReportService {
       });
       return {
         tenantId, tenantName: names.get(tenantId) || tenantId,
+        slaTargetPercent: targets.get(tenantId) ?? 95,
         completed, breached, slaRate: completed ? Math.round((completed - breached) / completed * 100) : null,
         months: monthly,
       };

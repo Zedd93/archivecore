@@ -35,6 +35,11 @@ export class TenantSlaService {
     return policy?.hours ?? defaultHours(priority);
   }
 
+  async updateTarget(tenantId: string, slaTargetPercent: number) {
+    await assertTenant(tenantId);
+    return prisma.tenant.update({ where: { id: tenantId }, data: { slaTargetPercent }, select: { id: true, slaTargetPercent: true } });
+  }
+
   async replace(tenantId: string, policies: Array<{ orderType: OrderType; priority: OrderPriority; hours: number }>) {
     return prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });

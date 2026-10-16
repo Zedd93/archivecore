@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useList, useCreate } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import DataTable, { Column } from '@/components/ui/DataTable';
@@ -52,6 +53,7 @@ const emptyTenantForm: TenantFormState = {
 
 export default function TenantsPage() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
@@ -59,6 +61,7 @@ export default function TenantsPage() {
   const [gusLoading, setGusLoading] = useState(false);
   const [slaTenant, setSlaTenant] = useState<{ id: string; name: string } | null>(null);
   const [slaPolicies, setSlaPolicies] = useState<SlaPolicy[]>([]);
+  const [slaTargetPercent, setSlaTargetPercent] = useState<number | ''>(95);
   const [slaLoading, setSlaLoading] = useState(false);
   const [slaSaving, setSlaSaving] = useState(false);
   const slaRequest = useRef(0);
@@ -107,10 +110,11 @@ export default function TenantsPage() {
     ) },
   ];
 
-  const openSla = async (tenant: { id: string; name: string }) => {
+  const openSla = async (tenant: { id: string; name: string; slaTargetPercent?: number }) => {
     const request = ++slaRequest.current;
     setSlaTenant(tenant);
     setSlaPolicies([]);
+    setSlaTargetPercent(tenant.slaTargetPercent ?? 95);
     setSlaLoading(true);
     try {
       const { data } = await api.get(`/tenants/${tenant.id}/sla`);
@@ -142,6 +146,20 @@ export default function TenantsPage() {
       toast.success(t('admin.tenants.sla.saved'));
       slaRequest.current++;
       setSlaTenant(null);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('admin.tenants.sla.saveError')));
+    } finally {
+      setSlaSaving(false);
+    }
+  };
+
+  const saveSlaTarget = async () => {
+    if (!slaTenant || slaTargetPercent === '' || slaTargetPercent < 1 || slaTargetPercent > 100 || !Number.isInteger(slaTargetPercent) || slaSaving) return;
+    setSlaSaving(true);
+    try {
+      await api.put(`/tenants/${slaTenant.id}/sla-target`, { slaTargetPercent });
+      await queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      toast.success(t('admin.tenants.sla.targetSaved'));
     } catch (error) {
       toast.error(getApiErrorMessage(error, t('admin.tenants.sla.saveError')));
     } finally {
@@ -272,10 +290,19 @@ export default function TenantsPage() {
 
       <Modal isOpen={Boolean(slaTenant)} onClose={closeSla} title={t('admin.tenants.sla.title', { name: slaTenant?.name })} size="xl">
         {slaLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div> : (
-          <form onSubmit={saveSla} className="space-y-4">
-            <p className="text-sm text-gray-600">{t('admin.tenants.sla.description')}</p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[580px] text-sm">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 p-3">
+              <div>
+                <label htmlFor="tenant-sla-target" className="label-text">{t('admin.tenants.sla.target')}</label>
+                <input id="tenant-sla-target" type="number" min={1} max={100} step={1} disabled={slaSaving} value={slaTargetPercent} onChange={(event) => setSlaTargetPercent(event.target.value === '' ? '' : Number(event.target.value))} className="input-field w-28" />
+                <p className="mt-1 text-xs text-gray-500">{t('admin.tenants.sla.targetHint')}</p>
+              </div>
+              <button type="button" className="btn-secondary" disabled={slaSaving || slaTargetPercent === '' || slaTargetPercent < 1 || slaTargetPercent > 100 || !Number.isInteger(slaTargetPercent)} onClick={() => { void saveSlaTarget(); }}>{t('admin.tenants.sla.saveTarget')}</button>
+            </div>
+            <form onSubmit={saveSla} className="space-y-4">
+              <p className="text-sm text-gray-600">{t('admin.tenants.sla.description')}</p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[580px] text-sm">
                 <thead><tr className="border-b text-left"><th className="py-2 pr-3">{t('admin.tenants.sla.orderType')}</th>{SLA_PRIORITIES.map((priority) => <th key={priority} className="py-2 px-2">{t(`admin.tenants.sla.${priority}`)}</th>)}</tr></thead>
                 <tbody>{SLA_ORDER_TYPES.map(({ code, labelKey }) => <tr key={code} className="border-b border-gray-100">
                   <th scope="row" className="py-2 pr-3 text-left font-medium">{t(labelKey)}</th>
@@ -290,14 +317,15 @@ export default function TenantsPage() {
                     /></td>;
                   })}
                 </tr>)}</tbody>
-              </table>
-            </div>
-            <p className="text-xs text-gray-500">{t('admin.tenants.sla.rangeHint')}</p>
-            <div className="flex flex-wrap justify-between gap-3 border-t pt-4">
-              <button type="button" className="btn-secondary" disabled={slaSaving} onClick={() => { void resetSla(); }}>{t('admin.tenants.sla.reset')}</button>
-              <div className="flex gap-2"><button type="button" className="btn-secondary" onClick={closeSla} disabled={slaSaving}>{t('common.cancel')}</button><button type="submit" className="btn-primary" disabled={slaSaving || slaPolicies.length !== 15 || slaPolicies.some((policy) => policy.hours === '')}>{slaSaving ? t('common.saving') : t('common.save')}</button></div>
-            </div>
-          </form>
+                </table>
+              </div>
+              <p className="text-xs text-gray-500">{t('admin.tenants.sla.rangeHint')}</p>
+              <div className="flex flex-wrap justify-between gap-3 border-t pt-4">
+                <button type="button" className="btn-secondary" disabled={slaSaving} onClick={() => { void resetSla(); }}>{t('admin.tenants.sla.reset')}</button>
+                <div className="flex gap-2"><button type="button" className="btn-secondary" onClick={closeSla} disabled={slaSaving}>{t('common.cancel')}</button><button type="submit" className="btn-primary" disabled={slaSaving || slaPolicies.length !== 15 || slaPolicies.some((policy) => policy.hours === '')}>{slaSaving ? t('common.saving') : t('admin.tenants.sla.saveDurations')}</button></div>
+              </div>
+            </form>
+          </div>
         )}
       </Modal>
       {ConfirmDialogElement}

@@ -203,6 +203,7 @@ model Tenant {
   contactEmail  String?  @db.VarChar(255)
   contactPhone  String?  @db.VarChar(20)
   isActive      Boolean  @default(true)
+  slaTargetPercent Int   @default(95)
   configJson    Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

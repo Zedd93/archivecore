@@ -15,3 +15,7 @@ export const updateTenantSlaSchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['policies'], message: 'Podaj dokładnie jeden czas SLA dla każdego rodzaju zlecenia i priorytetu' });
   }
 });
+
+export const updateTenantSlaTargetSchema = z.object({
+  slaTargetPercent: z.number().int().min(1).max(100),
+});

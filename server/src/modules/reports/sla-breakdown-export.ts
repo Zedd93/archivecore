@@ -32,6 +32,7 @@ export function buildSlaBreakdownExport(report: SlaBreakdown, scope: 'tenant' | 
       row.slaRate ?? '',
     ]),
     ['Razem', '', '', report.totals.completed, report.totals.breached, report.totals.activeOverdue, totalRate],
+    ...(typeof report.slaTargetPercent === 'number' ? [['Cel SLA klienta (%)', report.slaTargetPercent]] : []),
   ];
   const sheet = XLSX.utils.aoa_to_sheet(format === 'csv' ? rows.map((row) => row.map(csvSafe)) : rows);
   sheet['!cols'] = [34, 22, 18, 15, 17, 24, 17].map((wch) => ({ wch }));
@@ -67,18 +68,19 @@ export function buildSlaTenantTrendExport(report: SlaTenantTrends, format: Expor
     ['Rodzaj zlecenia', report.orderType ? ORDER_TYPE_LABELS[report.orderType] || report.orderType : 'Wszystkie'],
     ['Uwaga', 'Pierwszy i ostatni miesiąc mogą być niepełne. Puste pola oznaczają brak zakończonych zleceń.'],
     [],
-    ['Klient', ...report.months.flatMap((month) => [`${month} SLA (%)`, `${month} zleceń`]), 'Razem zleceń', 'Po terminie', 'W terminie (%)'],
+    ['Klient', ...report.months.flatMap((month) => [`${month} SLA (%)`, `${month} zleceń`]), 'Razem zleceń', 'Po terminie', 'W terminie (%)', 'Cel SLA (%)'],
     ...report.data.map((tenant) => [
       tenant.tenantName,
       ...tenant.months.flatMap((month) => [month.slaRate ?? '', month.completed]),
       tenant.completed,
       tenant.breached,
       tenant.slaRate ?? '',
+      tenant.slaTargetPercent,
     ]),
-    ['Razem', ...monthlyTotals.flatMap((month) => [rate(month.completed, month.breached), month.completed]), completed, breached, rate(completed, breached)],
+    ['Razem', ...monthlyTotals.flatMap((month) => [rate(month.completed, month.breached), month.completed]), completed, breached, rate(completed, breached), ''],
   ];
   const sheet = XLSX.utils.aoa_to_sheet(format === 'csv' ? rows.map((row) => row.map(csvSafe)) : rows);
-  sheet['!cols'] = [{ wch: 34 }, ...report.months.flatMap(() => [{ wch: 16 }, { wch: 16 }]), { wch: 18 }, { wch: 16 }, { wch: 18 }];
+  sheet['!cols'] = [{ wch: 34 }, ...report.months.flatMap(() => [{ wch: 16 }, { wch: 16 }]), { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
   const timestamp = report.asOf.toISOString().replace(/[:.]/g, '-');
 
   if (format === 'csv') {

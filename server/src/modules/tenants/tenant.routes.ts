@@ -3,7 +3,7 @@ import { tenantController } from './tenant.controller';
 import { authenticate } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createTenantSchema, updateTenantSchema, updateTenantSlaSchema } from '@archivecore/shared';
+import { Permissions, createTenantSchema, updateTenantSchema, updateTenantSlaSchema, updateTenantSlaTargetSchema } from '@archivecore/shared';
 import { validate } from '../../middleware/validate';
 
 const router = Router();
@@ -14,6 +14,7 @@ router.get('/:id', authenticate, requirePermission(Permissions.TENANT_MANAGE, Pe
 router.get('/:id/stats', authenticate, requirePermission(Permissions.TENANT_MANAGE), (req, res, next) => tenantController.getStats(req, res, next));
 router.get('/:id/sla', authenticate, requirePermission(Permissions.TENANT_MANAGE), (req, res, next) => tenantController.getSlaPolicies(req, res, next));
 router.put('/:id/sla', authenticate, requirePermission(Permissions.TENANT_MANAGE), validate(updateTenantSlaSchema), auditLog('tenant', 'tenant.sla.update'), (req, res, next) => tenantController.updateSlaPolicies(req, res, next));
+router.put('/:id/sla-target', authenticate, requirePermission(Permissions.TENANT_MANAGE), validate(updateTenantSlaTargetSchema), auditLog('tenant', 'tenant.sla.target.update'), (req, res, next) => tenantController.updateSlaTarget(req, res, next));
 router.delete('/:id/sla', authenticate, requirePermission(Permissions.TENANT_MANAGE), auditLog('tenant', 'tenant.sla.reset'), (req, res, next) => tenantController.resetSlaPolicies(req, res, next));
 router.post('/', authenticate, requirePermission(Permissions.TENANT_MANAGE), validate(createTenantSchema), auditLog('tenant', 'tenant.create'), (req, res, next) => tenantController.create(req, res, next));
 router.put('/:id', authenticate, requirePermission(Permissions.TENANT_MANAGE), validate(updateTenantSchema), auditLog('tenant', 'tenant.update'), (req, res, next) => tenantController.update(req, res, next));

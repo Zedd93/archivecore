@@ -7,7 +7,8 @@ const serviceModule = await import('../src/modules/orders/order-sla.service.ts')
 const orderModule = await import('../src/modules/orders/order.service.ts');
 const exportModule = await import('../src/modules/import-export/export.service.ts');
 const tenantSlaModule = await import('../src/modules/tenants/tenant-sla.service.ts');
-const { updateTenantSlaSchema } = await import('../../shared/src/validators/sla-policy.schema.ts');
+const tenantRoutes = (await import('../src/modules/tenants/tenant.routes.ts')).default;
+const { updateTenantSlaSchema, updateTenantSlaTargetSchema } = await import('../../shared/src/validators/sla-policy.schema.ts');
 const { previewOrderSlaQuerySchema } = await import('../../shared/src/validators/order.schema.ts');
 const { businessMinutesBetween, createSlaSchedule, slaEscalationLevel, orderSlaLevel, slaRiskDeadlines, slaRiskWhere, subtractBusinessMinutes, slaLevelWhere } = slaModule;
 const { OrderSlaService } = serviceModule;
@@ -78,6 +79,10 @@ test('SLA policy input requires one valid duration for every service and priorit
   const priorities = ['normal', 'high', 'urgent'];
   const policies = orderTypes.flatMap((orderType) => priorities.map((priority) => ({ orderType, priority, hours: 10 })));
   assert.equal(updateTenantSlaSchema.safeParse({ policies }).success, true);
+  assert.equal(updateTenantSlaTargetSchema.safeParse({ slaTargetPercent: 97 }).success, true);
+  for (const slaTargetPercent of [0, 101, 95.5, '95']) {
+    assert.equal(updateTenantSlaTargetSchema.safeParse({ slaTargetPercent }).success, false);
+  }
   assert.equal(updateTenantSlaSchema.safeParse({ policies: [...policies.slice(0, 14), policies[0]] }).success, false);
   assert.equal(updateTenantSlaSchema.safeParse({ policies: policies.map((policy, index) => index ? policy : { ...policy, hours: 0 }) }).success, false);
   assert.equal(updateTenantSlaSchema.safeParse({ policies: policies.map((policy, index) => index ? policy : { ...policy, hours: 241 }) }).success, false);
@@ -107,10 +112,15 @@ test('tenant SLA lookup falls back to defaults and never reads another tenant po
 
 test('tenant SLA settings show defaults, mark overrides, and replace only that tenant in a transaction', async () => {
   const originalTenantFind = prisma.tenant.findUnique;
+  const originalTenantUpdate = prisma.tenant.update;
   const originalPolicyFind = prisma.tenantSlaPolicy.findMany;
   const originalTransaction = prisma.$transaction;
   const changes = [];
   prisma.tenant.findUnique = async ({ where }) => where.id === 'tenant-a' ? { id: 'tenant-a' } : null;
+  prisma.tenant.update = async ({ where, data }) => {
+    changes.push(['target', where.id, data.slaTargetPercent]);
+    return { id: where.id, slaTargetPercent: data.slaTargetPercent };
+  };
   prisma.tenantSlaPolicy.findMany = async ({ where }) => {
     assert.equal(where.tenantId, 'tenant-a');
     return [{ orderType: 'scan', priority: 'urgent', hours: 3 }];
@@ -137,11 +147,42 @@ test('tenant SLA settings show defaults, mark overrides, and replace only that t
     assert.equal(changes[1][0], 'create');
     assert.equal(changes[1][1].length, 15);
     assert.ok(changes[1][1].every((policy) => policy.tenantId === 'tenant-a'));
+    assert.equal(changes.length, 2);
+    assert.deepEqual(await tenantSlaService.updateTarget('tenant-a', 97), { id: 'tenant-a', slaTargetPercent: 97 });
+    assert.deepEqual(changes[2], ['target', 'tenant-a', 97]);
+    await assert.rejects(tenantSlaService.updateTarget('missing', 97), /Tenant nie znaleziony/);
+    assert.equal(changes.length, 3);
   } finally {
     prisma.tenant.findUnique = originalTenantFind;
+    prisma.tenant.update = originalTenantUpdate;
     prisma.tenantSlaPolicy.findMany = originalPolicyFind;
     prisma.$transaction = originalTransaction;
   }
+});
+
+test('updating a client SLA target requires tenant-management permission and valid input', () => {
+  const route = tenantRoutes.stack.find((layer) => layer.route?.path === '/:id/sla-target')?.route;
+  assert.ok(route);
+  assert.equal(route.methods.put, true);
+  const permission = route.stack[1].handle;
+  const validation = route.stack[2].handle;
+  const response = () => ({
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  });
+  const denied = response();
+  permission({ user: { permissions: [] } }, denied, () => { throw new Error('Permission bypassed'); });
+  assert.equal(denied.statusCode, 403);
+
+  const allowed = response();
+  let nextCalled = false;
+  permission({ user: { permissions: ['tenant.manage'] } }, allowed, () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+
+  const invalid = response();
+  validation({ body: { slaTargetPercent: 0 } }, invalid, () => { throw new Error('Validation bypassed'); });
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(invalid.body.details[0].field, 'slaTargetPercent');
 });
 
 test('submission starts a fresh SLA window instead of using draft creation time', () => {
