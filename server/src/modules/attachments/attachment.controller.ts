@@ -1,9 +1,30 @@
 import { Request, Response, NextFunction } from 'express';
 import { attachmentService } from './attachment.service';
+import { scanBatchService } from './scan-batch.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
 
 export class AttachmentController {
+  async previewScanBatch(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Wybierz plik PDF', 400);
+      const result = await scanBatchService.preview(req.file, req.tenantId, req.accessDepartment || undefined);
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async commitScanBatch(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.file) return errorResponse(res, 'Wybierz plik PDF', 400);
+      const result = await scanBatchService.commit(
+        req.file, req.tenantId, req.user!.userId, String(req.body.checksumSha256 || ''), req.accessDepartment || undefined,
+      );
+      return successResponse(res, result, 201);
+    } catch (err) { next(err); }
+  }
+
   async upload(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

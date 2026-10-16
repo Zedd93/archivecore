@@ -40,6 +40,7 @@
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
     "test:table-import-mapping": "node --import tsx --test server/scripts/test-table-import-mapping.cjs",
     "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",
+    "test:scan-batch": "node --import tsx --test server/scripts/test-scan-batch.mjs",
     "test:offline-shell": "node --test client/scripts/test-offline-shell.cjs",
     "test:order-draft": "node --import tsx --test client/scripts/test-order-draft.mjs",
     "test:order-requester-access": "node --import tsx --test server/scripts/test-order-requester-access.mjs",

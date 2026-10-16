@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Box, FileSpreadsheet, Loader2, Printer } from 'lucide-react';
+import { Box, Download, FileSpreadsheet, Loader2, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { normalizeDisplayText } from '@archivecore/shared';
 import api from '@/services/api';
@@ -43,6 +43,7 @@ export default function FolderDetailPage() {
   const { hasPermission, user } = useAuth();
   const tenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const [printing, setPrinting] = useState(false);
+  const [attachmentPage, setAttachmentPage] = useState(1);
   const { data: folder, isLoading, error, refetch } = useQuery({
     queryKey: ['folder', tenantId, id],
     queryFn: async () => {
@@ -51,6 +52,31 @@ export default function FolderDetailPage() {
     },
     enabled: Boolean(id),
   });
+  useEffect(() => setAttachmentPage(1), [id]);
+  const { data: attachments, isLoading: loadingAttachments, error: attachmentsError, refetch: refetchAttachments } = useQuery({
+    queryKey: ['folder-attachments', tenantId, id, attachmentPage],
+    queryFn: async () => {
+      const { data } = await api.get('/attachments', { params: { folderId: id, page: attachmentPage, limit: 20 } });
+      return data as { data: Array<{ id: string; fileName: string; uploadedAt: string }>; pagination: { total: number } };
+    },
+    enabled: Boolean(id) && Boolean(folder?._count.attachments) && hasPermission('attachment.read'),
+  });
+
+  const openAttachment = async (attachmentId: string) => {
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) {
+      toast.error(t('scanBatch.allowPopup'));
+      return;
+    }
+    tab.opener = null;
+    try {
+      const { data } = await api.get(`/attachments/${attachmentId}/download`);
+      tab.location.replace(data.data.url);
+    } catch (err) {
+      tab.close();
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
+    }
+  };
 
   const printLabel = async () => {
     if (!id) return;
@@ -137,6 +163,21 @@ export default function FolderDetailPage() {
         <ul className="divide-y divide-gray-100">{folder.documents.map((document) => <li key={document.id} className="py-2">
           <Link to={`/documents/${document.id}`} className="text-primary-700 hover:underline break-words">{normalizeDisplayText(document.title)}</Link>
         </li>)}</ul>
+      </div>}
+      {hasPermission('attachment.read') && folder._count.attachments > 0 && <div className="card space-y-3">
+        <h2 className="text-lg font-semibold">{t('boxes.attachments')} ({folder._count.attachments})</h2>
+        {loadingAttachments ? <Loader2 size={20} className="animate-spin" /> : attachmentsError ? <div className="text-sm text-red-700">
+          {getApiErrorMessage(attachmentsError, t('common.genericError'))}
+          <button type="button" className="btn-secondary ml-3" onClick={() => void refetchAttachments()}>{t('common.tryAgain')}</button>
+        </div> : <ul className="divide-y divide-gray-100">{attachments?.data.map((attachment) => <li key={attachment.id} className="flex items-center justify-between gap-3 py-2">
+          <span className="min-w-0 break-words text-sm">{attachment.fileName}</span>
+          <button type="button" onClick={() => void openAttachment(attachment.id)} className="btn-secondary shrink-0" aria-label={`${t('common.download')}: ${attachment.fileName}`}><Download size={16} /></button>
+        </li>)}</ul>}
+        {(attachments?.pagination.total || 0) > 20 && <div className="flex items-center gap-3 text-sm">
+          <button type="button" className="btn-secondary" disabled={attachmentPage === 1} onClick={() => setAttachmentPage((page) => page - 1)}>{t('common.previous')}</button>
+          <span>{attachmentPage}</span>
+          <button type="button" className="btn-secondary" disabled={attachmentPage * 20 >= (attachments?.pagination.total || 0)} onClick={() => setAttachmentPage((page) => page + 1)}>{t('common.next')}</button>
+        </div>}
       </div>}
       <CustodyHistory kind="folder" id={folder.id} />
     </div>

@@ -29,3 +29,11 @@ export const fileUpload = multer({
     }
   },
 });
+
+export const scanBatchUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    cb(null, file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname));
+  },
+});

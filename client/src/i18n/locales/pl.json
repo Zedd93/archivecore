@@ -20,6 +20,9 @@
     "import": "Importuj",
     "search": "Szukaj",
     "back": "Wróć",
+    "download": "Pobierz",
+    "previous": "Poprzednia",
+    "next": "Następna",
     "close": "Zamknij",
     "actions": "Akcje",
     "details": "Szczegóły",
@@ -1322,6 +1325,25 @@
     "successWithErrors": "Zaimportowano {{count}} wierszy. {{errors}} błędów.",
     "createdTransferList": "Utworzono spis {{number}}: {{title}}",
     "openTransferList": "Otwórz spis"
+  },
+  "scanBatch": {
+    "open": "Przypisz skany po kodach QR",
+    "title": "Przypisywanie skanów do teczek",
+    "hint": "Przygotuj jeden PDF. Przed każdą teczką umieść osobną stronę z jej etykietą QR. Strony z kodem są separatorami i nie będą zapisane w teczkach.",
+    "file": "Wsad PDF (maks. 20 MB, 20 stron)",
+    "invalidFile": "Wybierz plik PDF do 20 MB",
+    "preview": "Odczytaj i sprawdź podział",
+    "previewTitle": "Podgląd przypisania",
+    "summary": "{{pages}} stron, {{folders}} części do zapisania",
+    "coverPage": "Separator",
+    "folder": "Teczka",
+    "documentPages": "Strony dokumentu",
+    "reviewWarning": "Sprawdź wszystkie przypisania z oryginalnym plikiem. Nieczytelny kod, brak teczki albo brak dostępu zatrzyma cały wsad. Podgląd niczego jeszcze nie zapisuje.",
+    "confirm": "Sprawdziłem przypisania i zgadzam się na zapis skanów do wskazanych teczek.",
+    "save": "Zapisz skany w teczkach",
+    "saved": "Skany przypisano do teczek",
+    "savedTitle": "Zapisane pliki",
+    "allowPopup": "Zezwól przeglądarce na otwarcie nowej karty, aby pobrać plik"
   },
 
   "settings": {

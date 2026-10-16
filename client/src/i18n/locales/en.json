@@ -20,6 +20,9 @@
     "import": "Import",
     "search": "Search",
     "back": "Back",
+    "download": "Download",
+    "previous": "Previous",
+    "next": "Next",
     "close": "Close",
     "actions": "Actions",
     "details": "Details",
@@ -1322,6 +1325,25 @@
     "successWithErrors": "Imported {{count}} rows. {{errors}} errors.",
     "createdTransferList": "Created transfer list {{number}}: {{title}}",
     "openTransferList": "Open transfer list"
+  },
+  "scanBatch": {
+    "open": "Attach scans by QR code",
+    "title": "Attach scans to folders",
+    "hint": "Prepare one PDF. Place a separate page with the folder QR label before each folder's documents. QR pages are separators and will not be saved in folders.",
+    "file": "PDF batch (max. 20 MB, 20 pages)",
+    "invalidFile": "Choose a PDF file up to 20 MB",
+    "preview": "Read and review split",
+    "previewTitle": "Assignment preview",
+    "summary": "{{pages}} pages, {{folders}} parts to save",
+    "coverPage": "Separator",
+    "folder": "Folder",
+    "documentPages": "Document pages",
+    "reviewWarning": "Check every assignment against the original file. An unreadable code, missing folder, or denied access will stop the entire batch. Preview does not save anything.",
+    "confirm": "I have checked the assignments and approve saving scans to the listed folders.",
+    "save": "Save scans in folders",
+    "saved": "Scans attached to folders",
+    "savedTitle": "Saved files",
+    "allowPopup": "Allow the browser to open a new tab to download the file"
   },
 
   "settings": {

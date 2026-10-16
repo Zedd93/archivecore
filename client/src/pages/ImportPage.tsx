@@ -257,6 +257,9 @@ export default function ImportPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{t('import.title')}</h1>
         <p className="text-sm text-gray-500">{t('import.subtitle')}</p>
+        <Link to="/import/scans" className="btn-secondary inline-flex items-center gap-2 mt-4">
+          <Upload size={16} />{t('scanBatch.open')}
+        </Link>
       </div>
 
       {/* Step 1: Entity selection */}

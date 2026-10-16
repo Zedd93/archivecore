@@ -49,6 +49,9 @@ jobs:
       - name: Verify scan import approval
         run: npm run test:scan-import
 
+      - name: Verify QR scan batch assignment
+        run: npm run test:scan-batch
+
       - name: Verify offline PWA fallback
         run: npm run test:offline-shell
 
