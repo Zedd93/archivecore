@@ -72,6 +72,18 @@ export class OrderController {
     } catch (err) { next(err); }
   }
 
+  async attachExistingScan(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (![req.params.id, req.params.itemId, req.body?.attachmentId].every((id) => z.string().uuid().safeParse(id).success)) {
+        return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia, pozycji lub skanu', 400);
+      }
+      return successResponse(res, await orderScanService.attachExisting(
+        req.params.id, req.params.itemId, req.tenantId, req.user!.userId, req.body.attachmentId, req.accessDepartment || undefined,
+      ), 201);
+    } catch (err) { next(err); }
+  }
+
   async downloadScan(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

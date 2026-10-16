@@ -500,7 +500,7 @@ export class OrderService {
                 folderTitle: true,
                 categoryCode: true,
                 box: { select: { id: true, boxNumber: true, title: true, location: { select: { fullPath: true } } } },
-                folder: { select: { box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
+                folder: { select: { id: true, box: { select: { id: true, boxNumber: true, location: { select: { fullPath: true } } } } } },
                 transferList: { select: { id: true, listNumber: true, title: true } },
               },
             },

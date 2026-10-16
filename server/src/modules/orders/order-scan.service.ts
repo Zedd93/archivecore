@@ -23,10 +23,10 @@ export class OrderScanService {
     const item = await this.db.orderItem.findFirst({
       where: { id: itemId, orderId, order: { tenantId, orderType: 'scan', ...(department ? { items: { every: scanItemDepartmentWhere(department) } } : {}) } },
       select: {
-        id: true, order: { select: { status: true } }, scanFile: { select: { id: true, storageKey: true, checksumSha256: true, fileName: true, pageCount: true, fileSize: true, uploadedAt: true } },
+        id: true, folderId: true, order: { select: { status: true } }, scanFile: { select: { id: true, storageKey: true, checksumSha256: true, fileName: true, pageCount: true, fileSize: true, uploadedAt: true } },
         folder: { select: { box: { select: { department: true } } } },
         document: { select: { box: { select: { department: true } }, folder: { select: { box: { select: { department: true } } } } } },
-        transferListItem: { select: { box: { select: { department: true } }, folder: { select: { box: { select: { department: true } } } } } },
+        transferListItem: { select: { folderId: true, box: { select: { department: true } }, folder: { select: { box: { select: { department: true } } } } } },
       },
     });
     if (!item) fail('Pozycja zlecenia skanu nie została znaleziona', 404);
@@ -70,6 +70,28 @@ export class OrderScanService {
       await this.objectStorage.deleteFile(storageKey).catch(() => undefined);
       throw error;
     }
+  }
+
+  async attachExisting(orderId: string, itemId: string, tenantId: string, userId: string, attachmentId: string, department?: string) {
+    const item = await this.item(orderId, itemId, tenantId, department);
+    if (item.order.status !== 'in_progress') fail('Skan można dodać tylko podczas realizacji zlecenia', 409);
+    if (item.scanFile) fail('Skan tej pozycji został już dodany', 409);
+    const folderId = item.document ? null : item.folderId || item.transferListItem?.folderId;
+    if (!folderId) fail('Ta pozycja nie wskazuje teczki, z której można wybrać istniejący skan', 400);
+
+    const attachment = await this.db.attachment.findFirst({
+      where: { id: attachmentId, tenantId, folderId, mimeType: 'application/pdf' },
+      select: { filePath: true, fileName: true, fileSize: true, checksumSha256: true },
+    });
+    if (!attachment) fail('Nie znaleziono skanu PDF przypisanego do tej teczki', 404);
+    if (attachment.fileSize > BigInt(MAX_SCAN_BYTES)) fail('Wybrany PDF przekracza 25 MB', 400);
+    const buffer = await this.objectStorage.downloadFile(attachment.filePath);
+    if (sha256(buffer) !== attachment.checksumSha256) fail('Suma kontrolna istniejącego skanu jest nieprawidłowa', 409);
+
+    // Keep an independent copy: removing a folder attachment must not break a delivered order.
+    return this.upload(orderId, itemId, tenantId, userId, {
+      buffer, mimetype: 'application/pdf', originalname: attachment.fileName,
+    } as Express.Multer.File, department);
   }
 
   async download(orderId: string, itemId: string, tenantId: string, department?: string) {

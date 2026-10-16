@@ -119,7 +119,22 @@ export default function OrderDetailPage() {
   const [scanItemId, setScanItemId] = useState<string | null>(null);
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [uploadingScan, setUploadingScan] = useState(false);
+  const [scanAttachmentPage, setScanAttachmentPage] = useState(1);
+  const [selectedScanAttachmentId, setSelectedScanAttachmentId] = useState('');
   const [downloadingScan, setDownloadingScan] = useState<string | null>(null);
+  const scanItem = order?.items?.find((item: any) => item.id === scanItemId);
+  const scanSourceFolderId = scanItem?.documentId ? null : scanItem?.folderId || scanItem?.transferListItem?.folder?.id || null;
+  const { data: existingScans, isLoading: loadingExistingScans, error: existingScansError } = useQuery<{
+    data: Array<{ id: string; fileName: string; mimeType: string; uploadedAt: string }>;
+    pagination: { total: number };
+  }>({
+    queryKey: ['order-scan-attachments', activeTenantId, scanSourceFolderId, scanAttachmentPage],
+    queryFn: async () => {
+      const { data } = await api.get('/attachments', { params: { folderId: scanSourceFolderId, page: scanAttachmentPage, limit: 20 } });
+      return data;
+    },
+    enabled: Boolean(scanItemId && scanSourceFolderId && hasPermission('attachment.read')),
+  });
   const [showHandover, setShowHandover] = useState(false);
   const [handoverPhotoFile, setHandoverPhotoFile] = useState<File | null>(null);
   const [handoverPhotoBoxId, setHandoverPhotoBoxId] = useState('');
@@ -460,6 +475,23 @@ export default function OrderDetailPage() {
     }
   };
 
+  const attachExistingScan = async () => {
+    if (!id || !scanItemId || !selectedScanAttachmentId || uploadingScan) return;
+    setUploadingScan(true);
+    try {
+      await api.post(`/orders/${id}/items/${scanItemId}/scan/from-attachment`, { attachmentId: selectedScanAttachmentId });
+      await queryClient.invalidateQueries({ queryKey: ['order', id] });
+      setScanItemId(null);
+      setSelectedScanAttachmentId('');
+      setScanFile(null);
+      toast.success(t('orders.detail.scanSaved'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('orders.detail.scanUploadError')));
+    } finally {
+      setUploadingScan(false);
+    }
+  };
+
   const downloadScan = async (itemId: string) => {
     if (!id || downloadingScan) return;
     setDownloadingScan(itemId);
@@ -767,7 +799,7 @@ export default function OrderDetailPage() {
                         <span className="text-xs text-gray-600 break-all">{item.scanFile.fileName} · {t('orders.detail.scanPages')}: {item.scanFile.pageCount}</span>
                       )}
                       {order.orderType === 'scan' && !item.scanFile && order.status === 'in_progress' && hasPermission('order.process') && (
-                        <button type="button" className="btn-secondary text-xs" onClick={() => setScanItemId(item.id)}><Upload size={14} />{t('orders.detail.scanUpload')}</button>
+                        <button type="button" className="btn-secondary text-xs" onClick={() => { setScanAttachmentPage(1); setSelectedScanAttachmentId(''); setScanItemId(item.id); }}><Upload size={14} />{t('orders.detail.scanUpload')}</button>
                       )}
                       {order.orderType === 'scan' && item.scanFile && ['delivered', 'completed'].includes(order.status) && (
                         <button type="button" className="btn-secondary text-xs" disabled={downloadingScan === item.id} onClick={() => downloadScan(item.id)}><Download size={14} />{t('orders.detail.scanDownload')}</button>
@@ -1055,11 +1087,30 @@ export default function OrderDetailPage() {
         <form onSubmit={handleScanUpload} className="space-y-4">
           <div>
             <label htmlFor="order-scan-file" className="label-text">{t('orders.detail.scanFile')}</label>
-            <input id="order-scan-file" type="file" accept="application/pdf" className="input-field" required onChange={(event) => setScanFile(event.target.files?.[0] || null)} />
+            <input id="order-scan-file" type="file" accept="application/pdf" className="input-field" onChange={(event) => setScanFile(event.target.files?.[0] || null)} />
           </div>
           <p className="text-xs text-gray-500">{t('orders.detail.scanPageHint')}</p>
           <button type="submit" className="btn-primary" disabled={!scanFile || uploadingScan}>{uploadingScan ? t('common.saving') : t('orders.detail.scanSave')}</button>
         </form>
+        {scanSourceFolderId && hasPermission('attachment.read') && <div className="mt-5 border-t border-gray-200 pt-4 space-y-3">
+          <h3 className="font-medium text-gray-900">{t('orders.detail.scanExistingTitle')}</h3>
+          <p className="text-xs text-gray-500">{t('orders.detail.scanExistingHint')}</p>
+          {loadingExistingScans ? <Loader2 className="animate-spin" size={18} /> : existingScansError ?
+            <p className="text-sm text-red-700">{getApiErrorMessage(existingScansError, t('common.genericError'))}</p> :
+            <div className="space-y-2">{existingScans?.data.filter((attachment) => attachment.mimeType === 'application/pdf').map((attachment) =>
+              <label key={attachment.id} className="flex items-start gap-2 text-sm break-all">
+                <input type="radio" name="scan-existing-attachment" className="mt-1" checked={selectedScanAttachmentId === attachment.id} disabled={uploadingScan}
+                  onChange={() => setSelectedScanAttachmentId(attachment.id)} />{attachment.fileName}
+              </label>)}
+              {!existingScans?.data.some((attachment) => attachment.mimeType === 'application/pdf') && <p className="text-sm text-gray-500">{t('orders.detail.scanExistingEmpty')}</p>}
+            </div>}
+          {(existingScans?.pagination.total || 0) > 20 && <div className="flex items-center gap-3 text-sm">
+            <button type="button" className="btn-secondary" disabled={scanAttachmentPage === 1 || uploadingScan} onClick={() => { setSelectedScanAttachmentId(''); setScanAttachmentPage((page) => page - 1); }}>{t('common.previous')}</button>
+            <span>{scanAttachmentPage}</span>
+            <button type="button" className="btn-secondary" disabled={scanAttachmentPage * 20 >= (existingScans?.pagination.total || 0) || uploadingScan} onClick={() => { setSelectedScanAttachmentId(''); setScanAttachmentPage((page) => page + 1); }}>{t('common.next')}</button>
+          </div>}
+          <button type="button" className="btn-secondary" disabled={!selectedScanAttachmentId || uploadingScan} onClick={() => void attachExistingScan()}>{uploadingScan ? t('common.saving') : t('orders.detail.scanUseExisting')}</button>
+        </div>}
       </Modal>
     </div>
   );

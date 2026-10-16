@@ -53,6 +53,7 @@ router.delete('/:id', ...auth, requirePermission(Permissions.ORDER_COMPLETE), re
 router.post('/', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(createOrderSchema), auditLog('order', 'order.create'), (req, res, next) => orderController.create(req, res, next));
 router.post('/:id/items', ...auth, requirePermission(Permissions.ORDER_CREATE, Permissions.ORDER_PROCESS), validate(addOrderItemSchema), auditLog('order_item', 'order_item.create'), (req, res, next) => orderController.addItem(req, res, next));
 router.post('/:id/items/:itemId/scan', ...auth, requirePermission(Permissions.ORDER_PROCESS), uploadScanFile, auditLog('order_scan_file', 'order_scan.upload'), (req, res, next) => orderController.uploadScan(req, res, next));
+router.post('/:id/items/:itemId/scan/from-attachment', ...auth, requirePermission(Permissions.ORDER_PROCESS), requirePermission(Permissions.ATTACHMENT_READ), auditLog('order_scan_file', 'order_scan.upload'), (req, res, next) => orderController.attachExistingScan(req, res, next));
 router.post('/:id/handover/photos', ...auth, requirePermission(Permissions.ORDER_PROCESS), uploadHandoverPhoto, auditLog('order_handover_photo', 'order.handover_photo.upload'), (req, res, next) => orderController.uploadHandoverPhoto(req, res, next));
 
 // Status transitions

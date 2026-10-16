@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { PDFDocument } from 'pdf-lib';
 
@@ -16,6 +17,8 @@ const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const orderId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
 const itemId = '14a504c7-4864-4027-a02c-685201fb38f8';
 const userId = '0ab09ae1-75cb-4e65-9342-8b613196271f';
+const folderId = '34303393-0db4-49fd-b0d2-cae4f8971422';
+const attachmentId = 'db7c235e-661f-4bcb-bbf7-6c3d414a5d46';
 
 async function scanPdf() {
   const document = await PDFDocument.create();
@@ -26,12 +29,17 @@ async function scanPdf() {
 
 function fixture() {
   const objects = new Map();
+  const attachments = new Map();
   let status = 'in_progress';
   let scanFile = null;
   const db = {
     orderItem: { findFirst: async ({ where }) => {
       if (where.id !== itemId || where.orderId !== orderId || where.order.tenantId !== tenantId) return null;
-      return { id: itemId, order: { status }, folder: { box: { department: 'Księgowość' } }, document: null, transferListItem: null, scanFile };
+      return { id: itemId, folderId, order: { status }, folder: { box: { department: 'Księgowość' } }, document: null, transferListItem: null, scanFile };
+    } },
+    attachment: { findFirst: async ({ where }) => {
+      const attachment = attachments.get(where.id);
+      return attachment?.tenantId === where.tenantId && attachment?.folderId === where.folderId && attachment?.mimeType === where.mimeType ? attachment : null;
     } },
     orderScanFile: { create: async ({ data }) => {
       scanFile = { id: 'scan-id', uploadedAt: new Date(), ...data };
@@ -43,7 +51,17 @@ function fixture() {
     downloadFile: async (key) => objects.get(key),
     deleteFile: async (key) => objects.delete(key),
   };
-  return { service: new OrderScanService(db, storage), objects, setStatus: (value) => { status = value; }, getScan: () => scanFile };
+  return {
+    service: new OrderScanService(db, storage), objects, setStatus: (value) => { status = value; }, getScan: () => scanFile,
+    addAttachment: (buffer, overrides = {}) => {
+      const attachment = {
+        tenantId, folderId, mimeType: 'application/pdf', filePath: `${tenantId}/folder-scan.pdf`, fileName: 'teczka.pdf',
+        fileSize: BigInt(buffer.length), checksumSha256: createHash('sha256').update(buffer).digest('hex'), ...overrides,
+      };
+      attachments.set(attachmentId, attachment);
+      objects.set(attachment.filePath, buffer);
+    },
+  };
 }
 
 test('scan orders accept folders and reject whole boxes', () => {
@@ -77,6 +95,54 @@ test('download is tenant- and department-scoped and waits for delivery', async (
   assert.deepEqual((await service.download(orderId, itemId, tenantId, 'Księgowość')).buffer, pdf);
   objects.set(getScan().storageKey, Buffer.from('tampered'));
   await assert.rejects(service.download(orderId, itemId, tenantId), /Suma kontrolna/);
+});
+
+test('existing folder PDF can fulfill a scan order without depending on the source attachment', async () => {
+  const { service, addAttachment, objects, getScan, setStatus } = fixture();
+  const pdf = await scanPdf();
+  addAttachment(pdf);
+  const result = await service.attachExisting(orderId, itemId, tenantId, userId, attachmentId, 'Księgowość');
+  assert.equal(result.pageCount, 2);
+  assert.notEqual(getScan().storageKey, `${tenantId}/folder-scan.pdf`);
+  objects.delete(`${tenantId}/folder-scan.pdf`);
+  setStatus('delivered');
+  assert.deepEqual((await service.download(orderId, itemId, tenantId, 'Księgowość')).buffer, pdf);
+});
+
+test('existing scan cannot cross tenant, folder or department boundaries', async () => {
+  const { service, addAttachment, objects, getScan } = fixture();
+  const pdf = await scanPdf();
+  addAttachment(pdf, { folderId: '039c7196-f156-4ab4-8dc8-7d0f415c2190' });
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId), { statusCode: 404 });
+  addAttachment(pdf, { tenantId: '42e703a6-4528-4423-b4bf-ae554614bfc9' });
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId), { statusCode: 404 });
+  addAttachment(pdf);
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId, 'Kadry'), { statusCode: 404 });
+  await assert.rejects(service.attachExisting(orderId, itemId, 'another-tenant', userId, attachmentId), { statusCode: 404 });
+  assert.equal(getScan(), null);
+  assert.equal(objects.size, 1);
+});
+
+test('existing scan checks checksum and order state before copying', async () => {
+  const { service, addAttachment, objects, getScan, setStatus } = fixture();
+  const pdf = await scanPdf();
+  addAttachment(pdf, { checksumSha256: '0'.repeat(64) });
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId), { statusCode: 409 });
+  addAttachment(pdf);
+  setStatus('ready');
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId), { statusCode: 409 });
+  assert.equal(getScan(), null);
+  assert.equal(objects.size, 1);
+});
+
+test('existing attachment must be a valid PDF within the scan-order size limit', async () => {
+  const { service, addAttachment, getScan } = fixture();
+  const invalidPdf = Buffer.from('not a PDF');
+  addAttachment(invalidPdf);
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId), { statusCode: 400 });
+  addAttachment(await scanPdf(), { fileSize: BigInt(25 * 1024 * 1024 + 1) });
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId), { statusCode: 400 });
+  assert.equal(getScan(), null);
 });
 
 test('scan order cannot be marked ready until each item has a PDF', async () => {
