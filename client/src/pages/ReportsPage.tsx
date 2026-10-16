@@ -8,6 +8,7 @@ import { Permissions, RoleCode } from '@archivecore/shared';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
 import { useExport } from '@/hooks/useExport';
 import { slaReportOrderUrl, SlaReportKind } from '@/utils/slaReportDrilldown';
+import { slaTargetStatus } from '@/utils/slaTarget';
 import toast from 'react-hot-toast';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
 
@@ -89,6 +90,8 @@ export default function ReportsPage() {
   const [slaDays, setSlaDays] = useState(180);
   const [slaScope, setSlaScope] = useState<'tenant' | 'all'>('tenant');
   const [slaOrderType, setSlaOrderType] = useState('');
+  const [slaTarget, setSlaTarget] = useState(95);
+  const isBelowSlaTarget = (completed: number, breached: number) => slaTargetStatus(completed, breached, slaTarget) === 'below';
   const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
   const canOpenSlaOrders = hasPermission(Permissions.ORDER_READ);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
@@ -340,6 +343,12 @@ export default function ReportsPage() {
               {SLA_ORDER_TYPES.map(({ code, labelKey }) => <option key={code} value={code}>{t(labelKey)}</option>)}
             </select>
           </label>
+          <label className="text-sm font-medium text-gray-700">
+            {t('reports.slaTarget')}
+            <select className="input-field mt-1" value={slaTarget} onChange={(event) => setSlaTarget(Number(event.target.value))}>
+              {[80, 90, 95, 98, 99, 100].map((target) => <option key={target} value={target}>{target}%</option>)}
+            </select>
+          </label>
           {hasPermission(Permissions.REPORT_EXPORT) && <div className="flex flex-wrap items-end gap-2">
             <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaExporting || (slaScope === 'tenant' && !activeTenantId)} onClick={() => { void exportSlaBreakdown({ format: 'xlsx', scope: slaScope, days: String(slaDays), ...(slaOrderType ? { orderType: slaOrderType } : {}) }); }}>
               {slaExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}{t('reports.slaExportXlsx')}
@@ -392,6 +401,16 @@ export default function ReportsPage() {
             </div>
           )
         )}
+        {slaBreakdown && !slaBreakdownError && !slaBreakdownLoading && slaBreakdown.totals.completed > 0 && <div
+          className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${isBelowSlaTarget(slaBreakdown.totals.completed, slaBreakdown.totals.breached) ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}
+        >
+          {isBelowSlaTarget(slaBreakdown.totals.completed, slaBreakdown.totals.breached) && <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />}
+          <span>{t(isBelowSlaTarget(slaBreakdown.totals.completed, slaBreakdown.totals.breached) ? 'reports.slaTargetBelowSummary' : 'reports.slaTargetMetSummary', {
+            rate: Math.round((slaBreakdown.totals.completed - slaBreakdown.totals.breached) / slaBreakdown.totals.completed * 100),
+            target: slaTarget,
+            count: slaBreakdown.totals.completed,
+          })}</span>
+        </div>}
         <div className="border-t border-gray-200 pt-4">
           <h3 className="text-base font-semibold text-gray-900">{t('reports.slaTrendTitle')}</h3>
           <p className="mt-1 text-sm text-gray-500">{t('reports.slaTrendDescription')}</p>
@@ -403,8 +422,10 @@ export default function ReportsPage() {
                 <div className="grid min-w-[480px] gap-3" style={{ gridTemplateColumns: `repeat(${slaTrend.months.length}, minmax(5.5rem, 1fr))` }}>
                   {slaTrend.months.map((month) => {
                     const label = formatSlaMonth(month.month, i18n.language);
+                    const belowTarget = isBelowSlaTarget(month.completed, month.breached);
                     return <div key={month.month} className="min-w-0 text-center text-xs text-gray-700">
-                      <span className="block font-semibold text-sm text-gray-900">{month.slaRate === null ? '—' : `${month.slaRate}%`}</span>
+                      <span className={`block font-semibold text-sm ${belowTarget ? 'text-amber-800' : 'text-gray-900'}`}>{month.slaRate === null ? '—' : `${month.slaRate}%`}</span>
+                      {belowTarget && <span className="mt-1 block text-amber-800">{t('reports.slaBelowTarget')}</span>}
                       <div
                         className="mt-2 flex h-4 overflow-hidden rounded-full bg-gray-100"
                         role="img"
@@ -459,17 +480,19 @@ export default function ReportsPage() {
                   <tbody>
                     {slaTenantTrends.data.map((tenant) => <tr key={tenant.tenantId} className="border-t border-gray-100">
                       <th scope="row" className="sticky left-0 z-10 max-w-64 bg-white px-3 py-2 text-left font-medium text-gray-900">{tenant.tenantName}</th>
-                      {tenant.months.map((month) => <td key={month.month} className="px-2 py-2 text-center">
+                      {tenant.months.map((month) => <td key={month.month} className={`px-2 py-2 text-center ${isBelowSlaTarget(month.completed, month.breached) ? 'bg-amber-50' : ''}`}>
                         {month.slaRate === null ? <span className="text-gray-400">—</span> : <>
-                          <span className="font-semibold text-gray-900">{month.slaRate}%</span>
+                          <span className={`font-semibold ${isBelowSlaTarget(month.completed, month.breached) ? 'text-amber-800' : 'text-gray-900'}`}>{month.slaRate}%</span>
+                          {isBelowSlaTarget(month.completed, month.breached) && <span className="mt-1 block text-amber-800">{t('reports.slaBelowTarget')}</span>}
                           <span className="mt-1 block text-gray-500">{t('reports.slaTenantTrendSample', { count: month.completed })}</span>
                           <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-red-200" aria-hidden="true">
                             <span className="block h-full bg-emerald-500" style={{ width: `${month.slaRate}%` }} />
                           </span>
                         </>}
                       </td>)}
-                      <td className="bg-gray-50 px-2 py-2 text-center font-semibold text-gray-900">
+                      <td className={`px-2 py-2 text-center font-semibold ${isBelowSlaTarget(tenant.completed, tenant.breached) ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-900'}`}>
                         {tenant.slaRate === null ? '—' : `${tenant.slaRate}%`}
+                        {isBelowSlaTarget(tenant.completed, tenant.breached) && <span className="mt-1 block font-normal">{t('reports.slaBelowTarget')}</span>}
                         <span className="mt-1 block font-normal text-gray-500">{t('reports.slaTenantTrendSample', { count: tenant.completed })}</span>
                       </td>
                     </tr>)}

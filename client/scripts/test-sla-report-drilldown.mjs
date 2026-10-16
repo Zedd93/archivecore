@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readSlaReportDrilldown, slaReportOrderUrl } from '../src/utils/slaReportDrilldown.ts';
+import { slaTargetStatus } from '../src/utils/slaTarget.ts';
 
 test('SLA report link preserves tenant, report snapshot, type and priority', () => {
   const filter = {
@@ -17,4 +18,14 @@ test('SLA report link preserves tenant, report snapshot, type and priority', () 
   assert.equal(readSlaReportDrilldown('?slaReport=breached'), null);
   assert.equal(readSlaReportDrilldown(url.replace('checkout', 'invalid')), null);
   assert.equal(readSlaReportDrilldown(url.replace(filter.tenantId, 'not-a-tenant')), null);
+});
+
+test('SLA target compares the displayed rounded rate and ignores empty samples', () => {
+  assert.equal(slaTargetStatus(0, 0, 95), 'noData');
+  assert.equal(slaTargetStatus(20, 1, 95), 'met');
+  assert.equal(slaTargetStatus(20, 2, 95), 'below');
+  assert.equal(slaTargetStatus(100, 5, 95), 'met');
+  assert.equal(slaTargetStatus(200, 11, 95), 'met');
+  assert.equal(slaTargetStatus(200, 12, 95), 'below');
+  assert.equal(slaTargetStatus(200, 10, 95), 'met');
 });
