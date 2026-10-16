@@ -235,6 +235,7 @@ model Tenant {
   webhookEndpoints  WebhookEndpoint[]
   warehouseOperations WarehouseOperation[]
   slaPolicies       TenantSlaPolicy[]
+  slaTargetAlertState TenantSlaTargetAlertState?
 
   @@map("tenants")
 }
@@ -270,6 +271,16 @@ model TenantSlaPolicy {
 
   @@id([tenantId, orderType, priority])
   @@map("tenant_sla_policies")
+}
+
+model TenantSlaTargetAlertState {
+  tenantId       String    @id @db.Uuid
+  isBelow        Boolean   @default(false)
+  lastNotifiedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_sla_target_alert_states")
 }
 
 model PriceListItem {

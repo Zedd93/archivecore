@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readSlaReportDrilldown, slaReportOrderUrl } from '../src/utils/slaReportDrilldown.ts';
 import { slaTargetStatus } from '../src/utils/slaTarget.ts';
+import { readSlaReportView } from '../src/utils/slaReportView.ts';
 
 test('SLA report link preserves tenant, report snapshot, type and priority', () => {
   const filter = {
@@ -28,4 +29,11 @@ test('SLA target compares the displayed rounded rate and ignores empty samples',
   assert.equal(slaTargetStatus(200, 11, 95), 'met');
   assert.equal(slaTargetStatus(200, 12, 95), 'below');
   assert.equal(slaTargetStatus(200, 10, 95), 'met');
+});
+
+test('SLA alert report link keeps the period and never grants global scope to a client role', () => {
+  assert.deepEqual(readSlaReportView('?slaDays=30&slaScope=all', true), { days: 30, scope: 'all' });
+  assert.deepEqual(readSlaReportView('?slaDays=30&slaScope=all', false), { days: 30, scope: 'tenant' });
+  assert.deepEqual(readSlaReportView('?slaDays=999&slaScope=all', true), { days: 180, scope: 'all' });
+  assert.deepEqual(readSlaReportView('', true), { days: 180, scope: 'tenant' });
 });

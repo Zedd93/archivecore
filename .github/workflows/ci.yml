@@ -70,6 +70,9 @@ jobs:
       - name: Verify SLA breakdown report
         run: npm run test:sla-breakdown
 
+      - name: Verify client SLA target alerts
+        run: npm run test:sla-target-alert
+
       - name: Verify SLA report links
         run: npm run test:sla-report-drilldown
 

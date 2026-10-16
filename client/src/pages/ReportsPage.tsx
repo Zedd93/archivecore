@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Permissions, RoleCode } from '@archivecore/shared';
@@ -9,6 +9,7 @@ import { getApiErrorMessageAsync } from '@/utils/apiError';
 import { useExport } from '@/hooks/useExport';
 import { slaReportOrderUrl, SlaReportKind } from '@/utils/slaReportDrilldown';
 import { slaTargetStatus } from '@/utils/slaTarget';
+import { readSlaReportView } from '@/utils/slaReportView';
 import toast from 'react-hot-toast';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
 
@@ -85,15 +86,21 @@ const previousMonth = () => {
 
 export default function ReportsPage() {
   const { t, i18n } = useTranslation();
+  const location = useLocation();
   const { user, hasPermission, hasRole } = useAuth();
+  const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
   const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(null);
   const [reportMonth, setReportMonth] = useState(previousMonth);
   const [downloadingReport, setDownloadingReport] = useState(false);
-  const [slaDays, setSlaDays] = useState(180);
-  const [slaScope, setSlaScope] = useState<'tenant' | 'all'>('tenant');
+  const [slaDays, setSlaDays] = useState(() => readSlaReportView(location.search, canViewAllSla).days);
+  const [slaScope, setSlaScope] = useState<'tenant' | 'all'>(() => readSlaReportView(location.search, canViewAllSla).scope);
   const [slaOrderType, setSlaOrderType] = useState('');
   const isBelowSlaTarget = (completed: number, breached: number, target: number | null) => target !== null && slaTargetStatus(completed, breached, target) === 'below';
-  const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
+  useEffect(() => {
+    const view = readSlaReportView(location.search, canViewAllSla);
+    setSlaDays(view.days);
+    setSlaScope(view.scope);
+  }, [location.search, canViewAllSla]);
   const canOpenSlaOrders = hasPermission(Permissions.ORDER_READ);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const orderTypeLabels = Object.fromEntries(SLA_ORDER_TYPES.map(({ code, labelKey }) => [code, t(labelKey)]));

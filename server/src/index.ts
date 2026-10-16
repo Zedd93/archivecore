@@ -4,6 +4,7 @@ import { prisma } from './config/database';
 import { redis } from './config/redis';
 import { webhookService } from './modules/integrations/webhook.service';
 import { orderSlaService } from './modules/orders/order-sla.service';
+import { slaTargetAlertService } from './modules/reports/sla-target-alert.service';
 
 const log = {
   info: (...args: unknown[]) => { if (config.nodeEnv !== 'test') process.stdout.write(args.join(' ') + '\n'); },
@@ -59,10 +60,23 @@ async function main() {
   slaTimer.unref();
   checkOrderSla();
 
+  let checkingSlaTargets = false;
+  const checkSlaTargets = () => {
+    if (checkingSlaTargets) return;
+    checkingSlaTargets = true;
+    void slaTargetAlertService.processDue()
+      .catch((error) => log.error('Tenant SLA target alert worker failed; retrying later:', error))
+      .finally(() => { checkingSlaTargets = false; });
+  };
+  const slaTargetTimer = setInterval(checkSlaTargets, 6 * 60 * 60_000);
+  slaTargetTimer.unref();
+  checkSlaTargets();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     clearInterval(webhookTimer);
     clearInterval(slaTimer);
+    clearInterval(slaTargetTimer);
     log.info(`\n📡 Received ${signal}, shutting down...`);
     server.close(async () => {
       await prisma.$disconnect();

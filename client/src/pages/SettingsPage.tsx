@@ -378,6 +378,7 @@ function NotificationsTab() {
     t('settings.notifications.newOrders'),
     t('settings.notifications.orderStatus'),
     t('settings.notifications.retention'),
+    t('settings.notifications.slaTarget'),
   ];
 
   return (

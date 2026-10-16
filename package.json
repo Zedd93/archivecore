@@ -48,6 +48,7 @@
     "test:order-assignment": "node --import tsx --test server/scripts/test-order-assignment.mjs",
     "test:order-sla": "node --import tsx --test server/scripts/test-order-sla.mjs",
     "test:sla-breakdown": "node --import tsx --test server/scripts/test-sla-breakdown.mjs",
+    "test:sla-target-alert": "node --import tsx --test server/scripts/test-sla-target-alert.mjs",
     "test:sla-report-drilldown": "node --import tsx --test client/scripts/test-sla-report-drilldown.mjs",
     "test:offline-warehouse-scans": "node --import tsx --test client/scripts/test-offline-warehouse-scans.mjs",
     "test:warehouse-submission": "node --import tsx --test client/scripts/test-warehouse-submission.mjs",
