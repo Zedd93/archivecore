@@ -112,6 +112,10 @@ export default function ReportsPage() {
     endpoint: '/reports/sla/breakdown/export',
     defaultFilename: 'raport_sla.xlsx',
   });
+  const { exportData: exportSlaTenantTrends, isExporting: slaTenantTrendsExporting } = useExport({
+    endpoint: '/reports/sla/trend/tenants/export',
+    defaultFilename: 'raport_sla_klienci.xlsx',
+  });
 
   const downloadMonthlyReport = async () => {
     if (!reportMonth || downloadingReport) return;
@@ -425,8 +429,20 @@ export default function ReportsPage() {
           )}
         </div>
         {canViewAllSla && slaScope === 'all' && <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-base font-semibold text-gray-900">{t('reports.slaTenantTrendTitle')}</h3>
-          <p className="mt-1 text-sm text-gray-500">{t('reports.slaTenantTrendDescription')}</p>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">{t('reports.slaTenantTrendTitle')}</h3>
+              <p className="mt-1 text-sm text-gray-500">{t('reports.slaTenantTrendDescription')}</p>
+            </div>
+            {hasPermission(Permissions.REPORT_EXPORT) && <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-secondary flex items-center gap-2" disabled={slaTenantTrendsExporting || slaTenantTrendsLoading || slaTenantTrendsError} onClick={() => { void exportSlaTenantTrends({ format: 'xlsx', scope: 'all', days: String(slaDays), ...(slaOrderType ? { orderType: slaOrderType } : {}) }); }}>
+                {slaTenantTrendsExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}{t('reports.slaTenantTrendExportXlsx')}
+              </button>
+              <button type="button" className="btn-secondary" disabled={slaTenantTrendsExporting || slaTenantTrendsLoading || slaTenantTrendsError} onClick={() => { void exportSlaTenantTrends({ format: 'csv', scope: 'all', days: String(slaDays), ...(slaOrderType ? { orderType: slaOrderType } : {}) }); }}>
+                {t('reports.slaTenantTrendExportCsv')}
+              </button>
+            </div>}
+          </div>
           {slaTenantTrendsLoading ? <p className="mt-3 text-sm text-gray-500">{t('common.loading')}</p> : slaTenantTrendsError ? (
             <button type="button" className="btn-secondary mt-3" onClick={() => { void refetchSlaTenantTrends(); }}>{t('common.tryAgain')}</button>
           ) : slaTenantTrends && (

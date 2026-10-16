@@ -1097,6 +1097,8 @@
     "slaTenantTrendEmpty": "No clients have completed orders with an SLA deadline in this period.",
     "slaTenantTrendOverall": "Whole period",
     "slaTenantTrendSample": "{{count}} orders",
+    "slaTenantTrendExportXlsx": "Export comparison to Excel",
+    "slaTenantTrendExportCsv": "Export comparison to CSV",
     "slaExportXlsx": "Download Excel",
     "slaExportCsv": "Download CSV",
     "hrRetention": "HR records retention",

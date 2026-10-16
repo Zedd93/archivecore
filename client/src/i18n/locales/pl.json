@@ -1097,6 +1097,8 @@
     "slaTenantTrendEmpty": "Żaden klient nie ma zakończonych zleceń z terminem SLA w tym okresie.",
     "slaTenantTrendOverall": "Cały okres",
     "slaTenantTrendSample": "{{count}} zlec.",
+    "slaTenantTrendExportXlsx": "Eksportuj porównanie do Excela",
+    "slaTenantTrendExportCsv": "Eksportuj porównanie do CSV",
     "slaExportXlsx": "Pobierz Excel",
     "slaExportCsv": "Pobierz CSV",
     "hrRetention": "Retencja akt osobowych",

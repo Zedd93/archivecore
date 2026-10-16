@@ -3,7 +3,7 @@ import { reportService } from './report.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions, RoleCode } from '@archivecore/shared';
 import { buildMonthlyReportPdf, getMonthlyReport, parseReportMonth } from './monthly-report.service';
-import { buildSlaBreakdownExport } from './sla-breakdown-export';
+import { buildSlaBreakdownExport, buildSlaTenantTrendExport } from './sla-breakdown-export';
 import { prisma } from '../../config/database';
 import { OrderType } from '@prisma/client';
 
@@ -179,6 +179,33 @@ export class ReportController {
           action: 'report.sla.export',
           entityType: 'report',
           newValues: { scope: options.scope, days: options.days, orderType: options.orderType ?? 'all', format, rows: report.data.length, asOf: report.asOf.toISOString() },
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']?.substring(0, 500),
+        },
+      });
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(buffer);
+    } catch (err) { next(err); }
+  }
+
+  async exportSlaTenantTrends(req: Request, res: Response, next: NextFunction) {
+    try {
+      const options = parseSlaReportOptions(req);
+      if (!options.ok) return errorResponse(res, options.error, options.status);
+      if (options.scope !== 'all') return errorResponse(res, 'Wybierz zakres wszystkich klientów', 400);
+      const format = req.query.format === undefined ? 'xlsx' : req.query.format;
+      if (format !== 'xlsx' && format !== 'csv') return errorResponse(res, 'Nieprawidłowy format eksportu', 400);
+      const report = await reportService.getSlaTenantTrends(options.days, new Date(), options.orderType);
+      const { buffer, filename, contentType } = buildSlaTenantTrendExport(report, format);
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.userId,
+          action: 'report.sla.tenant_trend.export',
+          entityType: 'report',
+          newValues: { scope: 'all', days: options.days, orderType: options.orderType ?? 'all', format, tenants: report.data.length, asOf: report.asOf.toISOString() },
           ipAddress: req.ip,
           userAgent: req.headers['user-agent']?.substring(0, 500),
         },

@@ -6,7 +6,8 @@ const require = createRequire(import.meta.url);
 const { prisma } = require('../dist/config/database.js');
 const { ReportService, reportService } = require('../dist/modules/reports/report.service.js');
 const { reportController } = require('../dist/modules/reports/report.controller.js');
-const { buildSlaBreakdownExport } = require('../dist/modules/reports/sla-breakdown-export.js');
+const reportRoutes = require('../dist/modules/reports/report.routes.js').default;
+const { buildSlaBreakdownExport, buildSlaTenantTrendExport } = require('../dist/modules/reports/sla-breakdown-export.js');
 const { slaReportWhere } = require('../dist/modules/orders/sla-report-filter.js');
 const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { ExportService } = require('../dist/modules/import-export/export.service.js');
@@ -330,6 +331,44 @@ test('SLA export produces a readable Excel and UTF-8 CSV with the same totals', 
   assert.match(csv.filename, /\.csv$/);
 });
 
+test('tenant trend export preserves monthly samples, totals and CSV formula safety', () => {
+  const report = {
+    days: 30,
+    since: new Date('2026-09-15T12:00:00.000Z'),
+    asOf: new Date('2026-10-15T12:00:00.000Z'),
+    orderType: 'checkout',
+    months: ['2026-09', '2026-10'],
+    data: [
+      { tenantId: 'a', tenantName: 'Spółdzielnia Żory', completed: 3, breached: 1, slaRate: 67, months: [
+        { month: '2026-09', completed: 2, breached: 0, slaRate: 100 },
+        { month: '2026-10', completed: 1, breached: 1, slaRate: 0 },
+      ] },
+      { tenantId: 'b', tenantName: '=2+2', completed: 1, breached: 0, slaRate: 100, months: [
+        { month: '2026-09', completed: 0, breached: 0, slaRate: null },
+        { month: '2026-10', completed: 1, breached: 0, slaRate: 100 },
+      ] },
+    ],
+  };
+  const excel = buildSlaTenantTrendExport(report, 'xlsx');
+  const workbook = XLSX.read(excel.buffer, { type: 'buffer' });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets['Klienci SLA'], { header: 1, defval: '' });
+  assert.match(excel.filename, /^raport_sla_klienci_2026-10-15T12-00-00-000Z\.xlsx$/);
+  assert.equal(rows[2][1], 'Wydanie');
+  assert.deepEqual(rows[5], ['Klient', '2026-09 SLA (%)', '2026-09 zleceń', '2026-10 SLA (%)', '2026-10 zleceń', 'Razem zleceń', 'Po terminie', 'W terminie (%)']);
+  assert.deepEqual(rows[6], ['Spółdzielnia Żory', 100, 2, 0, 1, 3, 1, 67]);
+  assert.deepEqual(rows[7], ['=2+2', '', 0, 100, 1, 1, 0, 100]);
+  assert.equal(workbook.Sheets['Klienci SLA'].A8.t, 's');
+  assert.deepEqual(rows[8], ['Razem', 100, 2, 50, 2, 4, 1, 75]);
+
+  const csv = buildSlaTenantTrendExport(report, 'csv');
+  const content = csv.buffer.toString('utf8');
+  assert.ok(content.startsWith('\uFEFF'));
+  assert.match(content, /Spółdzielnia Żory;100;2;0;1;3;1;67/);
+  assert.match(content, /'=2\+2;;0;100;1;1;0;100/);
+  assert.match(content, /Razem;100;2;50;2;4;1;75/);
+  assert.match(csv.filename, /\.csv$/);
+});
+
 test('SLA export shares report scope checks and rejects unsupported formats', async () => {
   const original = reportService.getSlaBreakdown;
   const originalAudit = prisma.auditLog.create;
@@ -383,4 +422,84 @@ test('SLA export shares report scope checks and rejects unsupported formats', as
     reportService.getSlaBreakdown = original;
     prisma.auditLog.create = originalAudit;
   }
+});
+
+test('tenant trend export requires global scope, validates format and records a successful download', async () => {
+  const original = reportService.getSlaTenantTrends;
+  const originalAudit = prisma.auditLog.create;
+  let called = false;
+  let requestedType;
+  let audit;
+  reportService.getSlaTenantTrends = async (_days, _now, orderType) => {
+    called = true;
+    requestedType = orderType;
+    return {
+      days: 30,
+      since: new Date('2026-09-15T12:00:00.000Z'),
+      asOf: new Date('2026-10-15T12:00:00.000Z'),
+      orderType: orderType ?? null,
+      months: ['2026-09', '2026-10'],
+      data: [],
+    };
+  };
+  prisma.auditLog.create = async (query) => { audit = query.data; return { id: 'audit-1' }; };
+  const response = () => ({
+    headers: {},
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+    setHeader(name, value) { this.headers[name] = value; return this; },
+    send(body) { this.body = body; return this; },
+  });
+  const next = (error) => { throw error; };
+  try {
+    const denied = response();
+    await reportController.exportSlaTenantTrends({ query: { scope: 'all', format: 'csv' }, tenantId: 'tenant-a', user: { roles: ['TK'] } }, denied, next);
+    assert.equal(denied.statusCode, 403);
+    assert.equal(called, false);
+    assert.equal(audit, undefined);
+
+    const wrongScope = response();
+    await reportController.exportSlaTenantTrends({ query: { scope: 'tenant' }, tenantId: 'tenant-a', user: { roles: ['SA'] } }, wrongScope, next);
+    assert.equal(wrongScope.statusCode, 400);
+    assert.equal(called, false);
+
+    const invalid = response();
+    await reportController.exportSlaTenantTrends({ query: { scope: 'all', format: 'pdf' }, tenantId: null, user: { roles: ['SA'] } }, invalid, next);
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(called, false);
+
+    const allowed = response();
+    await reportController.exportSlaTenantTrends({ query: { scope: 'all', days: '30', orderType: 'checkout', format: 'csv' }, tenantId: null, user: { roles: ['DA'], userId: 'admin-1' }, headers: {}, ip: '127.0.0.1' }, allowed, next);
+    assert.equal(called, true);
+    assert.equal(requestedType, 'checkout');
+    assert.equal(audit.action, 'report.sla.tenant_trend.export');
+    assert.equal(audit.userId, 'admin-1');
+    assert.deepEqual(audit.newValues, { scope: 'all', days: 30, orderType: 'checkout', format: 'csv', tenants: 0, asOf: '2026-10-15T12:00:00.000Z' });
+    assert.match(allowed.body.toString('utf8'), /Rodzaj zlecenia;Wydanie/);
+    assert.equal(allowed.headers['Content-Type'], 'text/csv; charset=utf-8');
+    assert.equal(allowed.headers['Content-Length'], allowed.body.length);
+    assert.equal(allowed.headers['Cache-Control'], 'no-store');
+  } finally {
+    reportService.getSlaTenantTrends = original;
+    prisma.auditLog.create = originalAudit;
+  }
+});
+
+test('tenant trend export route requires report view, export permission and an admin role', () => {
+  const route = reportRoutes.stack.find((layer) => layer.route?.path === '/sla/trend/tenants/export')?.route;
+  assert.ok(route);
+  const guards = route.stack.slice(2, -1).map((layer) => layer.handle);
+  const check = (roles, permissions) => {
+    const req = { user: { roles, permissions } };
+    const res = { status(code) { this.statusCode = code; return this; }, json() { return this; } };
+    for (const guard of guards) {
+      let allowed = false;
+      guard(req, res, () => { allowed = true; });
+      if (!allowed) return res.statusCode;
+    }
+    return 200;
+  };
+  assert.equal(check(['SA'], ['report.view']), 403);
+  assert.equal(check(['TK'], ['report.view', 'report.export']), 403);
+  assert.equal(check(['SA'], ['report.view', 'report.export']), 200);
 });
