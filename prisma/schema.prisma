@@ -834,6 +834,7 @@ model Order {
   scanQuote     OrderScanQuote?
   handoverProof OrderHandoverProof?
   slaEscalations OrderSlaEscalation[]
+  returnReminders OrderReturnReminder[]
 
   @@index([tenantId, status])
   @@index([orderNumber])
@@ -878,6 +879,18 @@ model OrderSlaEscalation {
 
   @@unique([orderId, level])
   @@map("order_sla_escalations")
+}
+
+model OrderReturnReminder {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  kind      String   @db.VarChar(20)
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, kind])
+  @@map("order_return_reminders")
 }
 
 model OrderItem {

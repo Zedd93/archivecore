@@ -65,6 +65,8 @@ jobs:
         run: npm run test:order-history
       - name: Verify order decision notifications
         run: npm run test:order-notifications
+      - name: Verify loan return reminders
+        run: npm run test:order-return-reminders
       - name: Verify notification tenant navigation
         run: npm run test:notification-navigation
       - name: Verify order assignment eligibility

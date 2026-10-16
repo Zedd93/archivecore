@@ -5,6 +5,7 @@ import { redis } from './config/redis';
 import { webhookService } from './modules/integrations/webhook.service';
 import { orderSlaService } from './modules/orders/order-sla.service';
 import { slaTargetAlertService } from './modules/reports/sla-target-alert.service';
+import { orderReturnReminderService } from './modules/orders/order-return-reminder.service';
 
 const log = {
   info: (...args: unknown[]) => { if (config.nodeEnv !== 'test') process.stdout.write(args.join(' ') + '\n'); },
@@ -72,11 +73,24 @@ async function main() {
   slaTargetTimer.unref();
   checkSlaTargets();
 
+  let checkingReturns = false;
+  const checkReturns = () => {
+    if (checkingReturns) return;
+    checkingReturns = true;
+    void orderReturnReminderService.processDue()
+      .catch((error) => log.error('Loan return reminder worker failed; retrying later:', error))
+      .finally(() => { checkingReturns = false; });
+  };
+  const returnTimer = setInterval(checkReturns, 60 * 60_000);
+  returnTimer.unref();
+  checkReturns();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     clearInterval(webhookTimer);
     clearInterval(slaTimer);
     clearInterval(slaTargetTimer);
+    clearInterval(returnTimer);
     log.info(`\n📡 Received ${signal}, shutting down...`);
     server.close(async () => {
       await prisma.$disconnect();
