@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useList } from '@/hooks/useApi';
 import { useTranslation } from 'react-i18next';
 import api from '@/services/api';
+import { notificationNavigation } from '@/utils/notificationNavigation';
 import { Search, Bell, LogOut, Settings, ChevronDown, Menu } from 'lucide-react';
 
 interface HeaderProps {
@@ -13,6 +14,7 @@ interface HeaderProps {
 
 interface NotificationItem {
   id: string;
+  tenantId?: string | null;
   title: string;
   message: string;
   actionUrl?: string | null;
@@ -118,11 +120,20 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   };
 
   const handleNotificationClick = async (notification: NotificationItem) => {
-    if (!notification.readAt) {
-      markRead.mutate(notification.id);
-    }
     setShowNotifications(false);
-    if (notification.actionUrl) navigate(notification.actionUrl);
+    if (!notification.readAt) {
+      try { await markRead.mutateAsync(notification.id); } catch { /* Navigate even if read status could not be saved. */ }
+    }
+    const target = notificationNavigation(
+      notification.actionUrl, notification.tenantId, localStorage.getItem('tenantId'), canChooseTenant,
+    );
+    if (!target) return;
+    if (target.switchToTenantId) {
+      localStorage.setItem('tenantId', target.switchToTenantId);
+      window.location.assign(target.path);
+      return;
+    }
+    navigate(target.path);
   };
 
   return (

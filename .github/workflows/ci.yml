@@ -65,6 +65,8 @@ jobs:
         run: npm run test:order-history
       - name: Verify order decision notifications
         run: npm run test:order-notifications
+      - name: Verify notification tenant navigation
+        run: npm run test:notification-navigation
       - name: Verify order assignment eligibility
         run: npm run test:order-assignment
       - name: Verify order SLA escalations

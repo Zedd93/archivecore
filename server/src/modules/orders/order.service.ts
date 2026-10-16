@@ -8,7 +8,7 @@ import { departmentOrderVisibility } from './scan-access';
 import { webhookService } from '../integrations/webhook.service';
 import { assertDepartmentRequesterAction } from './order-requester-access';
 import { ORDER_HISTORY_ACTIONS, mergeOrderHistory, toOrderHistoryEntry } from './order-history';
-import { orderNotificationAudience } from './order-notifications';
+import { orderNotificationAudience, scanQuoteNotification } from './order-notifications';
 import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
 import { ACTIVE_SLA_STATUSES, createSlaSchedule, orderSlaLevel, parseSlaLevel, slaHours, slaLevelWhere, slaRiskWhere } from './order-sla';
 import { slaReportWhere } from './sla-report-filter';
@@ -590,7 +590,7 @@ export class OrderService {
     };
   }
 
-  async prepareExistingScanQuote(id: string, tenantId: string) {
+  async prepareExistingScanQuote(id: string, tenantId: string, userId: string) {
     const order = await this.getById(id, tenantId);
     if (order.orderType !== 'scan' || order.status !== 'ready') {
       throw Object.assign(new Error('Wycenę można przygotować tylko dla gotowego zlecenia skanu'), { statusCode: 409 });
@@ -600,6 +600,7 @@ export class OrderService {
       await prisma.$transaction(async (tx) => {
         await tx.order.update({ where: { id, tenantId, status: 'ready' }, data: { updatedAt: new Date() } });
         await tx.orderScanQuote.create({ data: { orderId: id, ...quote } });
+        await notificationService.notifyTenantUsers(scanQuoteNotification(order, 'ready', userId), tx);
       });
     } catch (error) {
       if (['P2002', 'P2025'].includes((error as { code?: string })?.code || '')) {
@@ -631,6 +632,7 @@ export class OrderService {
         if (changed.count !== 1) {
           throw Object.assign(new Error('Wycena została już zatwierdzona'), { statusCode: 409 });
         }
+        await notificationService.notifyTenantUsers(scanQuoteNotification(order, 'approved', userId), tx);
       });
     } catch (error) {
       if ((error as { code?: string })?.code === 'P2025') {
@@ -829,7 +831,11 @@ export class OrderService {
         });
       }
       await webhookService.enqueueOrderStatus(tx, changed, order.status, newStatus);
-      await this.notifyOrderStatus(changed, newStatus, userId, tx);
+      if (scanQuote) {
+        await notificationService.notifyTenantUsers(scanQuoteNotification(changed, 'ready', userId), tx);
+      } else {
+        await this.notifyOrderStatus(changed, newStatus, userId, tx);
+      }
       return changed;
     });
 

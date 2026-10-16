@@ -1490,6 +1490,7 @@
       "newOrdersDesc": "Notification about newly assigned orders",
       "orderStatus": "Order status",
       "slaTarget": "SLA on-time rate below the client target (last 30 days, at least 5 orders)",
+      "scanQuote": "Scan quote awaiting approval and its acceptance",
       "orderStatusDesc": "Status change of orders you manage",
       "retention": "Retention",
       "retentionDesc": "Upcoming retention/destruction deadlines",

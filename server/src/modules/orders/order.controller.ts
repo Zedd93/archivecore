@@ -74,7 +74,7 @@ export class OrderController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator zlecenia', 400);
-      return successResponse(res, await orderService.prepareExistingScanQuote(req.params.id, req.tenantId), 201);
+      return successResponse(res, await orderService.prepareExistingScanQuote(req.params.id, req.tenantId, req.user!.userId), 201);
     } catch (err) { next(err); }
   }
 

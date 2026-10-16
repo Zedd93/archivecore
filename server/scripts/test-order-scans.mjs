@@ -11,6 +11,7 @@ const { OrderScanService } = require('../dist/modules/orders/order-scan.service.
 const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { billingService } = require('../dist/modules/pricing/billing.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
+const { webhookService } = require('../dist/modules/integrations/webhook.service.js');
 const { createOrderSchema } = require('../../shared/src/validators/order.schema.ts');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
@@ -151,6 +152,50 @@ test('scan order cannot be marked ready until each item has a PDF', async () => 
   await assert.rejects(service.markReady(orderId, tenantId, userId), { statusCode: 409 });
 });
 
+test('marking a scan ready creates one quote notification in the same transaction', async () => {
+  const service = new OrderService();
+  const order = {
+    id: orderId, tenantId, orderNumber: 'Z-7', orderType: 'scan', status: 'in_progress',
+    requestedBy: userId, approvedBy: null, assignedTo: userId, notes: null,
+    items: [{ id: itemId, scanFile: { pageCount: 2 } }],
+  };
+  service.getById = async () => order;
+  const originalPrepare = billingService.prepareScanQuote;
+  const originalTransaction = prisma.$transaction;
+  const originalNotify = notificationService.notifyTenantUsers;
+  const originalWebhook = webhookService.enqueueOrderStatus;
+  const calls = [];
+  const tx = {
+    order: { update: async ({ where }) => {
+      assert.deepEqual(where, { id: orderId, tenantId, status: 'in_progress' });
+      return { ...order, status: 'ready' };
+    } },
+    orderScanQuote: { create: async ({ data }) => {
+      calls.push('quote');
+      assert.equal(data.orderId, orderId);
+    } },
+  };
+  billingService.prepareScanQuote = async () => ({ pageCount: 2 });
+  prisma.$transaction = async (callback) => callback(tx);
+  webhookService.enqueueOrderStatus = async (db) => { assert.equal(db, tx); calls.push('webhook'); };
+  notificationService.notifyTenantUsers = async (input, db) => {
+    assert.equal(db, tx);
+    assert.equal(input.type, 'order_scan_quote_ready');
+    assert.deepEqual(input.requiredRoleCodes, ['TL', 'AT']);
+    calls.push('notification');
+    return { count: 1 };
+  };
+  try {
+    await service.markReady(orderId, tenantId, userId);
+    assert.deepEqual(calls, ['quote', 'webhook', 'notification']);
+  } finally {
+    billingService.prepareScanQuote = originalPrepare;
+    prisma.$transaction = originalTransaction;
+    notificationService.notifyTenantUsers = originalNotify;
+    webhookService.enqueueOrderStatus = originalWebhook;
+  }
+});
+
 test('department order list keeps scan orders limited to its documents', async () => {
   const originalFindMany = prisma.order.findMany;
   const originalCount = prisma.order.count;
@@ -261,7 +306,9 @@ test('client quote approval is recorded once against the ready order', async () 
   const service = new OrderService();
   const originalFindUnique = prisma.orderScanQuote.findUnique;
   const originalTransaction = prisma.$transaction;
+  const originalNotify = notificationService.notifyTenantUsers;
   let approvals = 0;
+  let notifications = 0;
   let approvalData;
   service.getById = async () => ({
     id: orderId, tenantId, orderType: 'scan', status: 'ready',
@@ -273,6 +320,12 @@ test('client quote approval is recorded once against the ready order', async () 
     vatRate: new Prisma.Decimal(23), currency: 'PLN', createdAt: new Date(), approvedAt: null, approvedBy: null,
   };
   prisma.orderScanQuote.findUnique = async () => quote;
+  notificationService.notifyTenantUsers = async (input) => {
+    assert.equal(input.type, 'order_scan_quote_approved');
+    assert.equal(input.tenantId, tenantId);
+    notifications++;
+    return { count: 1 };
+  };
   prisma.$transaction = async (callback) => callback({
     order: { update: async ({ where }) => {
       assert.deepEqual(where, { id: orderId, tenantId, status: 'ready' });
@@ -291,9 +344,11 @@ test('client quote approval is recorded once against the ready order', async () 
     assert.equal(approvalData.approvedById, userId);
     assert.ok(approvalData.approvedAt instanceof Date);
     await assert.rejects(service.approveScanQuote(orderId, tenantId, userId), { statusCode: 409 });
+    assert.equal(notifications, 1);
   } finally {
     prisma.orderScanQuote.findUnique = originalFindUnique;
     prisma.$transaction = originalTransaction;
+    notificationService.notifyTenantUsers = originalNotify;
   }
 });
 
@@ -301,10 +356,16 @@ test('pre-update ready scan orders can receive a quote without changing their st
   const service = new OrderService();
   const originalPrepare = billingService.prepareScanQuote;
   const originalTransaction = prisma.$transaction;
+  const originalNotify = notificationService.notifyTenantUsers;
   let created;
   service.getById = async () => ({ id: orderId, tenantId, orderType: 'scan', status: 'ready', items: [{ id: itemId, scanFile: { pageCount: 2 } }] });
   service.getScanQuote = async () => ({ pageCount: 2 });
   billingService.prepareScanQuote = async () => ({ pageCount: 2, unitPrice: new Prisma.Decimal('0.75') });
+  notificationService.notifyTenantUsers = async (input) => {
+    assert.equal(input.type, 'order_scan_quote_ready');
+    assert.deepEqual(input.excludeUserIds, [userId]);
+    return { count: 1 };
+  };
   prisma.$transaction = async (callback) => callback({
     order: { update: async ({ where }) => {
       assert.deepEqual(where, { id: orderId, tenantId, status: 'ready' });
@@ -312,12 +373,13 @@ test('pre-update ready scan orders can receive a quote without changing their st
     orderScanQuote: { create: async ({ data }) => { created = data; } },
   });
   try {
-    await service.prepareExistingScanQuote(orderId, tenantId);
+    await service.prepareExistingScanQuote(orderId, tenantId, userId);
     assert.equal(created.orderId, orderId);
     assert.equal(created.pageCount, 2);
   } finally {
     billingService.prepareScanQuote = originalPrepare;
     prisma.$transaction = originalTransaction;
+    notificationService.notifyTenantUsers = originalNotify;
   }
 });
 

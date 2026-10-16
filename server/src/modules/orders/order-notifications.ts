@@ -1,5 +1,5 @@
 import { OrderStatus } from '@prisma/client';
-import { Permissions } from '@archivecore/shared';
+import { Permissions, RoleCode } from '@archivecore/shared';
 
 type OrderPermission = (typeof Permissions)[keyof typeof Permissions];
 
@@ -23,4 +23,36 @@ export function orderNotificationAudience(status: OrderStatus): {
     default:
       return { requiredPermissions: [], onlyIncludedUsers: true };
   }
+}
+
+export function scanQuoteNotification(
+  order: { id: string; tenantId: string; orderNumber: string; assignedTo?: string | null },
+  event: 'ready' | 'approved',
+  actorId: string,
+) {
+  const base = {
+    tenantId: order.tenantId,
+    entityType: 'order',
+    entityId: order.id,
+    actionUrl: `/orders/${order.id}`,
+    excludeUserIds: [actorId],
+  };
+  if (event === 'ready') {
+    return {
+      ...base,
+      type: 'order_scan_quote_ready',
+      title: `Wycena skanu ${order.orderNumber} czeka na akceptację`,
+      message: `Sprawdź koszt skanowania w zleceniu ${order.orderNumber} i zatwierdź go przed udostępnieniem plików.`,
+      requiredRoleCodes: [RoleCode.TENANT_LEADERSHIP, RoleCode.ADMIN_TENANT],
+      includeGlobalUsers: false,
+    };
+  }
+  return {
+    ...base,
+    type: 'order_scan_quote_approved',
+    title: `Zaakceptowano wycenę skanu ${order.orderNumber}`,
+    message: `Klient zaakceptował koszt skanowania w zleceniu ${order.orderNumber}. Można udostępnić skany.`,
+    requiredRoleCodes: [RoleCode.SUPER_ADMIN, RoleCode.DOXART_ADMIN, RoleCode.COORDINATOR_ARCHIVE],
+    includeUserIds: order.assignedTo ? [order.assignedTo] : [],
+  };
 }

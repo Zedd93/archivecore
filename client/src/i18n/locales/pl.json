@@ -1490,6 +1490,7 @@
       "newOrdersDesc": "Powiadomienie o nowo przypisanych zleceniach",
       "orderStatus": "Status zlecenia",
       "slaTarget": "Terminowość SLA poniżej celu klienta (ostatnie 30 dni, min. 5 zleceń)",
+      "scanQuote": "Wycena skanowania oczekująca na zgodę i jej akceptacja",
       "orderStatusDesc": "Zmiana statusu zlecenia, którym zarządzasz",
       "retention": "Retencja",
       "retentionDesc": "Zbliżający się termin retencji/brakowania",
