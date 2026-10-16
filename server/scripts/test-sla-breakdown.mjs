@@ -153,6 +153,50 @@ test('monthly SLA trend keeps empty months and uses the same tenant and order-ty
   }
 });
 
+test('tenant SLA trend compares monthly rates without losing empty months or year boundaries', async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  const originalFindMany = prisma.tenant.findMany;
+  let query;
+  prisma.$queryRaw = async (sql) => {
+    query = sql;
+    return [
+      { tenantId: 'tenant-b', month: '2025-12', completed: 2, breached: 1 },
+      { tenantId: 'tenant-a', month: '2026-01', completed: 4, breached: 1 },
+      { tenantId: 'tenant-b', month: '2026-01', completed: 1, breached: 0 },
+    ];
+  };
+  prisma.tenant.findMany = async () => [
+    { id: 'tenant-a', name: 'Alfa' },
+    { id: 'tenant-b', name: 'Beta' },
+  ];
+  try {
+    const now = new Date('2026-01-01T00:30:00.000Z');
+    const trend = await new ReportService().getSlaTenantTrends(30, now, 'checkout');
+    assert.deepEqual(trend.months, ['2025-12', '2026-01']);
+    assert.deepEqual(trend.data.map(({ tenantName, completed, breached, slaRate }) => ({ tenantName, completed, breached, slaRate })), [
+      { tenantName: 'Alfa', completed: 4, breached: 1, slaRate: 75 },
+      { tenantName: 'Beta', completed: 3, breached: 1, slaRate: 67 },
+    ]);
+    assert.deepEqual(trend.data[0].months, [
+      { month: '2025-12', completed: 0, breached: 0, slaRate: null },
+      { month: '2026-01', completed: 4, breached: 1, slaRate: 75 },
+    ]);
+    assert.match(query.sql, /AT TIME ZONE 'Europe\/Warsaw'/);
+    assert.match(query.sql, /"completedAt" > "slaDeadline"/);
+    assert.match(query.sql, /"orderType" = \?::"OrderType"/);
+    assert.doesNotMatch(query.sql, /"tenantId" = \?::uuid/);
+    assert.ok(query.values.includes('checkout'));
+
+    prisma.$queryRaw = async () => [];
+    const empty = await new ReportService().getSlaTenantTrends(30, now);
+    assert.deepEqual(empty.data, []);
+    assert.deepEqual(empty.months, ['2025-12', '2026-01']);
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+    prisma.tenant.findMany = originalFindMany;
+  }
+});
+
 test('SLA breakdown blocks all-client access for tenant roles and rejects invalid periods', async () => {
   const original = reportService.getSlaBreakdown;
   let called = false;
@@ -219,6 +263,38 @@ test('monthly SLA trend reuses report scope and period authorization', async () 
     assert.deepEqual(requested, { tenantId: undefined, days: 90, orderType: 'checkout' });
   } finally {
     reportService.getSlaTrend = original;
+  }
+});
+
+test('cross-tenant SLA comparison is denied to client roles', async () => {
+  const original = reportService.getSlaTenantTrends;
+  let requested;
+  reportService.getSlaTenantTrends = async (days, _now, orderType) => {
+    requested = { days, orderType };
+    return { months: [], data: [] };
+  };
+  const response = () => ({
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  });
+  const next = (error) => { throw error; };
+  try {
+    const denied = response();
+    await reportController.getSlaTenantTrends({ query: { scope: 'all' }, tenantId: 'tenant-a', user: { roles: ['TK'] } }, denied, next);
+    assert.equal(denied.statusCode, 403);
+    assert.equal(requested, undefined);
+
+    const wrongScope = response();
+    await reportController.getSlaTenantTrends({ query: { scope: 'tenant' }, tenantId: 'tenant-a', user: { roles: ['SA'] } }, wrongScope, next);
+    assert.equal(wrongScope.statusCode, 400);
+    assert.equal(requested, undefined);
+
+    const allowed = response();
+    await reportController.getSlaTenantTrends({ query: { scope: 'all', days: '90', orderType: 'scan' }, tenantId: null, user: { roles: ['DA'] } }, allowed, next);
+    assert.equal(allowed.statusCode, 200);
+    assert.deepEqual(requested, { days: 90, orderType: 'scan' });
+  } finally {
+    reportService.getSlaTenantTrends = original;
   }
 });
 

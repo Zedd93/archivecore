@@ -155,6 +155,15 @@ export class ReportController {
     } catch (err) { next(err); }
   }
 
+  async getSlaTenantTrends(req: Request, res: Response, next: NextFunction) {
+    try {
+      const options = parseSlaReportOptions(req);
+      if (!options.ok) return errorResponse(res, options.error, options.status);
+      if (options.scope !== 'all') return errorResponse(res, 'Wybierz zakres wszystkich klientów', 400);
+      return successResponse(res, await reportService.getSlaTenantTrends(options.days, new Date(), options.orderType));
+    } catch (err) { next(err); }
+  }
+
   async exportSlaBreakdown(req: Request, res: Response, next: NextFunction) {
     try {
       const options = parseSlaReportOptions(req);

@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { reportController } from './report.controller';
 import { authenticate } from '../../middleware/auth';
 import { tenantContext } from '../../middleware/tenant';
-import { requirePermission } from '../../middleware/rbac';
-import { Permissions } from '@archivecore/shared';
+import { requirePermission, requireRole } from '../../middleware/rbac';
+import { Permissions, RoleCode } from '@archivecore/shared';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -23,6 +23,7 @@ router.get('/audit-activity', ...auth, requirePermission(Permissions.AUDIT_VIEW)
 router.get('/sla', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getSlaPerformance(req, res, next));
 router.get('/sla/breakdown', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getSlaBreakdown(req, res, next));
 router.get('/sla/trend', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getSlaTrend(req, res, next));
+router.get('/sla/trend/tenants', ...auth, requirePermission(Permissions.REPORT_VIEW), requireRole(RoleCode.SUPER_ADMIN, RoleCode.DOXART_ADMIN), (req, res, next) => reportController.getSlaTenantTrends(req, res, next));
 router.get('/sla/breakdown/export', ...auth, requirePermission(Permissions.REPORT_EXPORT), (req, res, next) => reportController.exportSlaBreakdown(req, res, next));
 
 export default router;

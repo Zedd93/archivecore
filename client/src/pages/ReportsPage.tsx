@@ -42,6 +42,24 @@ interface SlaTrend {
   months: Array<{ month: string; completed: number; breached: number; onTime: number; slaRate: number | null }>;
 }
 
+interface SlaTenantTrends {
+  months: string[];
+  data: Array<{
+    tenantId: string;
+    tenantName: string;
+    completed: number;
+    breached: number;
+    slaRate: number | null;
+    months: Array<{ month: string; completed: number; breached: number; slaRate: number | null }>;
+  }>;
+}
+
+function formatSlaMonth(month: string, language: string): string {
+  return new Intl.DateTimeFormat(language.startsWith('en') ? 'en' : 'pl', {
+    month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw',
+  }).format(new Date(`${month}-15T12:00:00Z`));
+}
+
 const SLA_ORDER_TYPES = [
   { code: 'checkout', labelKey: 'orders.typeIssue' },
   { code: 'return_order', labelKey: 'orders.typeReturn' },
@@ -154,6 +172,15 @@ export default function ReportsPage() {
       return data.data;
     },
     enabled: slaScope === 'all' ? canViewAllSla : Boolean(activeTenantId),
+    refetchInterval: 60_000,
+  });
+  const { data: slaTenantTrends, isLoading: slaTenantTrendsLoading, isError: slaTenantTrendsError, refetch: refetchSlaTenantTrends } = useQuery<SlaTenantTrends>({
+    queryKey: ['report-sla-tenant-trends', user?.id, slaDays, slaOrderType],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/sla/trend/tenants', { params: { days: slaDays, scope: 'all', orderType: slaOrderType || undefined } });
+      return data.data;
+    },
+    enabled: canViewAllSla && slaScope === 'all',
     refetchInterval: 60_000,
   });
 
@@ -371,9 +398,7 @@ export default function ReportsPage() {
               <div className="mt-4 overflow-x-auto pb-2">
                 <div className="grid min-w-[480px] gap-3" style={{ gridTemplateColumns: `repeat(${slaTrend.months.length}, minmax(5.5rem, 1fr))` }}>
                   {slaTrend.months.map((month) => {
-                    const label = new Intl.DateTimeFormat(i18n.language.startsWith('en') ? 'en' : 'pl', {
-                      month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw',
-                    }).format(new Date(`${month.month}-15T12:00:00Z`));
+                    const label = formatSlaMonth(month.month, i18n.language);
                     return <div key={month.month} className="min-w-0 text-center text-xs text-gray-700">
                       <span className="block font-semibold text-sm text-gray-900">{month.slaRate === null ? '—' : `${month.slaRate}%`}</span>
                       <div
@@ -399,6 +424,45 @@ export default function ReportsPage() {
             )
           )}
         </div>
+        {canViewAllSla && slaScope === 'all' && <div className="border-t border-gray-200 pt-4">
+          <h3 className="text-base font-semibold text-gray-900">{t('reports.slaTenantTrendTitle')}</h3>
+          <p className="mt-1 text-sm text-gray-500">{t('reports.slaTenantTrendDescription')}</p>
+          {slaTenantTrendsLoading ? <p className="mt-3 text-sm text-gray-500">{t('common.loading')}</p> : slaTenantTrendsError ? (
+            <button type="button" className="btn-secondary mt-3" onClick={() => { void refetchSlaTenantTrends(); }}>{t('common.tryAgain')}</button>
+          ) : slaTenantTrends && (
+            slaTenantTrends.data.length === 0 ? <p className="mt-3 text-sm text-gray-500">{t('reports.slaTenantTrendEmpty')}</p> : (
+              <div className="mt-4 max-h-[28rem] overflow-auto rounded-lg border border-gray-200">
+                <table className="w-full min-w-max border-collapse text-xs" aria-label={t('reports.slaTenantTrendTitle')}>
+                  <thead>
+                    <tr className="text-left text-gray-700">
+                      <th scope="col" className="sticky left-0 top-0 z-30 min-w-48 bg-gray-50 px-3 py-2">{t('reports.slaTenant')}</th>
+                      {slaTenantTrends.months.map((month) => <th key={month} scope="col" className="sticky top-0 z-20 min-w-24 bg-gray-50 px-2 py-2 text-center">{formatSlaMonth(month, i18n.language)}</th>)}
+                      <th scope="col" className="sticky top-0 z-20 min-w-24 bg-gray-50 px-2 py-2 text-center">{t('reports.slaTenantTrendOverall')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slaTenantTrends.data.map((tenant) => <tr key={tenant.tenantId} className="border-t border-gray-100">
+                      <th scope="row" className="sticky left-0 z-10 max-w-64 bg-white px-3 py-2 text-left font-medium text-gray-900">{tenant.tenantName}</th>
+                      {tenant.months.map((month) => <td key={month.month} className="px-2 py-2 text-center">
+                        {month.slaRate === null ? <span className="text-gray-400">—</span> : <>
+                          <span className="font-semibold text-gray-900">{month.slaRate}%</span>
+                          <span className="mt-1 block text-gray-500">{t('reports.slaTenantTrendSample', { count: month.completed })}</span>
+                          <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-red-200" aria-hidden="true">
+                            <span className="block h-full bg-emerald-500" style={{ width: `${month.slaRate}%` }} />
+                          </span>
+                        </>}
+                      </td>)}
+                      <td className="bg-gray-50 px-2 py-2 text-center font-semibold text-gray-900">
+                        {tenant.slaRate === null ? '—' : `${tenant.slaRate}%`}
+                        <span className="mt-1 block font-normal text-gray-500">{t('reports.slaTenantTrendSample', { count: tenant.completed })}</span>
+                      </td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+        </div>}
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

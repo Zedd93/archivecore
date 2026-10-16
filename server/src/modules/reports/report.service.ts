@@ -23,6 +23,33 @@ interface SlaTrendRow {
   breached: number;
 }
 
+interface SlaTenantTrendRow extends SlaTrendRow {
+  tenantId: string;
+}
+
+function warsawMonthKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')!.value;
+  const month = parts.find((part) => part.type === 'month')!.value;
+  return `${year}-${month}`;
+}
+
+function monthKeysBetween(start: Date, end: Date): string[] {
+  const first = warsawMonthKey(start);
+  const last = warsawMonthKey(end);
+  const months: string[] = [];
+  let [year, month] = first.split('-').map(Number);
+  const [lastYear, lastMonth] = last.split('-').map(Number);
+  while (year < lastYear || (year === lastYear && month <= lastMonth)) {
+    months.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return months;
+}
+
 export interface DashboardKPIs {
   totalBoxes: number;
   totalFolders: number;
@@ -467,6 +494,54 @@ export class ReportService {
         slaRate: row.completed ? Math.round((row.completed - row.breached) / row.completed * 100) : null,
       })),
     };
+  }
+
+  async getSlaTenantTrends(days: number, now = new Date(), orderType?: OrderType) {
+    const since = new Date(now.getTime() - days * 24 * 60 * 60_000);
+    const months = monthKeysBetween(since, now);
+    const orderTypeFilter = orderType ? Prisma.sql`AND "orderType" = ${orderType}::"OrderType"` : Prisma.empty;
+    const rows = await prisma.$queryRaw<SlaTenantTrendRow[]>(Prisma.sql`
+      SELECT "tenantId", to_char("completedAt" AT TIME ZONE 'Europe/Warsaw', 'YYYY-MM') AS "month",
+        COUNT(*)::int AS "completed",
+        COUNT(*) FILTER (WHERE "completedAt" > "slaDeadline")::int AS "breached"
+      FROM "orders"
+      WHERE "status" = 'completed' AND "slaDeadline" IS NOT NULL
+        AND "completedAt" >= ${since} AND "completedAt" <= ${now}
+        ${orderTypeFilter}
+      GROUP BY "tenantId", 2
+    `);
+    const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
+    const tenants = tenantIds.length ? await prisma.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      select: { id: true, name: true },
+    }) : [];
+    const names = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+    const byTenant = new Map<string, Map<string, SlaTenantTrendRow>>();
+    for (const row of rows) {
+      if (!byTenant.has(row.tenantId)) byTenant.set(row.tenantId, new Map());
+      byTenant.get(row.tenantId)!.set(row.month, row);
+    }
+    const data = tenantIds.map((tenantId) => {
+      let completed = 0;
+      let breached = 0;
+      const monthly = months.map((month) => {
+        const row = byTenant.get(tenantId)?.get(month);
+        const monthCompleted = row?.completed ?? 0;
+        const monthBreached = row?.breached ?? 0;
+        completed += monthCompleted;
+        breached += monthBreached;
+        return {
+          month, completed: monthCompleted, breached: monthBreached,
+          slaRate: monthCompleted ? Math.round((monthCompleted - monthBreached) / monthCompleted * 100) : null,
+        };
+      });
+      return {
+        tenantId, tenantName: names.get(tenantId) || tenantId,
+        completed, breached, slaRate: completed ? Math.round((completed - breached) / completed * 100) : null,
+        months: monthly,
+      };
+    }).sort((a, b) => a.tenantName.localeCompare(b.tenantName, 'pl'));
+    return { days, since, asOf: now, orderType: orderType ?? null, months, data };
   }
 }
 
