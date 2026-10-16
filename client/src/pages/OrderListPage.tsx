@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useList, useCreate, useDelete } from '@/hooks/useApi';
@@ -18,6 +18,7 @@ import { getApiErrorMessage } from '@/utils/apiError';
 import toast from 'react-hot-toast';
 import { Permissions, RoleCode } from '@archivecore/shared';
 import { readOrderDraft } from '@/utils/orderDraft';
+import { readSlaReportDrilldown } from '@/utils/slaReportDrilldown';
 import { Plus, AlertTriangle, Download, Loader2, Trash2 } from 'lucide-react';
 
 interface SelectedBox {
@@ -64,7 +65,8 @@ export default function OrderListPage() {
   const [selectedBoxes, setSelectedBoxes] = useState<SelectedBox[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolder[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
-  const [filters, setFilters] = useState({ search: '', status: '', orderType: '', slaRisk: false, slaLevel: '' });
+  const reportFilter = useMemo(() => readSlaReportDrilldown(location.search), [location.search]);
+  const [filters, setFilters] = useState({ search: '', status: '', orderType: reportFilter?.orderType || '', priority: reportFilter?.priority || '', slaRisk: false, slaLevel: '' });
   const [assigningOrder, setAssigningOrder] = useState<AssignableOrder | null>(null);
   const [assigneeChoice, setAssigneeChoice] = useState('');
   const [assigning, setAssigning] = useState(false);
@@ -86,7 +88,23 @@ export default function OrderListPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate, user?.tenantId]);
 
-  const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...filters }, { refetchInterval: 60_000 });
+  useEffect(() => {
+    setFilters({ search: '', status: '', orderType: reportFilter?.orderType || '', priority: reportFilter?.priority || '', slaRisk: false, slaLevel: '' });
+    setPage(1);
+  }, [reportFilter]);
+
+  const canSwitchReportTenant = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
+  const switchingReportTenant = Boolean(reportFilter && canSwitchReportTenant && !user?.tenantId
+    && localStorage.getItem('tenantId') !== reportFilter.tenantId);
+  useEffect(() => {
+    if (!switchingReportTenant || !reportFilter) return;
+    localStorage.setItem('tenantId', reportFilter.tenantId);
+    window.location.reload();
+  }, [reportFilter, switchingReportTenant]);
+
+  const { data, isLoading } = useList('orders', '/orders', { page, limit: 20, ...(reportFilter ? {
+    slaReport: reportFilter.slaReport, slaDays: reportFilter.slaDays, slaAsOf: reportFilter.slaAsOf,
+  } : {}), ...filters }, { enabled: !switchingReportTenant, refetchInterval: 60_000 });
   const canApproveOrders = hasPermission(Permissions.ORDER_APPROVE);
   const canProcessOrders = hasPermission(Permissions.ORDER_PROCESS);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
@@ -336,8 +354,10 @@ export default function OrderListPage() {
         </div>
         <div className="flex w-full sm:w-auto items-center gap-2">
           <button
-            onClick={() => exportData({ format: 'xlsx', ...filters, slaRisk: String(filters.slaRisk) })}
-            disabled={isExporting}
+            onClick={() => exportData({ format: 'xlsx', ...(reportFilter ? {
+              slaReport: reportFilter.slaReport, slaDays: reportFilter.slaDays, slaAsOf: reportFilter.slaAsOf,
+            } : {}), ...filters, slaRisk: String(filters.slaRisk) })}
+            disabled={isExporting || switchingReportTenant}
             className="btn-secondary flex-1 sm:flex-none"
           >
             {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -349,14 +369,21 @@ export default function OrderListPage() {
         </div>
       </div>
 
+      {reportFilter && <div className="card flex flex-wrap items-center justify-between gap-3" role="status">
+        <p className="text-sm text-gray-700">
+          <strong>{t('orders.slaReportFilter')}:</strong> {t(reportFilter.slaReport === 'completed' ? 'reports.slaCompleted' : reportFilter.slaReport === 'breached' ? 'reports.slaBreached' : 'reports.slaActiveOverdue')}, {t('reports.slaDays', { count: Number(reportFilter.slaDays) })}. {t('orders.slaReportLiveNote')}
+        </p>
+        <button type="button" className="btn-secondary" onClick={() => navigate('/orders', { replace: true })}>{t('orders.clearSlaReportFilter')}</button>
+      </div>}
+
       {/* Filters */}
       {canApproveOrders && (
         <button
           type="button"
           onClick={() => {
             setFilters(filters.status === 'submitted'
-              ? { search: '', status: '', orderType: '', slaRisk: false, slaLevel: '' }
-              : { search: '', status: 'submitted', orderType: '', slaRisk: false, slaLevel: '' });
+              ? { search: '', status: '', orderType: '', priority: '', slaRisk: false, slaLevel: '' }
+              : { search: '', status: 'submitted', orderType: '', priority: '', slaRisk: false, slaLevel: '' });
             setPage(1);
           }}
           className={filters.status === 'submitted' ? 'btn-primary' : 'btn-secondary'}
@@ -385,7 +412,7 @@ export default function OrderListPage() {
               key={level}
               type="button"
               onClick={() => {
-                setFilters({ search: '', status: '', orderType: '', slaRisk: false, slaLevel: filters.slaLevel === level ? '' : level });
+                setFilters({ search: '', status: '', orderType: '', priority: '', slaRisk: false, slaLevel: filters.slaLevel === level ? '' : level });
                 setPage(1);
               }}
               aria-pressed={filters.slaLevel === level}
@@ -426,6 +453,12 @@ export default function OrderListPage() {
             <option value="transfer">{t('orders.typeTransfer')}</option>
             <option value="disposal">{t('orders.typeDestruction')}</option>
             <option value="scan">{t('orders.typeScan')}</option>
+          </select>
+          <select value={filters.priority} onChange={(e) => { setFilters({ ...filters, priority: e.target.value }); setPage(1); }} className="input-field w-full sm:w-36" aria-label={t('orders.allPriorities')}>
+            <option value="">{t('orders.allPriorities')}</option>
+            <option value="normal">{t('reports.slaPriorityNormal')}</option>
+            <option value="high">{t('reports.slaPriorityHigh')}</option>
+            <option value="urgent">{t('reports.slaPriorityUrgent')}</option>
           </select>
         </div>
       </div>

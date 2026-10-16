@@ -11,6 +11,7 @@ import { ORDER_HISTORY_ACTIONS, mergeOrderHistory, toOrderHistoryEntry } from '.
 import { orderNotificationAudience } from './order-notifications';
 import { canAssignOrder, PROCESSING_ROLE_CODES } from './order-assignment';
 import { ACTIVE_SLA_STATUSES, createSlaSchedule, orderSlaLevel, parseSlaLevel, slaHours, slaLevelWhere, slaRiskWhere } from './order-sla';
+import { slaReportWhere } from './sla-report-filter';
 import { tenantSlaService } from '../tenants/tenant-sla.service';
 import PDFDocument from 'pdfkit';
 
@@ -382,6 +383,8 @@ export class OrderService {
     if (selectedSlaLevel) {
       where.AND = [...(Array.isArray(where.AND) ? where.AND : []), slaLevelWhere(selectedSlaLevel, now)];
     }
+    const reportWhere = await slaReportWhere(tenantId, filters);
+    if (reportWhere) where.AND = [...(Array.isArray(where.AND) ? where.AND : []), reportWhere];
 
     if (filters.status) where.status = filters.status as OrderStatus;
     if (filters.orderType) where.orderType = filters.orderType as OrderType;

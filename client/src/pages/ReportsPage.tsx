@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Permissions, RoleCode } from '@archivecore/shared';
 import { getApiErrorMessageAsync } from '@/utils/apiError';
 import { useExport } from '@/hooks/useExport';
+import { slaReportOrderUrl, SlaReportKind } from '@/utils/slaReportDrilldown';
 import toast from 'react-hot-toast';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
 
@@ -22,6 +23,7 @@ interface StorageHealth {
 
 interface SlaBreakdown {
   days: number;
+  asOf: string;
   data: Array<{
     tenantId: string;
     tenantName: string;
@@ -66,8 +68,24 @@ export default function ReportsPage() {
   const [slaScope, setSlaScope] = useState<'tenant' | 'all'>('tenant');
   const [slaOrderType, setSlaOrderType] = useState('');
   const canViewAllSla = hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN);
+  const canOpenSlaOrders = hasPermission(Permissions.ORDER_READ);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const orderTypeLabels = Object.fromEntries(SLA_ORDER_TYPES.map(({ code, labelKey }) => [code, t(labelKey)]));
+  const slaCount = (row: SlaBreakdown['data'][number], kind: SlaReportKind, count: number, report: SlaBreakdown) => (
+    canOpenSlaOrders && count > 0 ? <a
+      href={slaReportOrderUrl({
+        slaReport: kind,
+        slaDays: String(report.days),
+        slaAsOf: report.asOf,
+        tenantId: row.tenantId,
+        orderType: row.orderType,
+        priority: row.priority,
+      })}
+      onClick={() => { if (canViewAllSla && !user?.tenantId) localStorage.setItem('tenantId', row.tenantId); }}
+      className="font-medium underline underline-offset-2 hover:text-primary-700"
+      aria-label={`${t(kind === 'completed' ? 'reports.slaCompleted' : kind === 'breached' ? 'reports.slaBreached' : 'reports.slaActiveOverdue')}: ${count}, ${row.tenantName}, ${orderTypeLabels[row.orderType] || row.orderType}`}
+    >{count}</a> : count
+  );
   const { exportData: exportSlaBreakdown, isExporting: slaExporting } = useExport({
     endpoint: '/reports/sla/breakdown/export',
     defaultFilename: 'raport_sla.xlsx',
@@ -310,9 +328,9 @@ export default function ReportsPage() {
                       <td className="py-2 pr-4 font-medium">{row.tenantName}</td>
                       <td className="py-2 pr-4">{orderTypeLabels[row.orderType] || row.orderType}</td>
                       <td className="py-2 pr-4">{t(`reports.slaPriority${row.priority === 'urgent' ? 'Urgent' : row.priority === 'high' ? 'High' : 'Normal'}`)}</td>
-                      <td className="py-2 pr-4 text-right">{row.completed}</td>
-                      <td className="py-2 pr-4 text-right text-red-700">{row.breached}</td>
-                      <td className="py-2 pr-4 text-right text-orange-700">{row.activeOverdue}</td>
+                      <td className="py-2 pr-4 text-right">{slaCount(row, 'completed', row.completed, slaBreakdown)}</td>
+                      <td className="py-2 pr-4 text-right text-red-700">{slaCount(row, 'breached', row.breached, slaBreakdown)}</td>
+                      <td className="py-2 pr-4 text-right text-orange-700">{slaCount(row, 'activeOverdue', row.activeOverdue, slaBreakdown)}</td>
                       <td className="py-2 text-right">{row.slaRate === null ? '—' : `${row.slaRate}%`}</td>
                     </tr>
                   ))}

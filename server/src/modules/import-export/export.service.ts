@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { parseSlaLevel, slaLevelWhere, slaRiskWhere } from '../orders/order-sla';
+import { slaReportWhere } from '../orders/sla-report-filter';
 import { departmentOrderVisibility } from '../orders/scan-access';
 import {
   BOX_STATUS_LABELS,
@@ -254,6 +255,8 @@ export class ExportService {
     if (selectedSlaLevel) {
       where.AND = [...(Array.isArray(where.AND) ? where.AND : []), slaLevelWhere(selectedSlaLevel, now)];
     }
+    const reportWhere = await slaReportWhere(tenantId, filters);
+    if (reportWhere) where.AND = [...(Array.isArray(where.AND) ? where.AND : []), reportWhere];
     if (filters.status) where.status = filters.status as any;
     if (filters.orderType) where.orderType = filters.orderType as any;
     if (filters.priority) where.priority = filters.priority as any;

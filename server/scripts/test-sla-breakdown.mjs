@@ -7,7 +7,73 @@ const { prisma } = require('../dist/config/database.js');
 const { ReportService, reportService } = require('../dist/modules/reports/report.service.js');
 const { reportController } = require('../dist/modules/reports/report.controller.js');
 const { buildSlaBreakdownExport } = require('../dist/modules/reports/sla-breakdown-export.js');
+const { slaReportWhere } = require('../dist/modules/orders/sla-report-filter.js');
+const { OrderService } = require('../dist/modules/orders/order.service.js');
+const { ExportService } = require('../dist/modules/import-export/export.service.js');
 const XLSX = require('xlsx');
+
+test('SLA drilldown matches completed, breached and active-overdue report predicates', async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  let query;
+  prisma.$queryRaw = async (sql) => { query = sql; return [{ id: 'late-order' }]; };
+  const base = { slaDays: '30', slaAsOf: '2026-10-15T12:00:00.000Z' };
+
+  try {
+    const completed = await slaReportWhere('tenant-a', { ...base, slaReport: 'completed' });
+    assert.equal(completed.status, 'completed');
+    assert.equal(completed.completedAt.gte.toISOString(), '2026-09-15T12:00:00.000Z');
+    assert.equal(completed.completedAt.lte.toISOString(), base.slaAsOf);
+    assert.deepEqual(completed.slaDeadline, { not: null });
+
+    const active = await slaReportWhere('tenant-a', { ...base, slaReport: 'activeOverdue' });
+    assert.deepEqual(active.status.in, ['submitted', 'approved', 'in_progress', 'ready']);
+    assert.equal(active.slaDeadline.lt.toISOString(), base.slaAsOf);
+
+    const breached = await slaReportWhere('tenant-a', { ...base, slaReport: 'breached' });
+    assert.deepEqual(breached.id.in, ['late-order']);
+    assert.equal(breached.status, 'completed');
+    assert.match(query.sql, /"completedAt" > "slaDeadline"/);
+    assert.match(query.sql, /"completedAt" <= \?/);
+    assert.match(query.sql, /"tenantId" = \?::uuid/);
+    assert.ok(query.values.includes('tenant-a'));
+
+    await assert.rejects(() => slaReportWhere('tenant-a', { ...base, slaDays: '999', slaReport: 'completed' }), { statusCode: 400 });
+    await assert.rejects(() => slaReportWhere('tenant-a', { ...base, slaAsOf: 'bad-date', slaReport: 'breached' }), { statusCode: 400 });
+    await assert.rejects(() => slaReportWhere('tenant-a', { ...base, slaReport: 'other' }), { statusCode: 400 });
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+  }
+});
+
+test('order list and export apply the same SLA drilldown without dropping tenant scope', async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  const originalFindMany = prisma.order.findMany;
+  const originalCount = prisma.order.count;
+  const captured = [];
+  prisma.$queryRaw = async () => [{ id: 'late-order' }];
+  prisma.order.findMany = async ({ where }) => { captured.push(where); return []; };
+  prisma.order.count = async ({ where }) => { captured.push(where); return 0; };
+  const filters = {
+    slaReport: 'breached', slaDays: '30', slaAsOf: '2026-10-15T12:00:00.000Z',
+    orderType: 'checkout', priority: 'urgent',
+  };
+
+  try {
+    await new OrderService().list('tenant-a', filters, 0, 20);
+    await new ExportService().exportOrders('tenant-a', filters, 'csv');
+    assert.equal(captured.length, 3);
+    for (const where of captured) {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.orderType, 'checkout');
+      assert.equal(where.priority, 'urgent');
+      assert.deepEqual(where.AND[0].id.in, ['late-order']);
+    }
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+    prisma.order.findMany = originalFindMany;
+    prisma.order.count = originalCount;
+  }
+});
 
 test('SLA breakdown groups by tenant, order type and priority, with scoped filters', async () => {
   const originalQueryRaw = prisma.$queryRaw;
@@ -27,6 +93,7 @@ test('SLA breakdown groups by tenant, order type and priority, with scoped filte
     const result = await new ReportService().getSlaBreakdown('tenant-a', 30, now);
     assert.match(query.sql, /"tenantId" = \?::uuid/);
     assert.match(query.sql, /GROUP BY "tenantId", "orderType", "priority"/);
+    assert.match(query.sql, /"completedAt" <= \?/);
     assert.ok(query.values.includes('tenant-a'));
     assert.ok(query.values.some((value) => value instanceof Date && value.getTime() === now.getTime()));
     assert.equal(result.since.toISOString(), '2026-09-15T12:00:00.000Z');

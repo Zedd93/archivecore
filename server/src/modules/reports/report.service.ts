@@ -393,12 +393,12 @@ export class ReportService {
     const orderTypeFilter = orderType ? Prisma.sql`AND "orderType" = ${orderType}::"OrderType"` : Prisma.empty;
     const rows = await prisma.$queryRaw<SlaBreakdownRow[]>(Prisma.sql`
       SELECT "tenantId", "orderType", "priority",
-        COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since})::int AS "completed",
-        COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since} AND "completedAt" > "slaDeadline")::int AS "breached",
+        COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since} AND "completedAt" <= ${now})::int AS "completed",
+        COUNT(*) FILTER (WHERE "status" = 'completed' AND "completedAt" >= ${since} AND "completedAt" <= ${now} AND "completedAt" > "slaDeadline")::int AS "breached",
         COUNT(*) FILTER (WHERE "status" IN ('submitted', 'approved', 'in_progress', 'ready') AND "slaDeadline" < ${now})::int AS "activeOverdue"
       FROM "orders"
       WHERE (
-        ("status" = 'completed' AND "completedAt" >= ${since} AND "slaDeadline" IS NOT NULL)
+        ("status" = 'completed' AND "completedAt" >= ${since} AND "completedAt" <= ${now} AND "slaDeadline" IS NOT NULL)
         OR ("status" IN ('submitted', 'approved', 'in_progress', 'ready') AND "slaDeadline" < ${now})
       ) ${tenantFilter} ${orderTypeFilter}
       GROUP BY "tenantId", "orderType", "priority"
