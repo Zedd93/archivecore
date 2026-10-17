@@ -1501,7 +1501,31 @@
       "inAppDesc": "New events will appear under the bell in the top-right corner of the app.",
       "eventsTitle": "Supported events",
       "channelInApp": "In app",
-      "futureChannels": "Email and browser push notifications can be added as additional channels if needed."
+      "loanReturn": "Upcoming or overdue loan return reminder",
+      "futureChannels": "Loan return reminders can also be sent by email after SMTP is configured. Push notifications are not available yet.",
+      "emailDelivery": {
+        "title": "Email delivery",
+        "description": "Loan return reminder delivery status. Message bodies are not shown here.",
+        "smtpDisabled": "SMTP is not configured. Emails are not currently queued or sent.",
+        "counts": "Message counts by status",
+        "filter": "Delivery status",
+        "all": "All",
+        "status": { "pending": "Pending", "sending": "Sending", "sent": "Sent", "failed": "Failed", "skipped": "Skipped" },
+        "created": "Created",
+        "attempts": "Attempts",
+        "sentAt": "Sent",
+        "nextAttempt": "Next attempt",
+        "retry": "Retry",
+        "retryConfirm": "Retry sending to {{recipient}}? The system will check whether the reminder is still relevant.",
+        "retryQueued": "Email has been queued again",
+        "retrySkipped": "The reminder is no longer relevant and will not be sent",
+        "retryError": "Could not retry email",
+        "loadError": "Could not load email deliveries",
+        "empty": "No deliveries for the selected status",
+        "page": "Page {{page}} of {{total}}",
+        "previous": "Previous",
+        "next": "Next"
+      }
     },
     "appearance": {
       "title": "Appearance",

@@ -19,6 +19,12 @@ type DueDelivery = {
 };
 
 const LOAN_STATUSES = ['delivered', 'completed'] as const;
+export const EMAIL_DELIVERY_STATUSES = ['pending', 'sending', 'sent', 'failed', 'skipped'] as const;
+export type EmailDeliveryStatus = typeof EMAIL_DELIVERY_STATUSES[number];
+
+function httpError(message: string, statusCode: number) {
+  return Object.assign(new Error(message), { statusCode });
+}
 
 export function emailRetryDelayMs(attempts: number) {
   return [60_000, 300_000, 1_800_000, 7_200_000, 21_600_000][Math.min(attempts - 1, 4)];
@@ -32,6 +38,104 @@ export class EmailDeliveryService {
     private readonly getSettings: () => SmtpSettings | null = smtpSettings,
     private readonly send: typeof sendNotificationEmail = sendNotificationEmail,
   ) {}
+
+  async listAdmin(page = 1, status?: EmailDeliveryStatus) {
+    const limit = 20;
+    const [items, total, counts] = await Promise.all([
+      this.db.notificationEmailDelivery.findMany({
+        where: status ? { status } : {},
+        select: {
+          id: true, status: true, attempts: true, lastError: true,
+          createdAt: true, nextAttemptAt: true, sentAt: true,
+          notification: {
+            select: {
+              title: true,
+              user: { select: { email: true } },
+              tenant: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.db.notificationEmailDelivery.count({ where: status ? { status } : {} }),
+      this.db.notificationEmailDelivery.groupBy({ by: ['status'], _count: { _all: true } }),
+    ]);
+    return {
+      smtpConfigured: this.getSettings() !== null,
+      items: items.map((item) => ({
+        id: item.id, status: item.status, attempts: item.attempts,
+        lastError: item.lastError, createdAt: item.createdAt,
+        nextAttemptAt: item.nextAttemptAt, sentAt: item.sentAt,
+        title: item.notification.title,
+        recipientEmail: item.notification.user.email,
+        tenantName: item.notification.tenant?.name ?? null,
+      })),
+      total, page, limit,
+      counts: Object.fromEntries(EMAIL_DELIVERY_STATUSES.map((key) => [
+        key, counts.find((entry) => entry.status === key)?._count._all ?? 0,
+      ])) as Record<EmailDeliveryStatus, number>,
+    };
+  }
+
+  async retryFailed(id: string, actorId: string, now = new Date()) {
+    if (!this.getSettings()) throw httpError('Poczta SMTP nie jest skonfigurowana', 409);
+    return this.db.$transaction(async (tx) => {
+      const delivery = await tx.notificationEmailDelivery.findUnique({
+        where: { id },
+        select: {
+          status: true, attempts: true,
+          notification: {
+            select: {
+              tenantId: true, type: true, entityId: true,
+              user: { select: { tenantId: true, isActive: true } },
+            },
+          },
+        },
+      });
+      if (!delivery) throw httpError('Wysyłka e-mail nie została znaleziona', 404);
+      if (delivery.status !== 'failed') throw httpError('Ponowić można tylko nieudane wysyłki', 409);
+
+      const notification = delivery.notification;
+      const kind = notification.type === 'loan_return_upcoming' ? 'upcoming'
+        : notification.type === 'loan_return_overdue' ? 'overdue' : null;
+      const validRecipient = notification.user.isActive
+        && (notification.user.tenantId === notification.tenantId || notification.user.tenantId === null);
+      const order = kind && validRecipient && notification.entityId && notification.tenantId
+        ? await tx.order.findFirst({
+          where: {
+            id: notification.entityId, tenantId: notification.tenantId,
+            orderType: 'checkout', status: { in: [...LOAN_STATUSES] },
+            items: { some: { itemStatus: 'delivered' } },
+          },
+          select: { expectedReturnAt: true },
+        })
+        : null;
+      const stillRelevant = order?.expectedReturnAt
+        && returnReminderKind(order.expectedReturnAt, now) === kind;
+      const nextStatus = stillRelevant ? 'pending' : 'skipped';
+      const updated = await tx.notificationEmailDelivery.updateMany({
+        where: { id, status: 'failed' },
+        data: {
+          status: nextStatus, nextAttemptAt: now, leaseUntil: null,
+          lastError: stillRelevant ? null : 'Przypomnienie nieaktualne',
+        },
+      });
+      if (updated.count !== 1) throw httpError('Status wysyłki zmienił się. Odśwież listę.', 409);
+      await tx.auditLog.create({
+        data: {
+          tenantId: notification.tenantId,
+          userId: actorId,
+          action: stillRelevant ? 'notification_email.retry' : 'notification_email.skip_stale',
+          entityType: 'notification_email_delivery', entityId: id,
+          oldValues: { status: 'failed', attempts: delivery.attempts },
+          newValues: { status: nextStatus },
+        },
+      });
+      return { status: nextStatus };
+    });
+  }
 
   async processDue(now = new Date()) {
     const settings = this.getSettings();

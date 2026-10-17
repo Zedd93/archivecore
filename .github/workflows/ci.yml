@@ -69,6 +69,8 @@ jobs:
         run: npm run test:order-return-reminders
       - name: Verify email delivery of loan reminders
         run: npm run test:notification-email
+      - name: Verify email delivery admin controls
+        run: npm run test:email-delivery-admin
       - name: Verify notification tenant navigation
         run: npm run test:notification-navigation
       - name: Verify order assignment eligibility

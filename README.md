@@ -149,6 +149,13 @@ returned or the reminder is no longer timely.
 Check `node --version` on the server before updating: email delivery requires
 Node.js 20 or newer.
 
+Global Super Admin and Doxart Admin users can review delivery status in
+Settings > Notifications. The panel shows recipients, status, attempt count,
+and safe error codes without message bodies. Failed deliveries can be retried
+manually; the server checks whether the loan return reminder is still relevant
+before requeueing. SMTP configuration can be added after deployment; without
+it, only in-app reminders are created.
+
 ## API
 
 All endpoints are under `/api/v1/`. Authentication via `Authorization: Bearer <token>` header.

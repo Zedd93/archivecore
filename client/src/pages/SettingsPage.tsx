@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { User, Shield, Bell, Palette, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import IntegrationsTab from './settings/IntegrationsTab';
+import EmailDeliveriesPanel from './settings/EmailDeliveriesPanel';
+import { RoleCode } from '@archivecore/shared';
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, ThemePreference } from '@/utils/theme';
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance' | 'integrations';
@@ -373,6 +375,9 @@ function SecurityTab() {
 // ─── Notifications Tab ───────────────────────────────────
 function NotificationsTab() {
   const { t } = useTranslation();
+  const { user, hasRole } = useAuth();
+  const canManageEmail = user?.tenantId === null
+    && (hasRole(RoleCode.SUPER_ADMIN) || hasRole(RoleCode.DOXART_ADMIN));
 
   const activeEvents = [
     t('settings.notifications.newOrders'),
@@ -380,9 +385,11 @@ function NotificationsTab() {
     t('settings.notifications.retention'),
     t('settings.notifications.slaTarget'),
     t('settings.notifications.scanQuote'),
+    t('settings.notifications.loanReturn'),
   ];
 
   return (
+    <div className="space-y-4">
     <div className="card p-4 sm:p-6 space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">{t('settings.notifications.title')}</h2>
 
@@ -411,6 +418,8 @@ function NotificationsTab() {
       <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">
         {t('settings.notifications.futureChannels')}
       </div>
+    </div>
+    {canManageEmail && <EmailDeliveriesPanel />}
     </div>
   );
 }

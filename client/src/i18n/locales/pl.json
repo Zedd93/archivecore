@@ -1501,7 +1501,31 @@
       "inAppDesc": "Nowe zdarzenia pojawią się pod dzwonkiem w prawym górnym rogu aplikacji.",
       "eventsTitle": "Obsługiwane zdarzenia",
       "channelInApp": "W aplikacji",
-      "futureChannels": "Powiadomienia mailowe i systemowe push mogą zostać dodane jako kolejne kanały, jeśli będą potrzebne."
+      "loanReturn": "Przypomnienie o zbliżającym się lub przekroczonym terminie zwrotu wypożyczenia",
+      "futureChannels": "Przypomnienia o zwrocie mogą być wysyłane również e-mailem po skonfigurowaniu SMTP. Powiadomienia push nie są jeszcze dostępne.",
+      "emailDelivery": {
+        "title": "Dostarczenie e-maili",
+        "description": "Podgląd wysyłek przypomnień o zwrocie. Treść wiadomości nie jest tutaj wyświetlana.",
+        "smtpDisabled": "SMTP nie jest skonfigurowane. E-maile nie są obecnie kolejkowane ani wysyłane.",
+        "counts": "Liczba wiadomości według statusu",
+        "filter": "Status wysyłki",
+        "all": "Wszystkie",
+        "status": { "pending": "Oczekuje", "sending": "Wysyłanie", "sent": "Wysłano", "failed": "Błąd", "skipped": "Pominięto" },
+        "created": "Utworzono",
+        "attempts": "Próby",
+        "sentAt": "Wysłano",
+        "nextAttempt": "Następna próba",
+        "retry": "Ponów",
+        "retryConfirm": "Ponowić wysyłkę do {{recipient}}? System sprawdzi, czy przypomnienie jest nadal aktualne.",
+        "retryQueued": "Wysyłka została ponownie zakolejkowana",
+        "retrySkipped": "Przypomnienie nie jest już aktualne, więc nie zostanie wysłane",
+        "retryError": "Nie udało się ponowić wysyłki",
+        "loadError": "Nie udało się wczytać wysyłek e-mail",
+        "empty": "Brak wysyłek dla wybranego statusu",
+        "page": "Strona {{page}} z {{total}}",
+        "previous": "Poprzednia",
+        "next": "Następna"
+      }
     },
     "appearance": {
       "title": "Wygląd",
