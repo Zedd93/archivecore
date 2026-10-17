@@ -31,6 +31,17 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
+  async listJrwaVersions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const versions = await retentionService.listJrwaVersions(
+        req.tenantId || null,
+        req.user!,
+        typeof req.query.tenantId === 'string' ? req.query.tenantId : undefined
+      );
+      return successResponse(res, versions);
+    } catch (err) { next(err); }
+  }
+
   async importJrwa(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.file) return errorResponse(res, 'Nie załączono pliku JRWA', 400);
@@ -39,7 +50,9 @@ export class RetentionController {
         req.file.buffer,
         req.file.originalname,
         req.body.tenantId,
-        req.user!
+        req.user!,
+        req.body.label,
+        req.body.validFrom
       );
       return successResponse(res, result, 201);
     } catch (err) { next(err); }

@@ -74,6 +74,7 @@
     "test:webhooks": "node --import tsx --test server/scripts/test-webhooks.mjs",
     "test:hr-retention": "node --import tsx --test server/scripts/test-hr-retention.mjs",
     "test:hr-retention-audit": "node --test server/scripts/test-audit-hr-retention.cjs",
+    "test:jrwa-versions": "node --import tsx --test server/scripts/test-jrwa-versions.mjs",
     "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio",

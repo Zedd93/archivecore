@@ -4,6 +4,7 @@ import { IJwtPayload, Permissions, RoleCode } from '@archivecore/shared';
 import { notificationService } from '../notifications/notification.service';
 import { parseJrwaDocx } from './jrwa-import.parser';
 import { randomUUID } from 'node:crypto';
+import { parseJrwaValidFrom, previousJrwaDay } from './jrwa-version';
 
 export class RetentionService {
   private async recordDisposalAudit(
@@ -102,6 +103,7 @@ export class RetentionService {
       where,
       include: {
         rules: true,
+        jrwaVersion: { select: { id: true, label: true, validFrom: true, validTo: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
         _count: { select: { boxes: true } },
       },
@@ -114,6 +116,19 @@ export class RetentionService {
     }));
   }
 
+  async listJrwaVersions(tenantId: string | null, actor?: IJwtPayload, requestedTenantId?: string) {
+    if (requestedTenantId && !this.isSuperAdmin(actor) && requestedTenantId !== tenantId) {
+      throw Object.assign(new Error('Nie masz dostępu do JRWA tego tenanta'), { statusCode: 403 });
+    }
+    const effectiveTenantId = requestedTenantId || tenantId;
+    if (!effectiveTenantId) return [];
+    return prisma.jrwaVersion.findMany({
+      where: { tenantId: effectiveTenantId },
+      orderBy: { validFrom: 'desc' },
+      include: { _count: { select: { policies: true } } },
+    });
+  }
+
   async getPolicy(id: string, tenantId: string | null) {
     const where: Prisma.RetentionPolicyWhereInput = tenantId
       ? { id, OR: [{ tenantId }, { tenantId: null }] }
@@ -121,7 +136,7 @@ export class RetentionService {
 
     const policy = await prisma.retentionPolicy.findFirst({
       where,
-      include: { rules: true, _count: { select: { boxes: true } } },
+      include: { rules: true, jrwaVersion: true, _count: { select: { boxes: true } } },
     });
     if (!policy) throw Object.assign(new Error('Polityka retencji nie znaleziona'), { statusCode: 404 });
     return {
@@ -185,46 +200,66 @@ export class RetentionService {
     };
   }
 
-  async importJrwa(buffer: Buffer, originalName: string, targetTenantId: string, actor: IJwtPayload) {
+  async importJrwa(buffer: Buffer, originalName: string, targetTenantId: string, actor: IJwtPayload, labelInput: unknown, validFromInput: unknown) {
+    const label = typeof labelInput === 'string' ? labelInput.trim() : '';
+    if (!label || label.length > 120) {
+      throw Object.assign(new Error('Podaj nazwę wersji JRWA (maksymalnie 120 znaków)'), { statusCode: 400 });
+    }
+    const validFrom = parseJrwaValidFrom(validFromInput);
     const preview = await this.previewJrwa(buffer, originalName, targetTenantId, actor);
-    const existingPolicies = await prisma.retentionPolicy.findMany({
-      where: {
-        tenantId: targetTenantId,
-        jrwaCode: { in: preview.rows.map((row) => row.jrwaCode) },
-      },
-      select: { id: true, jrwaCode: true },
-    });
-    const existingByCode = new Map(existingPolicies.map((policy) => [policy.jrwaCode, policy.id]));
-    let created = 0;
-    let updated = 0;
-    const operations = preview.rows.map((row) => {
-      const existingId = existingByCode.get(row.jrwaCode);
-      const data = {
-        name: row.name,
-        docType: row.docType,
-        retentionYears: row.retentionYears,
-        retentionTrigger: 'end_date' as const,
-        description: row.description,
-        jrwaCode: row.jrwaCode,
-        archivalCategory: row.archivalCategory,
-        isPermanent: row.isPermanent,
-        sourceFileName: originalName,
-        isActive: true,
-      };
-
-      if (existingId) {
-        updated++;
-        return prisma.retentionPolicy.update({ where: { id: existingId }, data });
+    const codes = new Set<string>();
+    for (const row of preview.rows) {
+      if (codes.has(row.jrwaCode)) {
+        throw Object.assign(new Error(`Powtórzony symbol JRWA w pliku: ${row.jrwaCode}`), { statusCode: 400 });
       }
-      created++;
-      return prisma.retentionPolicy.create({ data: { ...data, tenantId: targetTenantId } });
-    });
+      codes.add(row.jrwaCode);
+    }
 
-    await prisma.$transaction(operations);
+    let version;
+    try {
+      version = await prisma.$transaction(async (tx) => {
+        const latest = await tx.jrwaVersion.findFirst({
+          where: { tenantId: targetTenantId },
+          orderBy: { validFrom: 'desc' },
+        });
+        if (latest && validFrom <= latest.validFrom) {
+          throw Object.assign(new Error('Nowa wersja JRWA musi obowiązywać później niż ostatnia zapisana wersja'), { statusCode: 409 });
+        }
+        const createdVersion = await tx.jrwaVersion.create({
+          data: { tenantId: targetTenantId, label, validFrom, sourceFileName: originalName },
+        });
+        if (latest) {
+          await tx.jrwaVersion.update({ where: { id: latest.id }, data: { validTo: previousJrwaDay(validFrom) } });
+        }
+        await tx.retentionPolicy.createMany({
+          data: preview.rows.map((row) => ({
+            tenantId: targetTenantId,
+            jrwaVersionId: createdVersion.id,
+            name: row.name,
+            docType: row.docType,
+            retentionYears: row.retentionYears,
+            retentionTrigger: 'end_date',
+            description: row.description,
+            jrwaCode: row.jrwaCode,
+            archivalCategory: row.archivalCategory,
+            isPermanent: row.isPermanent,
+            sourceFileName: originalName,
+            isActive: true,
+          })),
+        });
+        return createdVersion;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === 'P2002' || error.code === 'P2034')) {
+        throw Object.assign(new Error('Wersja lub data JRWA już istnieje. Odśwież listę i wybierz inną.'), { statusCode: 409 });
+      }
+      throw error;
+    }
 
     return {
-      created,
-      updated,
+      version,
+      created: preview.rows.length,
+      updated: 0,
       total: preview.rows.length,
       skipped: preview.skipped,
       tenant: preview.tenant,
@@ -234,6 +269,9 @@ export class RetentionService {
 
   async updatePolicy(id: string, tenantId: string | null, actor: IJwtPayload, data: any) {
     const policy = await this.getPolicy(id, tenantId);
+    if (policy.jrwaCode) {
+      throw Object.assign(new Error('Pozycji JRWA nie można edytować. Zaimportuj nową wersję wykazu.'), { statusCode: 409 });
+    }
     if (!policy.tenantId) {
       this.assertCanManageGlobalPolicy(actor);
     }
@@ -254,6 +292,9 @@ export class RetentionService {
 
   async deletePolicy(id: string, tenantId: string | null, actor: IJwtPayload) {
     const policy = await this.getPolicy(id, tenantId);
+    if (policy.jrwaCode) {
+      throw Object.assign(new Error('Pozycji JRWA nie można usunąć. Zachowaj historię wersji.'), { statusCode: 409 });
+    }
     if (!policy.tenantId) {
       this.assertCanManageGlobalPolicy(actor);
     }

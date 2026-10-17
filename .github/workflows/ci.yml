@@ -129,6 +129,9 @@ jobs:
       - name: Verify read-only personnel retention audit
         run: npm run test:hr-retention-audit
 
+      - name: Verify versioned JRWA imports
+        run: npm run test:jrwa-versions
+
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
 

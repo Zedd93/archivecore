@@ -219,6 +219,7 @@ model Tenant {
   orders            Order[]
   locations         Location[]
   retentionPolicies RetentionPolicy[]
+  jrwaVersions      JrwaVersion[]
   labelTemplates    LabelTemplate[]
   auditLogs         AuditLog[]
   shareLinks        ShareLink[]
@@ -1165,6 +1166,7 @@ model AuditLog {
 model RetentionPolicy {
   id               String           @id @default(uuid()) @db.Uuid
   tenantId         String?          @db.Uuid
+  jrwaVersionId    String?          @db.Uuid
   name             String           @db.VarChar(255)
   docType          String?          @db.VarChar(100)
   retentionYears   Int?
@@ -1178,12 +1180,32 @@ model RetentionPolicy {
   createdAt        DateTime         @default(now())
 
   tenant Tenant?         @relation(fields: [tenantId], references: [id])
+  jrwaVersion JrwaVersion? @relation(fields: [jrwaVersionId], references: [id], onDelete: Restrict)
   rules  RetentionRule[]
   boxes  Box[]
 
   @@index([tenantId])
   @@index([tenantId, jrwaCode])
+  @@index([jrwaVersionId])
   @@map("retention_policies")
+}
+
+model JrwaVersion {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  label          String   @db.VarChar(120)
+  validFrom      DateTime @db.Date
+  validTo        DateTime? @db.Date
+  sourceFileName String   @db.VarChar(500)
+  createdAt      DateTime @default(now())
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  policies RetentionPolicy[]
+
+  @@unique([tenantId, label])
+  @@unique([tenantId, validFrom])
+  @@index([tenantId, validFrom])
+  @@map("jrwa_versions")
 }
 
 model RetentionRule {

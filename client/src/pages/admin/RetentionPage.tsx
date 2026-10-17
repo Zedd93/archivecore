@@ -50,6 +50,9 @@ export default function RetentionPage() {
   const [policyTenantId, setPolicyTenantId] = useState(() => localStorage.getItem('tenantId') || '');
   const [jrwaTenantId, setJrwaTenantId] = useState('');
   const [jrwaFile, setJrwaFile] = useState<File | null>(null);
+  const [jrwaLabel, setJrwaLabel] = useState('');
+  const [jrwaValidFrom, setJrwaValidFrom] = useState('');
+  const [jrwaVersionFilter, setJrwaVersionFilter] = useState('current');
   const [jrwaPreview, setJrwaPreview] = useState<any>(null);
   const [jrwaLoading, setJrwaLoading] = useState(false);
   const [jrwaImporting, setJrwaImporting] = useState(false);
@@ -81,6 +84,32 @@ export default function RetentionPage() {
       return data.data || [];
     },
     enabled: canManageGlobalPolicies,
+  });
+
+  const { data: jrwaVersions = [] } = useQuery({
+    queryKey: ['jrwa-versions', policyTenantId],
+    queryFn: async () => {
+      const { data } = await api.get('/retention/policies/jrwa/versions', {
+        params: policyTenantId ? { tenantId: policyTenantId } : undefined,
+      });
+      return data.data || [];
+    },
+    enabled: canManageRetention && Boolean(policyTenantId || !canManageGlobalPolicies),
+  });
+
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const currentJrwaVersion = jrwaVersions.find((version: any) =>
+    version.validFrom.slice(0, 10) <= today && (!version.validTo || version.validTo.slice(0, 10) >= today)
+  );
+  const visiblePolicies = (policies || []).filter((policy: any) => {
+    if (jrwaVersionFilter === 'all') return true;
+    if (jrwaVersionFilter === 'legacy') return Boolean(policy.jrwaCode && !policy.jrwaVersionId);
+    if (jrwaVersionFilter === 'current') {
+      if (!policy.jrwaVersionId) return !policy.jrwaCode || !currentJrwaVersion;
+      return policy.jrwaVersionId === currentJrwaVersion?.id;
+    }
+    return policy.jrwaVersionId === jrwaVersionFilter;
   });
 
   useEffect(() => {
@@ -152,6 +181,9 @@ export default function RetentionPage() {
 
   const policyColumns: Column<any>[] = [
     { key: 'jrwaCode', header: t('admin.retention.jrwaCode'), render: (item) => item.jrwaCode ? <span className="font-mono font-medium">{item.jrwaCode}</span> : '—' },
+    { key: 'jrwaVersion', header: t('admin.retention.jrwaVersion'), render: (item) => item.jrwaVersion
+      ? <span>{item.jrwaVersion.label} ({item.jrwaVersion.validFrom.slice(0, 10)} – {item.jrwaVersion.validTo?.slice(0, 10) || '…'})</span>
+      : item.jrwaCode ? t('admin.retention.jrwaLegacy') : '—' },
     { key: 'name', header: t('common.name'), render: (item) => <span className="font-medium">{item.name}</span> },
     { key: 'docType', header: t('admin.retention.createModal.docType'), render: (item) => item.docType ? t(`docTypes.${item.docType}`, { defaultValue: item.docType }) : t('common.all') },
     { key: 'archivalCategory', header: t('admin.retention.archivalCategory'), render: (item) => item.archivalCategory || '—' },
@@ -171,7 +203,11 @@ export default function RetentionPage() {
     {
       key: 'isActive',
       header: t('common.status'),
-      render: (item) => item.isActive ? <span className="badge-green">{t('admin.retention.statusActive')}</span> : <span className="badge-gray">{t('admin.retention.statusInactive')}</span>,
+      render: (item) => {
+        if (item.jrwaVersion?.validFrom.slice(0, 10) > today) return <span className="badge-blue">{t('admin.retention.jrwaFuture')}</span>;
+        if (item.jrwaVersion?.validTo?.slice(0, 10) < today) return <span className="badge-gray">{t('admin.retention.jrwaHistorical')}</span>;
+        return item.isActive ? <span className="badge-green">{t('admin.retention.statusActive')}</span> : <span className="badge-gray">{t('admin.retention.statusInactive')}</span>;
+      },
     },
     { key: '_count', header: t('boxes.title'), render: (item) => item._count?.boxes ?? 0 },
   ];
@@ -280,6 +316,8 @@ export default function RetentionPage() {
 
   const resetJrwaImport = () => {
     setJrwaFile(null);
+    setJrwaLabel('');
+    setJrwaValidFrom('');
     setJrwaPreview(null);
     setJrwaLoading(false);
     setJrwaImporting(false);
@@ -291,10 +329,12 @@ export default function RetentionPage() {
   };
 
   const createJrwaFormData = () => {
-    if (!jrwaFile || !jrwaTenantId) return null;
+    if (!jrwaFile || !jrwaTenantId || !jrwaLabel.trim() || !jrwaValidFrom) return null;
     const formData = new FormData();
     formData.append('file', jrwaFile);
     formData.append('tenantId', jrwaTenantId);
+    formData.append('label', jrwaLabel.trim());
+    formData.append('validFrom', jrwaValidFrom);
     return formData;
   };
 
@@ -330,7 +370,9 @@ export default function RetentionPage() {
         updated: data.data.updated,
       }));
       setPolicyTenantId(jrwaTenantId);
+      setJrwaVersionFilter('current');
       await queryClient.invalidateQueries({ queryKey: ['retention-policies'] });
+      await queryClient.invalidateQueries({ queryKey: ['jrwa-versions'] });
       closeJrwaImport();
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('admin.retention.jrwaImport.importError')));
@@ -446,13 +488,23 @@ export default function RetentionPage() {
             {canManageGlobalPolicies && (
               <select
                 value={policyTenantId}
-                onChange={(e) => setPolicyTenantId(e.target.value)}
+                onChange={(e) => { setPolicyTenantId(e.target.value); setJrwaVersionFilter('current'); }}
                 className="input-field sm:w-64"
                 aria-label={t('admin.retention.tenantFilter')}
               >
                 <option value="">{t('admin.retention.globalOnly')}</option>
                 {tenants.map((tenant: any) => (
                   <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+                ))}
+              </select>
+            )}
+            {policyTenantId && (
+              <select value={jrwaVersionFilter} onChange={(e) => setJrwaVersionFilter(e.target.value)} className="input-field sm:w-64" aria-label={t('admin.retention.jrwaVersionFilter')}>
+                <option value="current">{t('admin.retention.jrwaCurrent')}</option>
+                <option value="all">{t('admin.retention.jrwaAll')}</option>
+                <option value="legacy">{t('admin.retention.jrwaLegacy')}</option>
+                {jrwaVersions.map((version: any) => (
+                  <option key={version.id} value={version.id}>{version.label} ({version.validFrom.slice(0, 10)})</option>
                 ))}
               </select>
             )}
@@ -466,7 +518,7 @@ export default function RetentionPage() {
             </button>
           </div>
         </div>
-        <DataTable columns={policyColumns} data={policies || []} isLoading={polLoading} emptyMessage={t('admin.retention.noPolicies')} />
+        <DataTable columns={policyColumns} data={visiblePolicies} isLoading={polLoading} emptyMessage={t('admin.retention.noPolicies')} />
       </div>}
 
       {activeTenantId && canInitiateDisposal && (
@@ -697,6 +749,17 @@ export default function RetentionPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="jrwa-label" className="label-text">{t('admin.retention.jrwaImport.versionLabel')} *</label>
+              <input id="jrwa-label" className="input-field" value={jrwaLabel} onChange={(e) => { setJrwaLabel(e.target.value); setJrwaPreview(null); }} maxLength={120} required />
+            </div>
+            <div>
+              <label htmlFor="jrwa-valid-from" className="label-text">{t('admin.retention.jrwaImport.validFrom')} *</label>
+              <input id="jrwa-valid-from" type="date" className="input-field" value={jrwaValidFrom} onChange={(e) => { setJrwaValidFrom(e.target.value); setJrwaPreview(null); }} required />
+            </div>
+          </div>
+
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
             {t('admin.retention.jrwaImport.hint')}
           </div>
@@ -707,7 +770,7 @@ export default function RetentionPage() {
               <button
                 type="button"
                 onClick={handleJrwaPreview}
-                disabled={jrwaLoading || !jrwaFile || !jrwaTenantId}
+                disabled={jrwaLoading || !jrwaFile || !jrwaTenantId || !jrwaLabel.trim() || !jrwaValidFrom}
                 className="btn-primary"
               >
                 {jrwaLoading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}

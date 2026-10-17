@@ -19,6 +19,7 @@ const evidenceUpload = multer({
 
 // Policies
 router.get('/policies', ...auth, requirePermission(Permissions.RETENTION_MANAGE), (req, res, next) => retentionController.listPolicies(req, res, next));
+router.get('/policies/jrwa/versions', ...auth, requirePermission(Permissions.RETENTION_MANAGE), (req, res, next) => retentionController.listJrwaVersions(req, res, next));
 router.post('/policies/jrwa/preview', ...auth, requirePermission(Permissions.SYSTEM_CONFIG), fileUpload.single('file'), (req, res, next) => retentionController.previewJrwa(req, res, next));
 router.post('/policies/jrwa/import', ...auth, requirePermission(Permissions.SYSTEM_CONFIG), fileUpload.single('file'), auditLog('retention_policy', 'policy.jrwa_import'), (req, res, next) => retentionController.importJrwa(req, res, next));
 router.get('/policies/:id', ...auth, requirePermission(Permissions.RETENTION_MANAGE), (req, res, next) => retentionController.getPolicy(req, res, next));
