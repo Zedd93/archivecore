@@ -19,6 +19,7 @@ export const createTransferListItemSchema = z.object({
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   categoryCode: z.string().min(1, 'Kategoria akt jest wymagana').max(20),
+  retentionPolicyId: z.string().uuid('Nieprawidłowa pozycja JRWA').optional().nullable(),
   folderCount: z.number().int().min(1).default(1),
   storageLocation: z.string().max(500).optional().nullable(),
   disposalOrTransferDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),

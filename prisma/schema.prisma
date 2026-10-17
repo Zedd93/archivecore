@@ -640,6 +640,7 @@ model Folder {
   id           String       @id @default(uuid()) @db.Uuid
   boxId        String?      @db.Uuid
   tenantId     String       @db.Uuid
+  retentionPolicyId String? @db.Uuid
   folderNumber String       @db.VarChar(100)
   title        String       @db.VarChar(1000)
   docType      String?      @db.VarChar(100)
@@ -654,6 +655,7 @@ model Folder {
 
   box              Box?              @relation(fields: [boxId], references: [id])
   tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  retentionPolicy  RetentionPolicy?   @relation(fields: [retentionPolicyId], references: [id], onDelete: Restrict)
   documents        Document[]
   attachments      Attachment[]      @relation("FolderAttachments")
   orderItems       OrderItem[]
@@ -662,6 +664,7 @@ model Folder {
 
   @@index([boxId])
   @@index([tenantId])
+  @@index([retentionPolicyId])
   @@map("folders")
 }
 
@@ -1183,6 +1186,7 @@ model RetentionPolicy {
   jrwaVersion JrwaVersion? @relation(fields: [jrwaVersionId], references: [id], onDelete: Restrict)
   rules  RetentionRule[]
   boxes  Box[]
+  folders Folder[]
 
   @@index([tenantId])
   @@index([tenantId, jrwaCode])

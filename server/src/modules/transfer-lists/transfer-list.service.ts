@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { generateQrData, normalizeOptionalText } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
+import { jrwaSuggestionService } from '../retention/jrwa-suggestion.service';
 
 const TRANSFER_LIST_ITEM_BOX_SELECT = {
   id: true,
@@ -48,6 +49,7 @@ export class TransferListService {
     return {
       tenantId: list.tenantId,
       boxId,
+      retentionPolicyId: data.retentionPolicyId ?? null,
       folderNumber: String(data.folderSignature || '').trim().substring(0, 100),
       title: String(data.folderTitle || '').trim().substring(0, 1000),
       dateFrom: this.parseOptionalDate(data.dateFrom),
@@ -326,6 +328,7 @@ export class TransferListService {
   async addItem(listId: string, tenantId: string, userId: string, data: any) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list, 'Można dodawać pozycje tylko w spisie o statusie roboczym');
+    await jrwaSuggestionService.validateSelection(tenantId, data.retentionPolicyId, data.categoryCode);
     const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, data);
 
     // Get next ordinal number
@@ -349,24 +352,25 @@ export class TransferListService {
   async updateItem(listId: string, itemId: string, tenantId: string, userId: string, data: any) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list);
-    const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, data);
-
     const item = await prisma.transferListItem.findFirst({
       where: { id: itemId, transferListId: listId },
-      select: { id: true, folderId: true, ordinalNumber: true },
+      select: { id: true, folderId: true, ordinalNumber: true, categoryCode: true, folder: { select: { retentionPolicyId: true } } },
     });
     if (!item) throw Object.assign(new Error('Pozycja spisu nie znaleziona'), { statusCode: 404 });
+    const selectedPolicyId = data.retentionPolicyId === undefined ? item.folder?.retentionPolicyId : data.retentionPolicyId;
+    await jrwaSuggestionService.validateSelection(tenantId, selectedPolicyId, data.categoryCode ?? item.categoryCode, item.folder?.retentionPolicyId);
+    const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, data);
 
     return prisma.$transaction(async (tx) => {
       let folderId = item.folderId;
       if (folderId) {
         await tx.folder.update({
           where: { id: folderId },
-          data: this.getCanonicalFolderData(list, data, boxId, item.ordinalNumber),
+          data: this.getCanonicalFolderData(list, { ...data, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
         });
       } else {
         const folder = await tx.folder.create({
-          data: this.getCanonicalFolderData(list, data, boxId, item.ordinalNumber),
+          data: this.getCanonicalFolderData(list, { ...data, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
         });
         folderId = folder.id;
       }
@@ -417,6 +421,7 @@ export class TransferListService {
       ordinalNumber++;
 
       try {
+        await jrwaSuggestionService.validateSelection(tenantId, item.retentionPolicyId, item.categoryCode);
         const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, item);
 
         const record = await prisma.$transaction((tx) => this.createItemWithCanonicalFolder(
@@ -602,6 +607,7 @@ export class TransferListService {
         orderBy: { ordinalNumber: 'asc' },
         include: {
           box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },
+          folder: { select: { retentionPolicyId: true, retentionPolicy: { select: { id: true, jrwaCode: true, name: true, archivalCategory: true, retentionYears: true, isPermanent: true, jrwaVersion: { select: { label: true, validFrom: true, validTo: true } } } } } },
         },
       }),
       prisma.transferListItem.count({ where }),

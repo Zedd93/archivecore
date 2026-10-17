@@ -19,6 +19,7 @@ import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/statusColors';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { normalizeDisplayText } from '@archivecore/shared';
+import JrwaSuggestionPicker from '@/components/retention/JrwaSuggestionPicker';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 const ITEM_PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
@@ -103,6 +104,7 @@ export default function TransferListDetailPage() {
     dateFrom: '',
     dateTo: '',
     categoryCode: 'B10',
+    retentionPolicyId: '',
     folderCount: 1,
     storageLocation: '',
     disposalOrTransferDate: '',
@@ -148,13 +150,17 @@ export default function TransferListDetailPage() {
   const resetForm = () => {
     setForm({
       folderSignature: '', folderTitle: '', dateFrom: '', dateTo: '',
-      categoryCode: 'B10', folderCount: 1, storageLocation: '',
+      categoryCode: 'B10', retentionPolicyId: '', folderCount: 1, storageLocation: '',
       disposalOrTransferDate: '', notes: '', boxNumber: '',
     });
   };
 
   const updateFormField = (field: keyof typeof form, value: string | number) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+      ...((field === 'folderSignature' || field === 'categoryCode') && prev[field] !== value ? { retentionPolicyId: '' } : {}),
+    }));
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -164,6 +170,7 @@ export default function TransferListDetailPage() {
         folderSignature: form.folderSignature,
         folderTitle: form.folderTitle,
         categoryCode: form.categoryCode,
+        retentionPolicyId: form.retentionPolicyId || null,
         folderCount: Number(form.folderCount),
         dateFrom: form.dateFrom || null,
         dateTo: form.dateTo || null,
@@ -188,6 +195,7 @@ export default function TransferListDetailPage() {
         folderSignature: form.folderSignature,
         folderTitle: form.folderTitle,
         categoryCode: form.categoryCode,
+        retentionPolicyId: form.retentionPolicyId || null,
         folderCount: Number(form.folderCount),
         dateFrom: form.dateFrom || null,
         dateTo: form.dateTo || null,
@@ -212,6 +220,7 @@ export default function TransferListDetailPage() {
       dateFrom: item.dateFrom ? item.dateFrom.split('T')[0] : '',
       dateTo: item.dateTo ? item.dateTo.split('T')[0] : '',
       categoryCode: item.categoryCode || 'B10',
+      retentionPolicyId: item.folder?.retentionPolicyId || '',
       folderCount: item.folderCount || 1,
       storageLocation: item.storageLocation || '',
       disposalOrTransferDate: item.disposalOrTransferDate ? item.disposalOrTransferDate.split('T')[0] : '',
@@ -975,9 +984,21 @@ export default function TransferListDetailPage() {
                 required
               >
                 {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                {!CATEGORY_OPTIONS.includes(form.categoryCode) && <option value={form.categoryCode}>{form.categoryCode}</option>}
               </select>
             </div>
           </div>
+
+          <JrwaSuggestionPicker
+            signature={form.folderSignature}
+            value={form.retentionPolicyId}
+            existingPolicy={editingItem?.folder?.retentionPolicy}
+            onChoose={(policy) => setForm((prev) => ({
+              ...prev,
+              retentionPolicyId: policy?.id || '',
+              categoryCode: policy?.archivalCategory || prev.categoryCode,
+            }))}
+          />
 
           <div>
             <label htmlFor="item-folderTitle" className="label-text">{t('transferLists.detail.folderTitle')}</label>

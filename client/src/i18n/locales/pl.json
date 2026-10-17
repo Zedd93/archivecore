@@ -181,6 +181,7 @@
 
   "custodyHistory": { "order": "Zlecenie", "more": "Pokaż starsze zdarzenia", "moreDocuments": "Pokaż więcej dokumentów", "documentNotFound": "Dokument nie znaleziony", "date": "Data dokumentu", "pages": "Liczba stron" },
   "folders": {
+    "retentionPolicy": "Pozycja JRWA / retencja",
     "title": "Teczki",
     "subtitle": "Najmniejsze jednostki archiwalne: teczki ze spisów ZO i teczki dodane ręcznie",
     "searchPlaceholder": "Szukaj po znaku, tytule, kartonie, lokalizacji lub spisie...",
@@ -592,6 +593,17 @@
     "importFromFile": "Importuj spis z pliku",
     "listNumber": "Numer spisu",
     "category": "Kategoria",
+    "retentionSuggestion": {
+      "label": "Podpowiedź JRWA i retencji",
+      "hint": "Wyszukaj symbol lub nazwę pozycji JRWA. Wybór wymaga potwierdzenia; nie zmienia wcześniejszych teczek ani nie wylicza daty brakowania kartonu. Dla akt historycznych zweryfikuj właściwą wersję wykazu.",
+      "searchPlaceholder": "Symbol JRWA lub nazwa klasy",
+      "legacy": "Import bez wersji",
+      "permanent": "przechowywanie wieczyste",
+      "review": "okres do weryfikacji",
+      "clear": "Usuń wybór",
+      "none": "Brak pasujących pozycji w bieżącej wersji JRWA",
+      "loadError": "Nie udało się pobrać podpowiedzi JRWA"
+    },
     "itemsCount": "Liczba pozycji",
     "empty": "Brak spisów zdawczo-odbiorczych",
     "emptyDesc": "Utwórz nowy spis ręcznie lub zaimportuj istniejący spis z pliku Excel/CSV.",

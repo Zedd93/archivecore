@@ -181,6 +181,7 @@
 
   "custodyHistory": { "order": "Order", "more": "Show older events", "moreDocuments": "Show more documents", "documentNotFound": "Document not found", "date": "Document date", "pages": "Page count" },
   "folders": {
+    "retentionPolicy": "JRWA class / retention",
     "title": "Folders",
     "subtitle": "Smallest archive units: transfer-list folders and manually added folders",
     "searchPlaceholder": "Search by sign, title, box, location, or transfer list...",
@@ -592,6 +593,17 @@
     "importFromFile": "Import list from file",
     "listNumber": "List number",
     "category": "Category",
+    "retentionSuggestion": {
+      "label": "JRWA and retention suggestion",
+      "hint": "Search by JRWA code or class name. Confirm a suggestion to use it; existing folders stay unchanged and the box disposal date is not calculated. Review the applicable version for historical records.",
+      "searchPlaceholder": "JRWA code or class name",
+      "legacy": "Unversioned import",
+      "permanent": "permanent retention",
+      "review": "period needs review",
+      "clear": "Clear selection",
+      "none": "No matching entries in the current JRWA version",
+      "loadError": "Could not load JRWA suggestions"
+    },
     "itemsCount": "Items count",
     "empty": "No transfer lists",
     "emptyDesc": "Create a new list manually or import an existing list from an Excel/CSV file.",

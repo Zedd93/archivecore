@@ -105,7 +105,7 @@ export class RetentionService {
         rules: true,
         jrwaVersion: { select: { id: true, label: true, validFrom: true, validTo: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
-        _count: { select: { boxes: true } },
+        _count: { select: { boxes: true, folders: true } },
       },
       orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
     });
@@ -136,7 +136,7 @@ export class RetentionService {
 
     const policy = await prisma.retentionPolicy.findFirst({
       where,
-      include: { rules: true, jrwaVersion: true, _count: { select: { boxes: true } } },
+      include: { rules: true, jrwaVersion: true, _count: { select: { boxes: true, folders: true } } },
     });
     if (!policy) throw Object.assign(new Error('Polityka retencji nie znaleziona'), { statusCode: 404 });
     return {
@@ -299,9 +299,9 @@ export class RetentionService {
       this.assertCanManageGlobalPolicy(actor);
     }
 
-    if (policy._count.boxes > 0) {
+    if (policy._count.boxes > 0 || policy._count.folders > 0) {
       throw Object.assign(
-        new Error('Nie można usunąć polityki — przypisane kartony'),
+        new Error('Nie można usunąć polityki — przypisane kartony lub teczki'),
         { statusCode: 400 }
       );
     }

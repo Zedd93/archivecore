@@ -23,6 +23,9 @@ const router = Router();
 const auth = [authenticate, tenantContext];
 
 // ─── Transfer Lists ──────────────────────────────────────
+router.get('/retention-suggestions', ...auth, requirePermission(Permissions.TRANSFER_LIST_WRITE),
+  (req, res, next) => transferListController.retentionSuggestions(req, res, next));
+
 router.get('/',
   ...auth,
   requirePermission(Permissions.TRANSFER_LIST_READ),

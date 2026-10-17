@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { Box, ClipboardList, UserCircle, MapPin, AlertTriangle, Clock, Users, Archive, FolderOpen, FilePlus2, Warehouse } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import JrwaSuggestionPicker from '@/components/retention/JrwaSuggestionPicker';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 
@@ -21,6 +22,7 @@ const initialFolderForm = {
   dateFrom: '',
   dateTo: '',
   categoryCode: 'B10',
+  retentionPolicyId: '',
   folderCount: 1,
   storageLocation: '',
   disposalOrTransferDate: '',
@@ -48,7 +50,11 @@ export default function DashboardPage() {
   const transferLists = transferListsResult?.data || [];
 
   const updateFolderForm = (field: keyof typeof initialFolderForm, value: string | number) => {
-    setFolderForm((prev) => ({ ...prev, [field]: value }));
+    setFolderForm((prev) => ({
+      ...prev,
+      [field]: value,
+      ...((field === 'folderSignature' || field === 'categoryCode') && prev[field] !== value ? { retentionPolicyId: '' } : {}),
+    }));
   };
 
   const resetFolderForm = () => {
@@ -65,6 +71,7 @@ export default function DashboardPage() {
         folderSignature: folderForm.folderSignature,
         folderTitle: folderForm.folderTitle.trim(),
         categoryCode: folderForm.categoryCode,
+        retentionPolicyId: folderForm.retentionPolicyId || null,
         folderCount: Number(folderForm.folderCount),
         dateFrom: folderForm.dateFrom || null,
         dateTo: folderForm.dateTo || null,
@@ -258,9 +265,20 @@ export default function DashboardPage() {
                 required
               >
                 {CATEGORY_OPTIONS.map((category) => <option key={category} value={category}>{category}</option>)}
+                {!CATEGORY_OPTIONS.includes(folderForm.categoryCode) && <option value={folderForm.categoryCode}>{folderForm.categoryCode}</option>}
               </select>
             </div>
           </div>
+
+          <JrwaSuggestionPicker
+            signature={folderForm.folderSignature}
+            value={folderForm.retentionPolicyId}
+            onChoose={(policy) => setFolderForm((prev) => ({
+              ...prev,
+              retentionPolicyId: policy?.id || '',
+              categoryCode: policy?.archivalCategory || prev.categoryCode,
+            }))}
+          />
 
           <div>
             <label htmlFor="dashboard-folder-title" className="label-text">{t('transferLists.detail.folderTitle')}</label>

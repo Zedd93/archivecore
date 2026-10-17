@@ -3,8 +3,17 @@ import { transferListService } from './transfer-list.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
 import { parseTransferListImport } from './transfer-list-import.parser';
+import { jrwaSuggestionService } from '../retention/jrwa-suggestion.service';
 
 export class TransferListController {
+  async retentionSuggestions(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const query = typeof req.query.query === 'string' ? req.query.query : '';
+      return successResponse(res, await jrwaSuggestionService.suggest(req.tenantId, query));
+    } catch (err) { next(err); }
+  }
+
   // ─── Lists ─────────────────────────────────────────────
   async list(req: Request, res: Response, next: NextFunction) {
     try {

@@ -22,6 +22,7 @@ interface FolderDetail {
   description: string | null;
   dateFrom: string | null;
   dateTo: string | null;
+  retentionPolicy: { jrwaCode: string | null; name: string; archivalCategory: string | null; retentionYears: number | null; jrwaVersion: { label: string } | null } | null;
   box: { id: string; boxNumber: string; location: { fullPath: string } | null } | null;
   transferListItem: {
     id: string;
@@ -131,6 +132,7 @@ export default function FolderDetailPage() {
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div><dt className="text-gray-500">{t('folders.dateRange')}</dt><dd>{displayDate(folder.dateFrom)} – {displayDate(folder.dateTo)}</dd></div>
             <div><dt className="text-gray-500">{t('folders.category')}</dt><dd>{folder.transferListItem?.categoryCode || folder.docType || '—'}</dd></div>
+            {folder.retentionPolicy && <div><dt className="text-gray-500">{t('folders.retentionPolicy')}</dt><dd>{folder.retentionPolicy.jrwaCode} · {normalizeDisplayText(folder.retentionPolicy.name)}<span className="block text-xs text-gray-500">{folder.retentionPolicy.jrwaVersion?.label || t('transferLists.retentionSuggestion.legacy')}</span></dd></div>}
             <div><dt className="text-gray-500">{t('folders.source')}</dt><dd>{transferList ? t('folders.sourceTransferList') : t('folders.sourceManual')}</dd></div>
             <div><dt className="text-gray-500">{t('folders.documentsCount')}</dt><dd>{folder._count.documents}</dd></div>
           </dl>

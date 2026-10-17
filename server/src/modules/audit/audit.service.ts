@@ -127,9 +127,12 @@ async function ensureCreateRevertIsSafe(entityType: string, entityId: string) {
   }
 
   if (entityType === 'retention_policy') {
-    const boxes = await prisma.box.count({ where: { retentionPolicyId: entityId } });
-    if (boxes > 0) {
-      throw Object.assign(new Error('Nie można cofnąć utworzenia polityki retencji używanej przez kartony'), { statusCode: 400 });
+    const [boxes, folders] = await Promise.all([
+      prisma.box.count({ where: { retentionPolicyId: entityId } }),
+      prisma.folder.count({ where: { retentionPolicyId: entityId } }),
+    ]);
+    if (boxes + folders > 0) {
+      throw Object.assign(new Error('Nie można cofnąć utworzenia polityki retencji używanej przez kartony lub teczki'), { statusCode: 400 });
     }
   }
 }
