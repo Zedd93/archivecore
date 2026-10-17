@@ -17,7 +17,9 @@ import {
   bulkAssignBoxSchema,
   bulkUpdateStorageLocationSchema,
   bulkUpdateDisposalDateSchema,
+  documentationLegalHoldSchema,
 } from '@archivecore/shared';
+import { setDocumentationLegalHold } from '../retention/documentation-legal-hold.controller';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -37,6 +39,8 @@ router.get('/:id',
   requirePermission(Permissions.TRANSFER_LIST_READ),
   (req, res, next) => transferListController.getById(req, res, next)
 );
+
+router.patch('/:id/legal-hold', ...auth, requirePermission(Permissions.RETENTION_MANAGE), validate(documentationLegalHoldSchema), setDocumentationLegalHold('transfer_list'));
 
 router.post('/',
   ...auth,

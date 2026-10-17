@@ -301,20 +301,21 @@ export class HRService {
   }
 
   async removeDocument(docId: string, tenantId: string) {
-    const doc = await prisma.hRDocument.findFirst({
-      where: { id: docId, tenantId },
-    });
-    if (!doc) throw Object.assign(new Error('Dokument nie znaleziony'), { statusCode: 404 });
-
-    await prisma.hRDocument.delete({ where: { id: docId } });
-
-    // Decrement counter
-    await prisma.hRFolderPart.update({
-      where: { id: doc.hrFolderPartId },
-      data: { documentCount: { decrement: 1 } },
-    });
-
-    return { deleted: true };
+    return prisma.$transaction(async (tx) => {
+      const doc = await tx.hRDocument.findFirst({
+        where: { id: docId, tenantId },
+        include: { hrFolderPart: { select: { hrFolder: { select: { litigationHold: true } } } } },
+      });
+      if (!doc) throw Object.assign(new Error('Dokument nie znaleziony'), { statusCode: 404 });
+      if (doc.hrFolderPart.hrFolder.litigationHold) {
+        throw Object.assign(new Error('Akta osobowe są objęte blokadą prawną'), { statusCode: 409 });
+      }
+      await tx.hRDocument.delete({ where: { id: docId } });
+      await tx.hRFolderPart.update({
+        where: { id: doc.hrFolderPartId }, data: { documentCount: { decrement: 1 } },
+      });
+      return { deleted: true };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async setLitigationHold(id: string, tenantId: string, hold: boolean, until?: string, notes?: string) {

@@ -649,6 +649,9 @@ model Folder {
   description  String?      @db.Text
   orderInBox   Int          @default(0)
   status       FolderStatus @default(active)
+  legalHold    Boolean      @default(false)
+  legalHoldReason String?   @db.Text
+  legalHoldAt  DateTime?
   customFields Json?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -679,6 +682,9 @@ model Document {
   pageCount       Int?
   description     String?         @db.Text
   confidentiality Confidentiality @default(normal)
+  legalHold       Boolean         @default(false)
+  legalHoldReason String?         @db.Text
+  legalHoldAt     DateTime?
   orderInFolder   Int?
   customFields    Json?
   createdAt       DateTime        @default(now())
@@ -1312,6 +1318,9 @@ model TransferList {
   receivingUnit    String?            @db.VarChar(255) // Komórka przejmująca
   transferDate     DateTime?          @db.Date // Data przekazania
   status           TransferListStatus @default(draft)
+  legalHold        Boolean            @default(false)
+  legalHoldReason  String?            @db.Text
+  legalHoldAt      DateTime?
   notes            String?            @db.Text
   createdById      String             @db.Uuid
   createdAt        DateTime           @default(now())

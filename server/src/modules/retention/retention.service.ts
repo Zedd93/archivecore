@@ -48,6 +48,12 @@ export class RetentionService {
       deletedAt: null,
       legalHold: false,
       hrFolders: { none: {} },
+      folders: { none: { OR: [
+        { legalHold: true },
+        { documents: { some: { legalHold: true } } },
+        { transferListItem: { is: { transferList: { legalHold: true } } } },
+      ] } },
+      documents: { none: { legalHold: true } },
       retentionPolicy: {
         is: {
           isActive: true,
@@ -66,6 +72,9 @@ export class RetentionService {
       },
       transferListItems: {
         none: { OR: [
+          { transferList: { legalHold: true } },
+          { folder: { legalHold: true } },
+          { folder: { documents: { some: { legalHold: true } } } },
           { categoryCode: restrictedCategory },
           { categoryCode: { startsWith: 'BE', mode: 'insensitive' } },
           { disposalOrTransferDate: { gt: new Date() } },

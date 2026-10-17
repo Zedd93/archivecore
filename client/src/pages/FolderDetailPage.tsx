@@ -12,23 +12,26 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import CustodyHistory from '@/components/ui/CustodyHistory';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
+import DocumentationLegalHoldControl from '@/components/retention/DocumentationLegalHoldControl';
 
 interface FolderDetail {
   id: string;
   folderNumber: string;
   title: string;
   status: string;
+  legalHold: boolean;
+  legalHoldReason: string | null;
   docType: string | null;
   description: string | null;
   dateFrom: string | null;
   dateTo: string | null;
   retentionPolicy: { jrwaCode: string | null; name: string; archivalCategory: string | null; retentionYears: number | null; jrwaVersion: { label: string } | null } | null;
-  box: { id: string; boxNumber: string; location: { fullPath: string } | null } | null;
+  box: { id: string; boxNumber: string; legalHold: boolean; location: { fullPath: string } | null } | null;
   transferListItem: {
     id: string;
     categoryCode: string | null;
     sourceBoxNumber: string | null;
-    transferList: { id: string; listNumber: string; title: string };
+    transferList: { id: string; listNumber: string; title: string; legalHold: boolean };
   } | null;
   _count: { documents: number; attachments: number };
   documents: Array<{ id: string; title: string }>;
@@ -125,6 +128,9 @@ export default function FolderDetailPage() {
           </button>
         )}
       </div>
+
+      <DocumentationLegalHoldControl path={`/folders/${folder.id}`} held={folder.legalHold} holdReason={folder.legalHoldReason} onChanged={() => refetch()} />
+      {(folder.box?.legalHold || transferList?.legalHold) && <p className="text-sm text-red-700">{t('documentationHold.parentHeld')}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card space-y-4">

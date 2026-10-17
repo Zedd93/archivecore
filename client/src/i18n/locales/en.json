@@ -62,6 +62,21 @@
     "offlineWarning": "Connection lost. You can save QR scans in an open warehouse page; check them after reconnecting before completing the operation."
   },
 
+  "documentationHold": {
+    "active": "Legal hold",
+    "inherited": "Content under legal hold",
+    "inheritedDetail": "Held: folders {{folders}}, documents {{documents}}, transfer-list items {{items}}. Box disposal is suspended.",
+    "parentHeld": "This record is also protected by a hold on its box, folder or transfer list.",
+    "place": "Place legal hold",
+    "release": "Release legal hold",
+    "reason": "Reason for hold (at least 5 characters)",
+    "releaseReason": "Reason for release (at least 5 characters)",
+    "placeHint": "This hold stops disposal of related boxes. Boxes already in the disposal process return to active status.",
+    "releaseHint": "Releasing the hold does not restart disposal. Review and initiate it again if appropriate.",
+    "placed": "Legal hold placed",
+    "released": "Legal hold released"
+  },
+
   "auth": {
     "login": "Sign in",
     "loginButton": "Sign in",
@@ -2039,6 +2054,8 @@
       "hr.update": "HR record updated",
       "hr.search_pesel": "PESEL search",
       "hr.litigation_hold": "Legal hold changed",
+      "legal_hold.placed": "Legal hold placed",
+      "legal_hold.released": "Legal hold released",
       "hr.add_document": "Document added",
       "hr_doc.create": "HR document added",
       "hr_doc.delete": "HR document deleted",

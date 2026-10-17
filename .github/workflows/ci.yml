@@ -103,6 +103,9 @@ jobs:
       - name: Verify legal hold and disposal safeguards
         run: npm run test:legal-hold
 
+      - name: Verify folder, document and transfer-list legal holds
+        run: npm run test:documentation-legal-hold
+
       - name: Verify disposal photo evidence
         run: npm run test:disposal-evidence
 

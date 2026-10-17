@@ -184,8 +184,8 @@ export class DocumentService {
         { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
       ] } : {}) },
       include: {
-        folder: { select: { id: true, folderNumber: true, title: true, boxId: true } },
-        box: { select: { id: true, boxNumber: true, title: true } },
+        folder: { select: { id: true, folderNumber: true, title: true, boxId: true, legalHold: true, box: { select: { legalHold: true } }, transferListItem: { select: { transferList: { select: { legalHold: true } } } } } },
+        box: { select: { id: true, boxNumber: true, title: true, legalHold: true } },
         attachments: {
           select: { id: true, fileName: true, fileSize: true, mimeType: true, uploadedAt: true, version: true },
           orderBy: { version: 'desc' },
@@ -245,12 +245,30 @@ export class DocumentService {
   }
 
   async delete(id: string, tenantId: string) {
-    await this.getById(id, tenantId);
-    if (await prisma.custodyEvent.count({ where: { documentId: id } })) {
-      throw Object.assign(new Error('Dokument ma historię wydań lub zwrotów i nie może zostać usunięty'), { statusCode: 409 });
-    }
-    await prisma.document.delete({ where: { id } });
-    return { deleted: true };
+    return prisma.$transaction(async (tx) => {
+      const document = await tx.document.findFirst({
+        where: { id, tenantId },
+        select: {
+          legalHold: true,
+          box: { select: { legalHold: true } },
+          folder: { select: {
+            legalHold: true,
+            box: { select: { legalHold: true } },
+            transferListItem: { select: { transferList: { select: { legalHold: true } } } },
+          } },
+        },
+      });
+      if (!document) throw Object.assign(new Error('Dokument nie znaleziony'), { statusCode: 404 });
+      if (document.legalHold || document.folder?.legalHold || document.folder?.box?.legalHold
+        || document.folder?.transferListItem?.transferList.legalHold || document.box?.legalHold) {
+        throw Object.assign(new Error('Nie można usunąć dokumentu objętego blokadą prawną'), { statusCode: 409 });
+      }
+      if (await tx.custodyEvent.count({ where: { documentId: id } })) {
+        throw Object.assign(new Error('Dokument ma historię wydań lub zwrotów i nie może zostać usunięty'), { statusCode: 409 });
+      }
+      await tx.document.delete({ where: { id } });
+      return { deleted: true };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }
 

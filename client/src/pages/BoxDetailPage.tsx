@@ -220,8 +220,10 @@ export default function BoxDetailPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{box.boxNumber}</h1>
             <StatusBadge status={box.status} type="box" />
             {box.legalHold && <span className="badge-red flex items-center gap-1"><ShieldAlert size={14} />{t('boxes.legalHold')}</span>}
+            {(box.heldContent?.folders || box.heldContent?.documents || box.heldContent?.transferListItems) > 0 && <span className="badge-red flex items-center gap-1"><ShieldAlert size={14} />{t('documentationHold.inherited')}</span>}
           </div>
           <p className="text-gray-500 mt-1">{box.title}</p>
+          {(box.heldContent?.folders || box.heldContent?.documents || box.heldContent?.transferListItems) > 0 && <p className="text-sm text-red-700 mt-1">{t('documentationHold.inheritedDetail', { folders: box.heldContent.folders, documents: box.heldContent.documents, items: box.heldContent.transferListItems })}</p>}
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           {hasPermission(Permissions.BOX_STATUS) && !['pending_disposal', 'approved_disposal', 'disposed'].includes(box.status) && <button

@@ -20,6 +20,7 @@ import { TRANSFER_LIST_STATUS_COLORS as STATUS_COLORS } from '@/constants/status
 import { getApiErrorMessage } from '@/utils/apiError';
 import { normalizeDisplayText } from '@archivecore/shared';
 import JrwaSuggestionPicker from '@/components/retention/JrwaSuggestionPicker';
+import DocumentationLegalHoldControl from '@/components/retention/DocumentationLegalHoldControl';
 
 const CATEGORY_OPTIONS = ['A', 'B2', 'B5', 'B10', 'B15', 'B20', 'B25', 'B50', 'BE5', 'BE10', 'BE25', 'BE50', 'Bc'];
 const ITEM_PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
@@ -488,6 +489,7 @@ export default function TransferListDetailPage() {
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: t('layout.nav.transferLists'), to: '/transfer-lists' }, { label: list.listNumber || normalizeDisplayText(list.title) }]} />
+      <DocumentationLegalHoldControl path={`/transfer-lists/${list.id}`} held={Boolean(list.legalHold)} holdReason={list.legalHoldReason || null} onChanged={() => refetchList()} />
 
       {/* Header */}
       <div className="flex items-center gap-4">

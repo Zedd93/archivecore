@@ -41,6 +41,8 @@ const AUDIT_ACTION_OPTIONS = [
   'hr.add_document',
   'hr.search_pesel',
   'hr.litigation_hold',
+  'legal_hold.placed',
+  'legal_hold.released',
   'hr_doc.create',
   'hr_doc.delete',
   'import.boxes',

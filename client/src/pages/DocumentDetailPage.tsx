@@ -8,16 +8,19 @@ import CustodyHistory from '@/components/ui/CustodyHistory';
 import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { useAuth } from '@/contexts/AuthContext';
+import DocumentationLegalHoldControl from '@/components/retention/DocumentationLegalHoldControl';
 
 type DocumentDetail = {
   id: string;
   title: string;
+  legalHold: boolean;
+  legalHoldReason: string | null;
   docType: string | null;
   docDate: string | null;
   pageCount: number | null;
   description: string | null;
-  folder: { id: string; folderNumber: string; title: string } | null;
-  box: { id: string; boxNumber: string } | null;
+  folder: { id: string; folderNumber: string; title: string; legalHold: boolean; box: { legalHold: boolean } | null; transferListItem: { transferList: { legalHold: boolean } } | null } | null;
+  box: { id: string; boxNumber: string; legalHold: boolean } | null;
 };
 
 export default function DocumentDetailPage() {
@@ -43,6 +46,8 @@ export default function DocumentDetailPage() {
   return <div className="space-y-6">
     <Breadcrumbs items={[{ label: t('boxes.documents') }, { label: normalizeDisplayText(document.title) }]} />
     <h1 className="text-2xl font-bold text-gray-900 break-words">{normalizeDisplayText(document.title)}</h1>
+    <DocumentationLegalHoldControl path={`/documents/${document.id}`} held={document.legalHold} holdReason={document.legalHoldReason} onChanged={() => refetch()} />
+    {(document.box?.legalHold || document.folder?.legalHold || document.folder?.box?.legalHold || document.folder?.transferListItem?.transferList.legalHold) && <p className="text-sm text-red-700">{t('documentationHold.parentHeld')}</p>}
     <div className="card space-y-4">
       <h2 className="text-lg font-semibold">{t('common.details')}</h2>
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">

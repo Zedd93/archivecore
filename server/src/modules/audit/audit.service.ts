@@ -48,7 +48,7 @@ const REVERSIBLE_DELETE_ACTIONS = new Set([
   'transfer_list_item.delete',
 ]);
 
-const SYSTEM_FIELDS = new Set(['createdAt', 'updatedAt']);
+const SYSTEM_FIELDS = new Set(['createdAt', 'updatedAt', 'legalHold', 'legalHoldReason', 'legalHoldAt', 'litigationHold', 'litigationHoldUntil', 'litigationNotes']);
 
 function getDelegate(entityType: string): any | null {
   const delegateName = ENTITY_DELEGATES[entityType];
@@ -137,6 +137,50 @@ async function ensureCreateRevertIsSafe(entityType: string, entityId: string) {
   }
 }
 
+async function ensureRevertIsNotHeld(entityType: string, entityId: string) {
+  let held = false;
+  if (entityType === 'box') {
+    held = Boolean(await prisma.box.findFirst({ where: { id: entityId, OR: [
+      { legalHold: true },
+      { folders: { some: { legalHold: true } } },
+      { folders: { some: { documents: { some: { legalHold: true } } } } },
+      { folders: { some: { transferListItem: { is: { transferList: { legalHold: true } } } } } },
+      { documents: { some: { legalHold: true } } },
+      { transferListItems: { some: { transferList: { legalHold: true } } } },
+    ] }, select: { id: true } }));
+  } else if (entityType === 'folder') {
+    held = Boolean(await prisma.folder.findFirst({ where: { id: entityId, OR: [
+      { legalHold: true },
+      { box: { is: { legalHold: true } } },
+      { documents: { some: { legalHold: true } } },
+      { transferListItem: { is: { transferList: { legalHold: true } } } },
+    ] }, select: { id: true } }));
+  } else if (entityType === 'document') {
+    held = Boolean(await prisma.document.findFirst({ where: { id: entityId, OR: [
+      { legalHold: true },
+      { box: { is: { legalHold: true } } },
+      { folder: { is: { legalHold: true } } },
+      { folder: { is: { box: { is: { legalHold: true } } } } },
+      { folder: { is: { transferListItem: { is: { transferList: { legalHold: true } } } } } },
+    ] }, select: { id: true } }));
+  } else if (entityType === 'transfer_list') {
+    held = Boolean(await prisma.transferList.findFirst({ where: { id: entityId, OR: [
+      { legalHold: true },
+      { items: { some: { folder: { legalHold: true } } } },
+      { items: { some: { folder: { documents: { some: { legalHold: true } } } } } },
+    ] }, select: { id: true } }));
+  } else if (entityType === 'transfer_list_item') {
+    held = Boolean(await prisma.transferListItem.findFirst({ where: { id: entityId, OR: [
+      { transferList: { legalHold: true } },
+      { folder: { legalHold: true } },
+      { folder: { documents: { some: { legalHold: true } } } },
+      { box: { legalHold: true } },
+      { folder: { box: { legalHold: true } } },
+    ] }, select: { id: true } }));
+  }
+  if (held) throw Object.assign(new Error('Nie można cofnąć zdarzenia dotyczącego dokumentacji objętej blokadą prawną'), { statusCode: 409 });
+}
+
 export class AuditService {
   async list(tenantId: string | null, filters: any, skip: number, take: number) {
     const where: Prisma.AuditLogWhereInput = {};
@@ -210,6 +254,7 @@ export class AuditService {
     if (!entityId) {
       throw Object.assign(new Error('Brak identyfikatora encji'), { statusCode: 400 });
     }
+    await ensureRevertIsNotHeld(log.entityType, entityId);
 
     let revertedEntity: any;
     let revertType: 'delete_created' | 'restore_previous' | 'recreate_deleted';

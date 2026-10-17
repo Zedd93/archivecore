@@ -110,9 +110,16 @@ test('disposal candidates require a live policy and exclude permanent, review an
   assert.deepEqual(where.retentionPolicy.is.AND[0].OR, [{ tenantId: null }, { tenantId }]);
   assert.equal(where.retentionPolicy.is.AND[1].OR[1].NOT.OR[0].archivalCategory.startsWith, 'A');
   assert.equal(where.retentionPolicy.is.AND[1].OR[1].NOT.OR[1].archivalCategory.startsWith, 'BE');
-  assert.equal(where.transferListItems.none.OR[0].categoryCode.startsWith, 'A');
-  assert.equal(where.transferListItems.none.OR[1].categoryCode.startsWith, 'BE');
-  assert.ok(where.transferListItems.none.OR[2].disposalOrTransferDate.gt instanceof Date);
+  assert.equal(where.folders.none.OR[0].legalHold, true);
+  assert.equal(where.folders.none.OR[1].documents.some.legalHold, true);
+  assert.equal(where.folders.none.OR[2].transferListItem.is.transferList.legalHold, true);
+  assert.equal(where.documents.none.legalHold, true);
+  assert.equal(where.transferListItems.none.OR[0].transferList.legalHold, true);
+  assert.equal(where.transferListItems.none.OR[1].folder.legalHold, true);
+  assert.equal(where.transferListItems.none.OR[2].folder.documents.some.legalHold, true);
+  assert.equal(where.transferListItems.none.OR[3].categoryCode.startsWith, 'A');
+  assert.equal(where.transferListItems.none.OR[4].categoryCode.startsWith, 'BE');
+  assert.ok(where.transferListItems.none.OR[5].disposalOrTransferDate.gt instanceof Date);
 });
 
 test('review list separates due and upcoming dates and paginates each tenant', async () => {

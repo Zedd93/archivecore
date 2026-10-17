@@ -4,8 +4,9 @@ import { authenticate } from '../../middleware/auth';
 import { tenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createFolderSchema, updateFolderSchema, reorderFoldersSchema } from '@archivecore/shared';
+import { Permissions, createFolderSchema, updateFolderSchema, reorderFoldersSchema, documentationLegalHoldSchema } from '@archivecore/shared';
 import { validate } from '../../middleware/validate';
+import { setDocumentationLegalHold } from '../retention/documentation-legal-hold.controller';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -13,6 +14,7 @@ const auth = [authenticate, tenantContext];
 router.get('/', ...auth, requirePermission(Permissions.FOLDER_READ), (req, res, next) => folderController.listAll(req, res, next));
 router.get('/box/:boxId', ...auth, requirePermission(Permissions.FOLDER_READ), (req, res, next) => folderController.list(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.FOLDER_READ), (req, res, next) => folderController.getById(req, res, next));
+router.patch('/:id/legal-hold', ...auth, requirePermission(Permissions.RETENTION_MANAGE), validate(documentationLegalHoldSchema), setDocumentationLegalHold('folder'));
 router.post('/', ...auth, requirePermission(Permissions.FOLDER_WRITE), validate(createFolderSchema), auditLog('folder', 'folder.create'), (req, res, next) => folderController.create(req, res, next));
 router.post('/box/:boxId', ...auth, requirePermission(Permissions.FOLDER_WRITE), validate(createFolderSchema), auditLog('folder', 'folder.create'), (req, res, next) => folderController.create(req, res, next));
 router.put('/:id', ...auth, requirePermission(Permissions.FOLDER_WRITE), validate(updateFolderSchema), auditLog('folder', 'folder.update'), (req, res, next) => folderController.update(req, res, next));

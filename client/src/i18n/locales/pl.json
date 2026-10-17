@@ -62,6 +62,21 @@
     "offlineWarning": "Brak połączenia. W otwartym widoku magazynowym możesz zapisać skany QR; po odzyskaniu sieci sprawdź je przed wykonaniem operacji."
   },
 
+  "documentationHold": {
+    "active": "Blokada prawna",
+    "inherited": "Blokada prawna zawartości",
+    "inheritedDetail": "Zablokowane: teczki {{folders}}, dokumenty {{documents}}, pozycje spisów {{items}}. Brakowanie kartonu jest wstrzymane.",
+    "parentHeld": "Dokumentacja jest też chroniona blokadą nadrzędnego kartonu, teczki lub spisu.",
+    "place": "Nałóż blokadę prawną",
+    "release": "Zdejmij blokadę prawną",
+    "reason": "Powód blokady (min. 5 znaków)",
+    "releaseReason": "Powód zdjęcia blokady (min. 5 znaków)",
+    "placeHint": "Blokada wstrzyma brakowanie powiązanych kartonów. Kartony już zgłoszone do brakowania wrócą do statusu aktywnego.",
+    "releaseHint": "Zdjęcie blokady nie wznawia automatycznie brakowania. Należy je rozpocząć ponownie po weryfikacji.",
+    "placed": "Nałożono blokadę prawną",
+    "released": "Zdjęto blokadę prawną"
+  },
+
   "auth": {
     "login": "Zaloguj się",
     "loginButton": "Zaloguj",
@@ -2039,6 +2054,8 @@
       "hr.update": "Edycja akt",
       "hr.search_pesel": "Wyszukiwanie po PESEL",
       "hr.litigation_hold": "Zmiana blokady prawnej",
+      "legal_hold.placed": "Nałożenie blokady prawnej",
+      "legal_hold.released": "Zdjęcie blokady prawnej",
       "hr.add_document": "Dodanie dokumentu",
       "hr_doc.create": "Dodanie dokumentu HR",
       "hr_doc.delete": "Usunięcie dokumentu HR",

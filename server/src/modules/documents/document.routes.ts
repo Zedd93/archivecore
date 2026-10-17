@@ -4,14 +4,16 @@ import { authenticate } from '../../middleware/auth';
 import { tenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { auditLog } from '../../middleware/audit';
-import { Permissions, createDocumentSchema, updateDocumentSchema } from '@archivecore/shared';
+import { Permissions, createDocumentSchema, updateDocumentSchema, documentationLegalHoldSchema } from '@archivecore/shared';
 import { validate } from '../../middleware/validate';
+import { setDocumentationLegalHold } from '../retention/documentation-legal-hold.controller';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
 
 router.get('/', ...auth, requirePermission(Permissions.DOCUMENT_READ), (req, res, next) => documentController.list(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.DOCUMENT_READ), (req, res, next) => documentController.getById(req, res, next));
+router.patch('/:id/legal-hold', ...auth, requirePermission(Permissions.RETENTION_MANAGE), validate(documentationLegalHoldSchema), setDocumentationLegalHold('document'));
 router.post('/', ...auth, requirePermission(Permissions.DOCUMENT_WRITE), validate(createDocumentSchema), auditLog('document', 'document.create'), (req, res, next) => documentController.create(req, res, next));
 router.put('/:id', ...auth, requirePermission(Permissions.DOCUMENT_WRITE), validate(updateDocumentSchema), auditLog('document', 'document.update'), (req, res, next) => documentController.update(req, res, next));
 router.delete('/:id', ...auth, requirePermission(Permissions.DOCUMENT_WRITE), auditLog('document', 'document.delete'), (req, res, next) => documentController.delete(req, res, next));

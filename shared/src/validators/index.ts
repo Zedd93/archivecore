@@ -10,4 +10,5 @@ export * from './search.schema';
 export * from './share-link.schema';
 export * from './tenant.schema';
 export * from './transfer-list.schema';
+export * from './legal-hold.schema';
 export * from './user.schema';

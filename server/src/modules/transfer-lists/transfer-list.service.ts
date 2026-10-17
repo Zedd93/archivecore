@@ -234,19 +234,19 @@ export class TransferListService {
 
   // ─── Delete transfer list ──────────────────────────────
   async delete(id: string, tenantId: string) {
-    const list = await this.getById(id, tenantId);
-    if (list.status !== 'draft') {
-      throw Object.assign(new Error('Można usunąć tylko spis w statusie roboczym'), { statusCode: 400 });
-    }
-
-    if (list.items.length > 0) {
-      throw Object.assign(
+    await prisma.$transaction(async (tx) => {
+      const list = await tx.transferList.findFirst({
+        where: { id, tenantId }, select: { status: true, legalHold: true, items: { take: 1, select: { id: true } } },
+      });
+      if (!list) throw Object.assign(new Error('Spis nie znaleziony'), { statusCode: 404 });
+      if (list.legalHold) throw Object.assign(new Error('Nie można usunąć spisu objętego blokadą prawną'), { statusCode: 409 });
+      if (list.status !== 'draft') throw Object.assign(new Error('Można usunąć tylko spis w statusie roboczym'), { statusCode: 400 });
+      if (list.items.length) throw Object.assign(
         new Error('Nie można usunąć spisu zawierającego teczki. Aby chronić dane archiwalne, można usuwać wyłącznie puste spisy robocze.'),
-        { statusCode: 409 }
+        { statusCode: 409 },
       );
-    }
-
-    await prisma.transferList.delete({ where: { id } });
+      await tx.transferList.delete({ where: { id } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   private async generateSystemBoxNumber(tenantId: string) {
@@ -391,13 +391,21 @@ export class TransferListService {
 
   // ─── Delete item ───────────────────────────────────────
   async deleteItem(listId: string, itemId: string, tenantId: string) {
-    const list = await this.getById(listId, tenantId);
-    this.ensureDraftStatus(list, 'Można usuwać pozycje tylko w spisie o statusie roboczym');
-    const item = await prisma.transferListItem.findFirst({
-      where: { id: itemId, transferListId: listId },
-    });
-    if (!item) throw Object.assign(new Error('Pozycja spisu nie znaleziona'), { statusCode: 404 });
-    await prisma.transferListItem.delete({ where: { id: itemId } });
+    await prisma.$transaction(async (tx) => {
+      const list = await tx.transferList.findFirst({ where: { id: listId, tenantId }, select: { status: true, legalHold: true } });
+      if (!list) throw Object.assign(new Error('Spis nie znaleziony'), { statusCode: 404 });
+      this.ensureDraftStatus(list, 'Można usuwać pozycje tylko w spisie o statusie roboczym');
+      if (list.legalHold) throw Object.assign(new Error('Spis jest objęty blokadą prawną'), { statusCode: 409 });
+      const item = await tx.transferListItem.findFirst({
+        where: { id: itemId, transferListId: listId },
+        select: { id: true, box: { select: { legalHold: true } }, folder: { select: { legalHold: true, box: { select: { legalHold: true } }, documents: { where: { legalHold: true }, select: { id: true }, take: 1 } } } },
+      });
+      if (!item) throw Object.assign(new Error('Pozycja spisu nie znaleziona'), { statusCode: 404 });
+      if (item.box?.legalHold || item.folder.box?.legalHold || item.folder.legalHold || item.folder.documents.length) {
+        throw Object.assign(new Error('Karton, teczka lub jej dokument jest objęty blokadą prawną'), { statusCode: 409 });
+      }
+      await tx.transferListItem.delete({ where: { id: itemId } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   // ─── Import items from parsed data (Excel/CSV) ────────
@@ -449,17 +457,24 @@ export class TransferListService {
 
   // ─── Bulk delete items ────────────────────────────────
   async bulkDeleteItems(listId: string, tenantId: string, itemIds: string[]) {
-    const list = await this.getById(listId, tenantId);
-    this.ensureDraftStatus(list, 'Można usuwać pozycje tylko w spisie o statusie roboczym');
-
-    const result = await prisma.transferListItem.deleteMany({
-      where: {
-        id: { in: itemIds },
-        transferListId: listId,
-      },
-    });
-
-    return { deleted: result.count };
+    return prisma.$transaction(async (tx) => {
+      const list = await tx.transferList.findFirst({ where: { id: listId, tenantId }, select: { status: true, legalHold: true } });
+      if (!list) throw Object.assign(new Error('Spis nie znaleziony'), { statusCode: 404 });
+      this.ensureDraftStatus(list, 'Można usuwać pozycje tylko w spisie o statusie roboczym');
+      if (list.legalHold) throw Object.assign(new Error('Spis jest objęty blokadą prawną'), { statusCode: 409 });
+      const heldItems = await tx.transferListItem.count({ where: {
+        id: { in: itemIds }, transferListId: listId,
+        OR: [
+          { box: { legalHold: true } },
+          { folder: { box: { legalHold: true } } },
+          { folder: { legalHold: true } },
+          { folder: { documents: { some: { legalHold: true } } } },
+        ],
+      } });
+      if (heldItems) throw Object.assign(new Error('Co najmniej jeden karton, teczka lub dokument jest objęty blokadą prawną'), { statusCode: 409 });
+      const result = await tx.transferListItem.deleteMany({ where: { id: { in: itemIds }, transferListId: listId } });
+      return { deleted: result.count };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   // ─── Bulk assign box to items ────────────────────────

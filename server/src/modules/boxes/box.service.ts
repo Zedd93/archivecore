@@ -244,7 +244,19 @@ export class BoxService {
       },
     });
     if (!box) throw Object.assign(new Error('Karton nie znaleziony'), { statusCode: 404 });
-    return box;
+    const [heldFolders, heldDocuments, heldLists] = await Promise.all([
+      prisma.folder.count({ where: { tenantId, legalHold: true, OR: [
+        { boxId: id }, { transferListItem: { is: { boxId: id } } },
+      ] } }),
+      prisma.document.count({ where: { tenantId, legalHold: true, OR: [
+        { boxId: id }, { folder: { is: { boxId: id } } },
+        { folder: { is: { transferListItem: { is: { boxId: id } } } } },
+      ] } }),
+      prisma.transferListItem.count({ where: { transferList: { tenantId, legalHold: true }, OR: [
+        { boxId: id }, { folder: { boxId: id } },
+      ] } }),
+    ]);
+    return { ...box, heldContent: { folders: heldFolders, documents: heldDocuments, transferListItems: heldLists } };
   }
 
   async create(data: any, tenantId: string, userId: string) {

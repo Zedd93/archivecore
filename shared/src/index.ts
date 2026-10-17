@@ -28,6 +28,7 @@ export * from './validators/sla-policy.schema';
 export * from './validators/hr.schema';
 export * from './validators/user.schema';
 export * from './validators/transfer-list.schema';
+export * from './validators/legal-hold.schema';
 export * from './validators/location.schema';
 export * from './validators/tenant.schema';
 export * from './validators/folder.schema';
