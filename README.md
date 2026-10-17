@@ -144,6 +144,11 @@ It checks the SMTP connection and login without sending a message or printing
 credentials. A successful check does not prove that the provider accepts the
 sender address or that a message reaches the recipient; verify one real reminder
 using a controlled test account before enabling operational reliance on email.
+To send one neutral message without creating an order or changing archive data,
+run `npm run email:send-test -- --to your-address@example.com` from `C:\Apps\archivecore`.
+The command requires an explicit recipient each time. SMTP acceptance is not
+proof of delivery: check the recipient inbox and spam folder. This test also
+does not exercise the loan reminder scheduler or queue.
 
 For the native Windows deployment, stop `archivecore-server`, update dependencies,
 apply Prisma migrations, build, then start it again. The existing
