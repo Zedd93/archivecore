@@ -31,7 +31,7 @@ function datePlusFiftyYears(date: Date): Date | null {
   return result.getUTCMonth() === month ? result : null;
 }
 
-export function calculateHRRetention(input: HRRetentionInput): {
+export function calculateHRRetention(input: HRRetentionInput, asOf = new Date()): {
   retentionBasis: HRRetentionBasis;
   retentionPeriod: RetentionPeriodType;
   retentionBaseDate: Date | null;
@@ -40,6 +40,7 @@ export function calculateHRRetention(input: HRRetentionInput): {
   const start = dateOnly(input.employmentStart);
   const end = dateOnly(input.employmentEnd);
   const riaDate = dateOnly(input.riaSubmittedAt);
+  const today = dateOnly(asOf);
 
   if (!start || (end && end < start) || input.retentionReviewRequired) {
     return { retentionBasis: 'needs_review', retentionPeriod: 'fifty_years', retentionBaseDate: null, retentionEndDate: null };
@@ -56,12 +57,13 @@ export function calculateHRRetention(input: HRRetentionInput): {
   }
 
   if (start.getUTCFullYear() < 2019) {
-    if (input.riaStatus === 'submitted' && riaDate && riaDate >= new Date('2019-01-01T00:00:00.000Z') && (!end || riaDate >= end)) {
+    if (input.riaStatus === 'submitted' && end && riaDate && today && riaDate >= new Date('2019-01-01T00:00:00.000Z')
+      && riaDate <= today && riaDate >= end) {
       return {
         retentionBasis: 'transitional_ria',
         retentionPeriod: 'ten_years',
         retentionBaseDate: riaDate,
-        retentionEndDate: end ? endOfYearPlusTen(riaDate) : null,
+        retentionEndDate: endOfYearPlusTen(riaDate),
       };
     }
     if (input.riaStatus === 'not_submitted') {

@@ -529,6 +529,8 @@
     "riaSubmitted": "Submitted",
     "riaSubmittedAt": "ZUS RIA submission date",
     "riaDateRequired": "Enter the ZUS RIA submission date",
+    "riaEndRequired": "Enter the employment end date before confirming ZUS RIA",
+    "riaDateFuture": "The ZUS RIA submission date cannot be in the future",
     "endBeforeStart": "End date cannot precede employment start",
     "editRetentionTitle": "Update retention data",
     "retentionUpdated": "Retention data updated",

@@ -51,8 +51,14 @@ export const createHRFolderSchema = hrFolderFields.superRefine((data, ctx) => {
   if (data.riaStatus === 'submitted' && !data.riaSubmittedAt) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['riaSubmittedAt'], message: 'Podaj datę złożenia raportu ZUS RIA' });
   }
+  if (data.riaStatus === 'submitted' && !data.employmentEnd) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['employmentEnd'], message: 'Podaj datę zakończenia pracy przed potwierdzeniem ZUS RIA' });
+  }
   if (data.riaSubmittedAt && (data.riaSubmittedAt < '2019-01-01' || (data.employmentEnd && data.riaSubmittedAt < data.employmentEnd))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['riaSubmittedAt'], message: 'Data ZUS RIA nie może poprzedzać 2019 r. ani zakończenia zatrudnienia' });
+  }
+  if (data.riaSubmittedAt && data.riaSubmittedAt > new Date().toISOString().slice(0, 10)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['riaSubmittedAt'], message: 'Data złożenia ZUS RIA nie może być przyszła' });
   }
   if (data.riaStatus !== 'submitted' && data.riaSubmittedAt) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['riaSubmittedAt'], message: 'Data wymaga potwierdzenia złożenia raportu ZUS RIA' });

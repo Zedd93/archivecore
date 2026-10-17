@@ -53,6 +53,14 @@ export default function HRDetailPage() {
       setRetentionError(t('hr.riaDateRequired'));
       return;
     }
+    if (retentionForm.riaStatus === 'submitted' && !retentionForm.employmentEnd) {
+      setRetentionError(t('hr.riaEndRequired'));
+      return;
+    }
+    if (retentionForm.riaStatus === 'submitted' && retentionForm.riaSubmittedAt > new Date().toISOString().slice(0, 10)) {
+      setRetentionError(t('hr.riaDateFuture'));
+      return;
+    }
     try {
       await updateHR.mutateAsync({
         id: folder.id,

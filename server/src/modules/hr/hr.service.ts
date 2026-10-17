@@ -209,8 +209,14 @@ export class HRService {
       if (riaStatus === 'submitted' && !riaSubmittedAt) {
         throw Object.assign(new Error('Podaj datę złożenia raportu ZUS RIA'), { statusCode: 400 });
       }
+      if (riaStatus === 'submitted' && !employmentEnd) {
+        throw Object.assign(new Error('Podaj datę zakończenia pracy przed potwierdzeniem ZUS RIA'), { statusCode: 400 });
+      }
       if (riaSubmittedAt && (new Date(riaSubmittedAt) < new Date('2019-01-01') || (employmentEnd && new Date(riaSubmittedAt) < new Date(employmentEnd)))) {
         throw Object.assign(new Error('Data ZUS RIA nie może poprzedzać 2019 r. ani zakończenia zatrudnienia'), { statusCode: 400 });
+      }
+      if (riaSubmittedAt && new Date(riaSubmittedAt).toISOString().slice(0, 10) > new Date().toISOString().slice(0, 10)) {
+        throw Object.assign(new Error('Data złożenia ZUS RIA nie może być przyszła'), { statusCode: 400 });
       }
       if (employmentStart && employmentEnd && new Date(employmentEnd) < new Date(employmentStart)) {
         throw Object.assign(new Error('Data zakończenia pracy nie może poprzedzać daty rozpoczęcia'), { statusCode: 400 });

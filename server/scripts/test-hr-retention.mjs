@@ -42,6 +42,18 @@ test('invalid or premature RIA data cannot produce a ten-year deadline', () => {
   assert.equal(result.retentionEndDate, null);
 });
 
+test('future RIA submission cannot produce a ten-year deadline', () => {
+  const result = calculateHRRetention({ ...base, employmentStart: '2010-01-01', riaStatus: 'submitted', riaSubmittedAt: '2027-01-01' }, new Date('2026-10-17T12:00:00Z'));
+  assert.equal(result.retentionBasis, 'needs_review');
+  assert.equal(result.retentionEndDate, null);
+});
+
+test('submitted RIA without employment termination still needs review', () => {
+  const result = calculateHRRetention({ ...base, employmentStart: '2010-01-01', employmentEnd: null, riaStatus: 'submitted', riaSubmittedAt: '2025-06-02' });
+  assert.equal(result.retentionBasis, 'needs_review');
+  assert.equal(result.retentionEndDate, null);
+});
+
 test('confirmed absence of RIA keeps fifty-year period', () => {
   const result = calculateHRRetention({ ...base, employmentStart: '2018-12-31', riaStatus: 'not_submitted' });
   assert.equal(result.retentionBasis, 'transitional_50');
@@ -86,9 +98,40 @@ test('create validation rejects unsupported manual periods and implausible dates
   assert.equal(createHRFolderSchema.safeParse({ ...valid, riaSubmittedAt: undefined }).success, false);
   assert.equal(createHRFolderSchema.safeParse({ ...valid, riaSubmittedAt: '2018-01-01' }).success, false);
   assert.equal(createHRFolderSchema.safeParse({ ...valid, riaSubmittedAt: '2019-01-01' }).success, false);
+  assert.equal(createHRFolderSchema.safeParse({ ...valid, riaSubmittedAt: `${new Date().getUTCFullYear() + 1}-01-01` }).success, false);
+  assert.equal(createHRFolderSchema.safeParse({ ...valid, employmentEnd: undefined }).success, false);
   assert.equal(createHRFolderSchema.safeParse({ ...valid, employmentEnd: '2009-12-31' }).success, false);
   assert.equal(createHRFolderSchema.safeParse({ ...valid, employmentStart: '2020-02-31' }).success, false);
   assert.equal('retentionPeriod' in createHRFolderSchema.parse({ ...valid, retentionPeriod: 'ten_years' }), false);
+});
+
+test('updating a record rejects a future RIA date', async () => {
+  const service = new HRService();
+  const originalFindFirst = prisma.hRFolder.findFirst;
+  const originalUpdate = prisma.hRFolder.update;
+  prisma.hRFolder.findFirst = async () => ({
+    id: '19b77167-607c-4cf6-a8b1-c724be113bc9', tenantId: '895af3d7-508b-48a2-a3ea-75fdce44dcb1',
+    employmentStart: new Date('2010-01-01'), employmentEnd: new Date('2020-01-01'),
+    riaStatus: 'unknown', riaSubmittedAt: null, retentionReviewRequired: false,
+  });
+  prisma.hRFolder.update = async () => { throw new Error('must not update'); };
+  try {
+    await assert.rejects(
+      service.update('19b77167-607c-4cf6-a8b1-c724be113bc9', '895af3d7-508b-48a2-a3ea-75fdce44dcb1', {
+        riaStatus: 'submitted', riaSubmittedAt: `${new Date().getUTCFullYear() + 1}-01-01`,
+      }),
+      { statusCode: 400 },
+    );
+    await assert.rejects(
+      service.update('19b77167-607c-4cf6-a8b1-c724be113bc9', '895af3d7-508b-48a2-a3ea-75fdce44dcb1', {
+        employmentEnd: null, riaStatus: 'submitted', riaSubmittedAt: '2025-06-02',
+      }),
+      { statusCode: 400 },
+    );
+  } finally {
+    prisma.hRFolder.findFirst = originalFindFirst;
+    prisma.hRFolder.update = originalUpdate;
+  }
 });
 
 test('updating a legacy record recalculates only after employment and RIA data are supplied', async () => {

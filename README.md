@@ -166,6 +166,19 @@ manually; the server checks whether the loan return reminder is still relevant
 before requeueing. SMTP configuration can be added after deployment; without
 it, only in-app reminders are created.
 
+### Personnel Retention Audit (Native Server)
+
+After deployment, run `npm run db:audit-hr-retention` from `C:\Apps\archivecore`.
+This read-only check compares stored personnel retention basis, period, and dates
+with the current 10/50-year and ZUS RIA rules. It reports counts plus up to 20
+tenant codes and record IDs, never names or PESEL numbers. A nonzero exit code
+means differences or future RIA submission dates need manual review; the command
+does not repair or delete records. Records already marked for review remain
+excluded from automatic retention alerts. Confirm any correction with the
+responsible archivist before changing production data.
+The calculation follows the [Ministry's personnel documentation guidance](https://www.gov.pl/web/rodzina/akta-osobowe)
+and the [ZUS RIA guidance](https://bip.zus.pl/web/guest/firmy/przedsiebiorco-przeczytaj-wazne/e-akta/e-akta-pytania-i-odpowiedzi).
+
 ## API
 
 All endpoints are under `/api/v1/`. Authentication via `Authorization: Bearer <token>` header.

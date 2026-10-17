@@ -529,6 +529,8 @@
     "riaSubmitted": "Złożono",
     "riaSubmittedAt": "Data złożenia ZUS RIA",
     "riaDateRequired": "Podaj datę złożenia ZUS RIA",
+    "riaEndRequired": "Podaj datę zakończenia pracy przed potwierdzeniem ZUS RIA",
+    "riaDateFuture": "Data złożenia ZUS RIA nie może być przyszła",
     "endBeforeStart": "Data zakończenia nie może poprzedzać początku zatrudnienia",
     "editRetentionTitle": "Uzupełnij dane do retencji",
     "retentionUpdated": "Dane retencji zaktualizowane",

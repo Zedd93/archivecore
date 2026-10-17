@@ -126,6 +126,8 @@ jobs:
 
       - name: Verify personnel record retention dates
         run: npm run test:hr-retention
+      - name: Verify read-only personnel retention audit
+        run: npm run test:hr-retention-audit
 
       - name: Verify invoice confirmation
         run: npm run test:billing-invoice
