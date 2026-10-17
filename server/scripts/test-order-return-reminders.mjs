@@ -11,7 +11,7 @@ test('Warsaw calendar day determines reminders across DST and due-day boundary',
   assert.equal(returnReminderKind(new Date('2026-10-26T12:00:00Z'), new Date('2026-10-24T21:30:00Z')), null);
 });
 
-function setup({ dueAt = '2026-10-17T12:00:00Z', requesterTenantId = 'tenant-a' } = {}) {
+function setup({ dueAt = '2026-10-17T12:00:00Z', requesterTenantId = 'tenant-a', handoverUserId = null, linkedUserActive = true } = {}) {
   const recorded = new Set();
   const notifications = [];
   const queries = [];
@@ -44,6 +44,17 @@ function setup({ dueAt = '2026-10-17T12:00:00Z', requesterTenantId = 'tenant-a' 
             return remaining > 0 ? snapshot() : null;
           },
         },
+        custodyEvent: { findFirst: async ({ where }) => {
+          assert.equal(where.orderId, order.id);
+          assert.equal(where.eventType, 'handover');
+          return handoverUserId ? { toUserId: handoverUserId } : null;
+        } },
+        user: { findFirst: async ({ where }) => {
+          assert.equal(where.id, handoverUserId);
+          assert.equal(where.tenantId, order.tenantId);
+          assert.equal(where.isActive, true);
+          return linkedUserActive ? { id: handoverUserId } : null;
+        } },
         orderReturnReminder: {
           create: async ({ data }) => {
             assert.equal(data.orderId, order.id);
@@ -88,6 +99,21 @@ test('upcoming notice is one-time and addressed only to this tenant requester', 
   assert.deepEqual(state.queries[0].where.items, { some: { itemStatus: 'delivered' } });
   assert.deepEqual(state.queries[0].where.status, { in: ['delivered', 'completed'] });
   assert.deepEqual(state.queries[0].where.OR[1].returnReminders, { none: { kind: 'overdue' } });
+});
+
+test('upcoming and overdue reminders prefer the active handover recipient', async () => {
+  for (const dueAt of ['2026-10-17T12:00:00Z', '2026-10-14T12:00:00Z']) {
+    const state = setup({ dueAt, handoverUserId: 'recipient-a' });
+    assert.equal(await state.service.processDue(new Date('2026-10-16T10:00:00Z')), 1);
+    assert.deepEqual(state.notifications[0].includeUserIds, ['recipient-a']);
+    assert.equal(state.notifications[0].queueEmail, true);
+  }
+});
+
+test('inactive handover account falls back to the original requester', async () => {
+  const state = setup({ handoverUserId: 'recipient-a', linkedUserActive: false });
+  assert.equal(await state.service.processDue(new Date('2026-10-16T10:00:00Z')), 1);
+  assert.deepEqual(state.notifications[0].includeUserIds, ['requester-a']);
 });
 
 test('overdue notice includes tenant leadership once while some items remain out', async () => {

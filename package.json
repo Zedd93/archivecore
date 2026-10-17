@@ -49,6 +49,7 @@
     "test:order-notifications": "node --import tsx --test server/scripts/test-order-notifications.mjs",
     "test:order-return-reminders": "node --import tsx --test server/scripts/test-order-return-reminders.mjs",
     "test:notification-email": "node --import tsx --test server/scripts/test-notification-email.mjs",
+    "email:check": "node server/scripts/check-smtp.cjs",
     "test:email-delivery-admin": "node --import tsx --test server/scripts/test-email-delivery-admin.mjs",
     "test:notification-navigation": "node --import tsx --test client/scripts/test-notification-navigation.mjs",
     "test:order-assignment": "node --import tsx --test server/scripts/test-order-assignment.mjs",

@@ -92,6 +92,19 @@ export class OrderReturnReminderService {
       const kind = returnReminderKind(order.expectedReturnAt, now);
       if (!kind || order.returnReminders.some((reminder) => reminder.kind === kind)) return false;
 
+      const handover = await tx.custodyEvent.findFirst({
+        where: { orderId, eventType: 'handover', toUserId: { not: null } },
+        orderBy: [{ eventAt: 'desc' }, { id: 'desc' }],
+        select: { toUserId: true },
+      });
+      const linkedRecipient = handover?.toUserId ? await tx.user.findFirst({
+        where: { id: handover.toUserId, tenantId: order.tenantId, isActive: true },
+        select: { id: true },
+      }) : null;
+      const recipientIds = linkedRecipient ? [linkedRecipient.id]
+        : order.requester.tenantId === order.tenantId || order.requester.tenantId === null
+          ? [order.requestedBy] : [];
+
       await tx.orderReturnReminder.create({ data: { orderId, kind } });
       const result = await this.notifier.notifyTenantUsers({
         tenantId: order.tenantId,
@@ -104,8 +117,7 @@ export class OrderReturnReminderService {
           : `Wypożyczenie ${order.orderNumber} ma niewrócone pozycje. Sprawdź je i odnotuj zwrot.`,
         entityType: 'order', entityId: order.id, actionUrl: `/orders/${order.id}`,
         queueEmail: true,
-        includeUserIds: order.requester.tenantId === order.tenantId || order.requester.tenantId === null
-          ? [order.requestedBy] : [],
+        includeUserIds: recipientIds,
         ...(kind === 'upcoming'
           ? { onlyIncludedUsers: true }
           : { requiredRoleCodes: [RoleCode.TENANT_LEADERSHIP, RoleCode.ADMIN_TENANT], includeGlobalUsers: false }),

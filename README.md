@@ -139,6 +139,11 @@ Return reminders always appear in the application. To also send them by email, s
 for mandatory STARTTLS, or port 465 with `SMTP_SECURE=true` for implicit TLS.
 `PUBLIC_APP_URL` must be the HTTPS origin of the application, for example
 `https://archivecore.doxart.pl`. Never commit SMTP credentials.
+After updating the server, run `npm run email:check` from `C:\Apps\archivecore`.
+It checks the SMTP connection and login without sending a message or printing
+credentials. A successful check does not prove that the provider accepts the
+sender address or that a message reaches the recipient; verify one real reminder
+using a controlled test account before enabling operational reliance on email.
 
 For the native Windows deployment, stop `archivecore-server`, update dependencies,
 apply Prisma migrations, build, then start it again. The existing
