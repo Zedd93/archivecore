@@ -30,6 +30,7 @@
     "test:qr": "node --import tsx --test server/scripts/test-qr.mjs",
     "test:order-picking": "node --import tsx --test server/scripts/test-order-picking.mjs",
     "test:loan-return": "node --import tsx --test server/scripts/test-loan-return.mjs",
+    "test:loan-return-request": "node --import tsx --test server/scripts/test-loan-return-request.mjs",
     "test:box-loan-audit": "node --test server/scripts/test-audit-box-loan-status.cjs",
     "test:inventory": "node --import tsx --test server/scripts/test-inventory.mjs",
     "test:inventory-sessions": "node --import tsx --test server/scripts/test-inventory-sessions.mjs",

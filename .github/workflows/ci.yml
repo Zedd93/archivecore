@@ -143,6 +143,8 @@ jobs:
 
       - name: Verify loan returns
         run: npm run test:loan-return
+      - name: Verify loan return requests
+        run: npm run test:loan-return-request
 
       - name: Verify historical box loan audit
         run: npm run test:box-loan-audit

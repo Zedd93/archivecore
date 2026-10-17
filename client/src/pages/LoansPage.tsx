@@ -16,8 +16,9 @@ import OfflineScanPanel from '@/components/ui/OfflineScanPanel';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { matchActiveLoansByQr } from '@/utils/loanReturn';
 import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
+import { useConfirm } from '@/hooks/useConfirm';
 import toast from 'react-hot-toast';
-import { ArchiveRestore, Box, Camera, FileText, Loader2, Plus, RotateCcw, X } from 'lucide-react';
+import { ArchiveRestore, Box, Camera, FileText, Loader2, Plus, RotateCcw, Send, X } from 'lucide-react';
 
 interface SelectedBox {
   id: string;
@@ -42,6 +43,7 @@ interface ActiveLoan {
   order: {
     id: string;
     orderNumber: string;
+    requestedBy: string;
     expectedReturnAt?: string | null;
     requester?: { firstName: string; lastName: string } | null;
   };
@@ -74,6 +76,7 @@ export default function LoansPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm, ConfirmDialogElement } = useConfirm();
   const { user, hasPermission } = useAuth();
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const offlineScans = useOfflineWarehouseScans(user?.id || '', activeTenantId, 'return');
@@ -128,6 +131,21 @@ export default function LoansPage() {
       toast.error(getApiErrorMessage(err, t('common.genericError')));
     },
   });
+  const sendReturnRequest = useMutation({
+    mutationFn: (item: ActiveLoan) => api.post(`/orders/${item.order.id}/items/${item.id}/request-return`),
+    onSuccess: () => toast.success(t('loans.returnRequestSent')),
+    onError: (err) => toast.error(getApiErrorMessage(err, t('loans.returnRequestError'))),
+  });
+
+  const handleReturnRequest = async (item: ActiveLoan) => {
+    const approved = await confirm({
+      title: t('loans.requestReturn'),
+      message: t('loans.requestReturnConfirm', { orderNumber: item.order.orderNumber }),
+      confirmLabel: t('loans.requestReturn'),
+      variant: 'info',
+    });
+    if (approved) sendReturnRequest.mutate(item);
+  };
 
   const resetForm = () => {
     setSelectedBoxes([]);
@@ -337,21 +355,29 @@ export default function LoansPage() {
         </button>
       ),
     },
-    ...(hasPermission('order.complete') ? [{
+    ...((hasPermission('order.complete') || hasPermission('order.create')) ? [{
       key: 'actions',
       header: t('common.actions'),
-      render: (item: any) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleReturnLoan(item);
-          }}
-          disabled={returnLoan.isPending}
-          className="btn-secondary text-xs whitespace-nowrap"
-        >
-          <RotateCcw size={14} /> {t('loans.returnAction')}
-        </button>
+      render: (item: ActiveLoan) => (
+        <div className="flex flex-wrap gap-2">
+          {hasPermission('order.create') && item.order.requestedBy !== user?.id && (
+            <button type="button" className="btn-secondary text-xs whitespace-nowrap"
+              disabled={sendReturnRequest.isPending} onClick={(event) => { event.stopPropagation(); void handleReturnRequest(item); }}>
+              <Send size={14} /> {t('loans.requestReturn')}
+            </button>
+          )}
+          {hasPermission('order.complete') && <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleReturnLoan(item);
+            }}
+            disabled={returnLoan.isPending}
+            className="btn-secondary text-xs whitespace-nowrap"
+          >
+            <RotateCcw size={14} /> {t('loans.returnAction')}
+          </button>}
+        </div>
       ),
     }] : []),
   ];
@@ -527,6 +553,7 @@ export default function LoansPage() {
           </div>
         </form>
       </Modal>
+      {ConfirmDialogElement}
     </div>
   );
 }

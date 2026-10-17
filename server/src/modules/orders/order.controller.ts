@@ -8,6 +8,7 @@ import { billingService } from '../pricing/billing.service';
 import { orderHandoverPhotoService } from './order-handover-photo.service';
 import { z } from 'zod';
 import { OrderPriority, OrderType } from '@prisma/client';
+import { loanReturnRequestService } from './loan-return-request.service';
 
 export class OrderController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -314,6 +315,16 @@ export class OrderController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const loans = await orderService.getActiveLoans(req.tenantId, req.accessDepartment || undefined);
       return successResponse(res, loans);
+    } catch (err) { next(err); }
+  }
+
+  async requestLoanReturn(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, await loanReturnRequestService.request(
+        req.params.id, req.params.itemId, req.tenantId, req.user!.userId, req.accessDepartment || undefined,
+      ));
     } catch (err) { next(err); }
   }
 

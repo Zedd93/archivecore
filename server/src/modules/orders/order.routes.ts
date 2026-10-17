@@ -7,6 +7,7 @@ import { validate } from '../../middleware/validate';
 import { auditLog } from '../../middleware/audit';
 import { Permissions, RoleCode, createOrderSchema, previewOrderSlaQuerySchema, addOrderItemSchema, createCustodyEventSchema, rejectOrderSchema, cancelOrderSchema, assignOrderSchema, updateOrderItemStatusSchema, deliverOrderSchema } from '@archivecore/shared';
 import multer from 'multer';
+import { z } from 'zod';
 
 const router = Router();
 const auth = [authenticate, tenantContext];
@@ -42,6 +43,7 @@ router.get('/scan-rate', ...auth, requirePermission(Permissions.ORDER_CREATE), r
 router.get('/assignees', ...auth, requirePermission(Permissions.ORDER_PROCESS), (req, res, next) => orderController.listAssignees(req, res, next));
 router.get('/overdue-sla', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getOverdueSla(req, res, next));
 router.get('/loans/active', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getActiveLoans(req, res, next));
+router.post('/:id/items/:itemId/request-return', ...auth, requirePermission(Permissions.ORDER_CREATE), validate(z.object({ id: z.string().uuid(), itemId: z.string().uuid() }), 'params'), (req, res, next) => orderController.requestLoanReturn(req, res, next));
 router.get('/:id', ...auth, requirePermission(Permissions.ORDER_READ), (req, res, next) => orderController.getById(req, res, next));
 router.get('/:id/scan-billing', ...auth, requirePermission(Permissions.ORDER_READ), requirePermission(Permissions.BILLING_VIEW), (req, res, next) => orderController.getScanBilling(req, res, next));
 router.get('/:id/scan-quote', ...auth, requirePermission(Permissions.ORDER_READ), requirePermission(Permissions.BILLING_VIEW), (req, res, next) => orderController.getScanQuote(req, res, next));
