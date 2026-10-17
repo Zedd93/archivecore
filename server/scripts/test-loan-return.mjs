@@ -11,6 +11,7 @@ const { custodyService } = require('../dist/modules/orders/custody.service.js');
 const { searchService } = require('../dist/modules/search/search.service.js');
 const { billingService } = require('../dist/modules/pricing/billing.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
+const { LoanReturnRequestService } = require('../dist/modules/orders/loan-return-request.service.js');
 const { sanitizeAuditValues } = require('../dist/middleware/audit.js');
 
 const orderId = '8a4b7d9a-89e2-4f5f-9c75-cf3f37e1543e';
@@ -279,6 +280,93 @@ test('recipient search only returns active users in the selected tenant', async 
     assert.deepEqual(Object.keys(captured[0].select), ['id', 'firstName', 'lastName', 'email']);
     assert.equal(captured[0].take, 50);
   } finally { prisma.user.findMany = original; }
+});
+
+test('loan acceptance: handover, return request, return, and closure stay linked', async () => {
+  const folderId = 'fb29721c-f3c3-4b63-b82b-62aff03ec269';
+  const item = {
+    id: itemId, itemStatus: 'picked', deliveredAt: null,
+    boxId: null, folderId, documentId: null, hrFolderId: null, transferListItemId: null,
+    box: null, folder: { title: 'Akta umów', boxId, box: { id: boxId } },
+    document: null, transferListItem: null, hrFolder: null,
+  };
+  const order = {
+    id: orderId, tenantId, orderType: 'checkout', status: 'ready',
+    orderNumber: 'Z-202610-00001', requestedBy: userId, items: [item],
+  };
+  const events = [];
+  const notifications = [];
+  const proofs = [];
+  const tx = {
+    $transaction: async (callback) => callback(tx),
+    $queryRaw: async () => [{ id: orderId }],
+    user: { findFirst: async ({ where }) => {
+      if (where.id === recipientId) return { id: recipientId, firstName: 'Anna', lastName: 'Nowak' };
+      if (where.id === userId) return { firstName: 'Wojciech', lastName: 'Testowy' };
+      return null;
+    } },
+    order: {
+      update: async ({ data }) => { order.status = data.status; return order; },
+      updateMany: async ({ data }) => { order.status = data.status; return { count: 1 }; },
+    },
+    orderItem: {
+      updateMany: async ({ data }) => {
+        item.itemStatus = data.itemStatus;
+        if (data.deliveredAt) item.deliveredAt = data.deliveredAt;
+        return { count: 1 };
+      },
+      findFirst: async ({ where }) => {
+        if (where.order?.orderType === 'return_order') return null;
+        return item.itemStatus === 'delivered' ? {
+          ...item, order: {
+            orderNumber: order.orderNumber, requestedBy: userId,
+            requester: { isActive: true, tenantId },
+          },
+        } : null;
+      },
+      count: async () => 0,
+    },
+    orderHandoverProof: { create: async ({ data }) => { proofs.push(data); } },
+    custodyEvent: {
+      createMany: async ({ data }) => { events.push(...data); },
+      create: async ({ data }) => { events.push(data); },
+      findFirst: async ({ where }) => events.find((event) => event.orderId === where.orderId
+        && event.folderId === where.folderId && event.eventType === 'handover' && event.toUserId) || null,
+    },
+    notification: {
+      findFirst: async () => null,
+      create: async ({ data }) => { notifications.push(data); },
+    },
+    auditLog: { create: async () => undefined },
+    webhookEndpoint: { findMany: async () => [] },
+  };
+  const mocks = [
+    mock.method(orderService, 'getById', async () => order),
+    mock.method(prisma, '$transaction', async (callback) => callback(tx)),
+    mock.method(billingService, 'buildOrderDeliveryEvents', async () => []),
+    mock.method(notificationService, 'notifyTenantUsers', async () => undefined),
+  ];
+  try {
+    await orderService.deliver(orderId, tenantId, userId, {
+      recipientName: 'Anna Nowak', recipientUserId: recipientId, boxChecks: [],
+    });
+    assert.equal(order.status, 'delivered');
+    assert.equal(item.itemStatus, 'delivered');
+    assert.equal(proofs[0].recipientName, 'Anna Nowak');
+    assert.equal(events[0].toUserId, recipientId);
+
+    const requestService = new LoanReturnRequestService(tx);
+    const request = await requestService.request(orderId, itemId, tenantId, userId);
+    assert.equal(request.recipientSource, 'handover');
+    assert.equal(notifications[0].userId, recipientId);
+
+    await orderService.returnLoanItem(orderId, itemId, tenantId, userId);
+    assert.equal(item.itemStatus, 'returned');
+    assert.equal(order.status, 'completed');
+    assert.deepEqual(events.map((event) => event.eventType), ['handover', 'return_event']);
+    await assert.rejects(requestService.request(orderId, itemId, tenantId, userId), { statusCode: 404 });
+    assert.equal(notifications.length, 1);
+  } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
 });
 
 test('order custody history filters by department and does not return signature bytes', async () => {
