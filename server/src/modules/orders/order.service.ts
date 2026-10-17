@@ -77,6 +77,23 @@ function isPrismaUniqueError(err: unknown, field?: string) {
 }
 
 export class OrderService {
+  async listRecipientUsers(tenantId: string, search: string) {
+    const terms = search.trim().split(/\s+/).filter(Boolean);
+    return prisma.user.findMany({
+      where: {
+        tenantId, isActive: true,
+        ...(terms.length ? { AND: terms.map((term) => ({ OR: [
+          { firstName: { contains: term, mode: 'insensitive' } },
+          { lastName: { contains: term, mode: 'insensitive' } },
+          { email: { contains: term, mode: 'insensitive' } },
+        ] })) } : {}),
+      },
+      select: { id: true, firstName: true, lastName: true, email: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }],
+      take: 50,
+    });
+  }
+
   private async getSlaSchedule(tenantId: string, orderType: OrderType, priority: OrderPriority) {
     const hours = await tenantSlaService.getHours(tenantId, orderType, priority);
     return createSlaSchedule(new Date(), hours);
@@ -872,6 +889,7 @@ export class OrderService {
 
   async deliver(id: string, tenantId: string, userId: string, proof?: {
     recipientName: string;
+    recipientUserId?: string;
     signatureData?: string;
     latitude?: number;
     longitude?: number;
@@ -881,6 +899,9 @@ export class OrderService {
     const order = await this.getById(id, tenantId);
     if (proof && !['checkout', 'return_order'].includes(order.orderType)) {
       throw Object.assign(new Error('Potwierdzenie odbioru jest dostępne tylko dla wydań i zwrotów'), { statusCode: 400 });
+    }
+    if (proof?.recipientUserId && order.orderType !== 'checkout') {
+      throw Object.assign(new Error('Konto odbiorcy można przypisać tylko do wydania wypożyczenia'), { statusCode: 400 });
     }
     validateHandoverSignature(proof?.signatureData);
     if (order.orderType === 'disposal') await this.assertDisposalNotHeld(order, tenantId);
@@ -928,6 +949,17 @@ export class OrderService {
     const billingEvents = await billingService.buildOrderDeliveryEvents({ ...order, scanQuote }, deliveredAt);
 
     await prisma.$transaction(async (tx) => {
+      let recipientName = proof?.recipientName;
+      if (proof?.recipientUserId) {
+        const recipient = await tx.user.findFirst({
+          where: { id: proof.recipientUserId, tenantId, isActive: true },
+          select: { firstName: true, lastName: true },
+        });
+        if (!recipient) {
+          throw Object.assign(new Error('Wybrane konto odbiorcy jest nieaktywne lub nie należy do tego klienta'), { statusCode: 404 });
+        }
+        recipientName = `${recipient.firstName} ${recipient.lastName}`.trim();
+      }
       try {
         await tx.order.update({
           where: { id, tenantId, status: 'ready' },
@@ -955,7 +987,7 @@ export class OrderService {
           data: {
             orderId: id,
             recordedById: userId,
-            recipientName: proof.recipientName,
+            recipientName: recipientName!,
             signatureData: proof.signatureData,
             latitude: proof.latitude,
             longitude: proof.longitude,
@@ -985,7 +1017,8 @@ export class OrderService {
             eventType: order.orderType === 'return_order' ? 'return_event' : 'handover',
             fromUserId: userId,
             performedById: userId,
-            recipientName: proof?.recipientName || null,
+            recipientName: recipientName || null,
+            ...(order.orderType === 'checkout' && proof?.recipientUserId ? { toUserId: proof.recipientUserId } : {}),
             eventAt: deliveredAt,
           })),
         });

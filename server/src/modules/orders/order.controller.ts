@@ -11,6 +11,14 @@ import { OrderPriority, OrderType } from '@prisma/client';
 import { loanReturnRequestService } from './loan-return-request.service';
 
 export class OrderController {
+  async listRecipientUsers(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, await orderService.listRecipientUsers(req.tenantId, String(req.query.search || '')));
+    } catch (err) { next(err); }
+  }
+
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

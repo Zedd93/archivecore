@@ -18,6 +18,7 @@ const itemId = '4f71e99f-b69a-4ff3-95f9-507f75f6242f';
 const tenantId = 'f411a4d4-904a-4779-b697-5df8ba29a976';
 const boxId = '9ff32a6e-818e-42ec-b35b-cd9c038758d7';
 const userId = 'bc97d781-4c88-43ba-8090-01e7adfa0714';
+const recipientId = 'd804ebf5-69f5-4721-b4e4-c112935209ac';
 const signatureData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4AWP8DwQMQMDEAAUAPfgEADYYS7QAAAAASUVORK5CYII=';
 
 test('QR matches the exact loaned entity and preserves multiple matches for selection', () => {
@@ -228,6 +229,56 @@ test('delivering two folders from one box records two distinct folder handovers'
     assert.ok(calls.custody.every((event) => event.boxId === undefined));
     assert.equal(calls.boxUpdates.length, 0);
   } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
+});
+
+test('delivery links an active tenant recipient and stores the canonical name', async () => {
+  const calls = { custody: [], proofs: [], users: [] };
+  let recipientExists = true;
+  const order = {
+    id: orderId, tenantId, orderType: 'checkout', status: 'ready', requestedBy: userId,
+    items: [{ id: itemId, folderId: itemId, itemStatus: 'picked', folder: { box: { id: boxId } } }],
+  };
+  const tx = {
+    user: { findFirst: async ({ where }) => { calls.users.push(where); return recipientExists ? { firstName: 'Anna', lastName: 'Nowak' } : null; } },
+    order: { update: async () => order },
+    orderItem: { updateMany: async () => ({ count: 1 }) },
+    orderHandoverProof: { create: async ({ data }) => { calls.proofs.push(data); } },
+    custodyEvent: { createMany: async ({ data }) => { calls.custody.push(...data); } },
+    box: { updateMany: async () => ({ count: 1 }) },
+    webhookEndpoint: { findMany: async () => [] },
+  };
+  const mocks = [
+    mock.method(orderService, 'getById', async () => order),
+    mock.method(prisma, '$transaction', async (callback) => callback(tx)),
+    mock.method(billingService, 'buildOrderDeliveryEvents', async () => []),
+    mock.method(notificationService, 'notifyTenantUsers', async () => undefined),
+  ];
+  try {
+    await orderService.deliver(orderId, tenantId, userId, { recipientName: 'Untrusted name', recipientUserId: recipientId, boxChecks: [] });
+    assert.deepEqual(calls.users[0], { id: recipientId, tenantId, isActive: true });
+    assert.equal(calls.proofs[0].recipientName, 'Anna Nowak');
+    assert.equal(calls.custody[0].recipientName, 'Anna Nowak');
+    assert.equal(calls.custody[0].toUserId, recipientId);
+    recipientExists = false;
+    await assert.rejects(orderService.deliver(orderId, tenantId, userId, { recipientName: 'Untrusted name', recipientUserId: recipientId, boxChecks: [] }), { statusCode: 404 });
+    assert.equal(calls.proofs.length, 1);
+    assert.equal(calls.custody.length, 1);
+  } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
+});
+
+test('recipient search only returns active users in the selected tenant', async () => {
+  const captured = [];
+  const original = prisma.user.findMany;
+  prisma.user.findMany = async (query) => { captured.push(query); return []; };
+  try {
+    await orderService.listRecipientUsers(tenantId, ' Anna Nowak ');
+    assert.equal(captured[0].where.tenantId, tenantId);
+    assert.equal(captured[0].where.isActive, true);
+    assert.equal(captured[0].where.AND[0].OR[0].firstName.contains, 'Anna');
+    assert.equal(captured[0].where.AND[1].OR[1].lastName.contains, 'Nowak');
+    assert.deepEqual(Object.keys(captured[0].select), ['id', 'firstName', 'lastName', 'email']);
+    assert.equal(captured[0].take, 50);
+  } finally { prisma.user.findMany = original; }
 });
 
 test('order custody history filters by department and does not return signature bytes', async () => {

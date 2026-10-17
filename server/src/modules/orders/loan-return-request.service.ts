@@ -45,9 +45,24 @@ export class LoanReturnRequestService {
       });
       if (!item?.deliveredAt) throw httpError('Pozycja nie jest aktywnym wypożyczeniem lub nie masz do niej dostępu', 404);
 
+      const custodyTarget = item.documentId ? { documentId: item.documentId }
+        : item.folderId ? { folderId: item.folderId }
+          : item.hrFolderId ? { hrFolderId: item.hrFolderId }
+            : item.boxId ? { boxId: item.boxId } : null;
+      const handover = custodyTarget ? await tx.custodyEvent.findFirst({
+        where: { orderId, eventType: 'handover', toUserId: { not: null }, ...custodyTarget },
+        orderBy: [{ eventAt: 'desc' }, { id: 'desc' }],
+        select: { toUserId: true },
+      }) : null;
+      const linkedRecipient = handover?.toUserId ? await tx.user.findFirst({
+        where: { id: handover.toUserId, tenantId, isActive: true },
+        select: { id: true },
+      }) : null;
+      const recipientId = linkedRecipient?.id || item.order.requestedBy;
+      const recipientSource = linkedRecipient ? 'handover' : 'requester';
       const borrower = item.order.requester;
-      if (item.order.requestedBy === actorId) throw httpError('Nie możesz wysłać prośby o zwrot do siebie', 409);
-      if (!borrower.isActive || (borrower.tenantId !== tenantId && borrower.tenantId !== null)) {
+      if (recipientId === actorId) throw httpError('Nie możesz wysłać prośby o zwrot do siebie', 409);
+      if (!linkedRecipient && (!borrower.isActive || (borrower.tenantId !== tenantId && borrower.tenantId !== null))) {
         throw httpError('Osoba zgłaszająca wypożyczenie nie ma już aktywnego konta w tym kliencie', 409);
       }
       const actor = await tx.user.findFirst({
@@ -79,7 +94,7 @@ export class LoanReturnRequestService {
 
       const lastRequest = await tx.notification.findFirst({
         where: {
-          userId: item.order.requestedBy, tenantId,
+          tenantId,
           type: 'loan_return_requested', entityType: 'order_item', entityId: itemId,
           createdAt: { gte: new Date(now.getTime() - REQUEST_COOLDOWN_MS) },
         },
@@ -91,7 +106,7 @@ export class LoanReturnRequestService {
         || item.transferListItem?.folderTitle || (item.hrFolder ? 'akta osobowe' : 'pozycję');
       await tx.notification.create({
         data: {
-          userId: item.order.requestedBy, tenantId,
+          userId: recipientId, tenantId,
           type: 'loan_return_requested', entityType: 'order_item', entityId: itemId,
           title: `Prośba o zwrot z wypożyczenia ${item.order.orderNumber}`,
           message: `${actor.firstName} ${actor.lastName} prosi o zwrot: ${itemLabel} (wypożyczenie ${item.order.orderNumber}). Sprawdź, czy możesz zwrócić tę pozycję, albo skontaktuj się z obsługą archiwum.`,
@@ -102,10 +117,10 @@ export class LoanReturnRequestService {
         data: {
           tenantId, userId: actorId, action: 'loan.return_request',
           entityType: 'order_item', entityId: itemId,
-          newValues: { orderId, recipientId: item.order.requestedBy },
+          newValues: { orderId, recipientId, recipientSource },
         },
       });
-      return { requested: true };
+      return { requested: true, recipientSource };
     });
   }
 }

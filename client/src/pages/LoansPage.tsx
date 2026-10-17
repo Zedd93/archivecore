@@ -132,8 +132,11 @@ export default function LoansPage() {
     },
   });
   const sendReturnRequest = useMutation({
-    mutationFn: (item: ActiveLoan) => api.post(`/orders/${item.order.id}/items/${item.id}/request-return`),
-    onSuccess: () => toast.success(t('loans.returnRequestSent')),
+    mutationFn: async (item: ActiveLoan): Promise<{ recipientSource: 'handover' | 'requester' }> => {
+      const { data } = await api.post(`/orders/${item.order.id}/items/${item.id}/request-return`);
+      return data.data;
+    },
+    onSuccess: ({ recipientSource }) => toast.success(t(recipientSource === 'handover' ? 'loans.returnRequestSentToHandover' : 'loans.returnRequestSent')),
     onError: (err) => toast.error(getApiErrorMessage(err, t('loans.returnRequestError'))),
   });
 

@@ -26,6 +26,7 @@ import { matchOrderItemQr } from '@/utils/orderPicking';
 import { getOrderItemPickBox, getOrderItemPickLocation, sortOrderItemsByPickRoute } from '@/utils/orderPickRoute';
 import { useOfflineWarehouseScans } from '@/hooks/useOfflineWarehouseScans';
 import { SerialScanQueue } from '@/utils/serialScanQueue';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Camera, CheckCircle, XCircle, Play, Package, Truck, Loader2, Clock, Plus, RotateCcw, Volume2, VolumeX, Upload, Download, MapPin } from 'lucide-react';
 
 // Status flow steps
@@ -62,6 +63,7 @@ type HandoverPhoto = {
   uploadedAt: string;
   uploadedBy: { firstName: string; lastName: string };
 };
+type RecipientUser = { id: string; firstName: string; lastName: string; email: string };
 type CustodyTimelineEvent = {
   id: string;
   eventType: 'handover' | 'receipt' | 'return_event' | 'transfer';
@@ -170,6 +172,19 @@ export default function OrderDetailPage() {
   const [downloadingHandoverPhoto, setDownloadingHandoverPhoto] = useState<string | null>(null);
   const handoverPhotoInputRef = useRef<HTMLInputElement>(null);
   const [recipientName, setRecipientName] = useState('');
+  const [recipientUser, setRecipientUser] = useState<RecipientUser | null>(null);
+  const [recipientSearch, setRecipientSearch] = useState('');
+  const debouncedRecipientSearch = useDebouncedValue(recipientSearch, 250);
+  const { data: recipientUsers = [], isError: recipientUsersError } = useQuery<RecipientUser[]>({
+    queryKey: ['order-recipient-users', activeTenantId, debouncedRecipientSearch],
+    queryFn: async () => {
+      const { data } = await api.get('/orders/recipient-users', { params: { search: debouncedRecipientSearch } });
+      return data.data;
+    },
+    enabled: Boolean(showHandover && order?.orderType === 'checkout' && activeTenantId && hasPermission(Permissions.ORDER_PROCESS)),
+  });
+  const recipientChoices = recipientUser && !recipientUsers.some((candidate) => candidate.id === recipientUser.id)
+    ? [recipientUser, ...recipientUsers] : recipientUsers;
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [handoverLocation, setHandoverLocation] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
   const [boxChecks, setBoxChecks] = useState<Record<string, HandoverBoxCheck>>({});
@@ -371,6 +386,7 @@ export default function OrderDetailPage() {
 
   const handleAction = async (action: string, proof?: {
     recipientName: string;
+    recipientUserId?: string;
     signatureData?: string;
     latitude?: number;
     longitude?: number;
@@ -406,6 +422,8 @@ export default function OrderDetailPage() {
     setIsLocating(false);
     setShowHandover(false);
     setRecipientName('');
+    setRecipientUser(null);
+    setRecipientSearch('');
     setSignatureData(null);
     setHandoverLocation(null);
     setBoxChecks({});
@@ -449,7 +467,7 @@ export default function OrderDetailPage() {
           ...(check.conditionNote.trim() ? { conditionNote: check.conditionNote.trim() } : {}),
         };
       });
-      await handleAction('deliver', { recipientName: name, ...(signatureData ? { signatureData } : {}), ...(handoverLocation || {}), boxChecks: checks });
+      await handleAction('deliver', { recipientName: name, ...(recipientUser ? { recipientUserId: recipientUser.id } : {}), ...(signatureData ? { signatureData } : {}), ...(handoverLocation || {}), boxChecks: checks });
       closeHandover();
     } catch {
       // The mutation displays the server error; keep the form open for retry.
@@ -1055,6 +1073,7 @@ export default function OrderDetailPage() {
                 </p>
                 {event.performedBy && <p className="text-gray-600">{t('orders.detail.custody.operator')}: {event.performedBy.firstName} {event.performedBy.lastName}</p>}
                 {event.recipientName && <p className="text-gray-600">{t('orders.detail.custody.recipient')}: {event.recipientName}</p>}
+                {event.toUser && <p className="text-gray-600">{t('orders.detail.recipientAccount')}: {event.toUser.firstName} {event.toUser.lastName}</p>}
                 {event.notes && <p className="text-gray-600 break-words">{event.notes}</p>}
               </li>)}
             </ol>
@@ -1071,10 +1090,31 @@ export default function OrderDetailPage() {
       <Modal isOpen={showHandover} onClose={() => { if (!patchOrder.isPending) closeHandover(); }} title={t('orders.detail.handoverTitle')}>
         <form onSubmit={(event) => { void confirmHandover(event); }} className="space-y-4">
           <p className="text-sm text-gray-600">{t('orders.detail.handoverIntro')}</p>
+          {order.orderType === 'checkout' && <div className="space-y-2">
+            <label htmlFor="handover-recipient-search" className="label-text">{t('orders.detail.recipientAccountSearch')}</label>
+            <input id="handover-recipient-search" className="input-field" maxLength={100}
+              value={recipientSearch} onChange={(event) => setRecipientSearch(event.target.value)}
+              placeholder={t('orders.detail.recipientAccountSearchHint')} disabled={patchOrder.isPending} />
+            <select id="handover-recipient-user" className="input-field" value={recipientUser?.id || ''}
+              aria-label={t('orders.detail.recipientAccount')}
+              disabled={patchOrder.isPending}
+              onChange={(event) => {
+                const selected = recipientChoices.find((candidate) => candidate.id === event.target.value) || null;
+                setRecipientUser(selected);
+                setRecipientName(selected ? `${selected.firstName} ${selected.lastName}`.trim() : '');
+              }}>
+              <option value="">{t('orders.detail.manualRecipient')}</option>
+              {recipientChoices.map((candidate) => <option key={candidate.id} value={candidate.id}>
+                {candidate.firstName} {candidate.lastName} ({candidate.email})
+              </option>)}
+            </select>
+            {recipientUsersError && <p className="text-xs text-red-700" role="alert">{t('orders.detail.recipientUsersError')}</p>}
+            <p className="text-xs text-gray-500">{t('orders.detail.recipientAccountHint')}</p>
+          </div>}
           <div>
             <label htmlFor="handover-recipient" className="label-text">{t('orders.detail.recipientName')}</label>
             <input id="handover-recipient" className="input-field" required minLength={2} maxLength={120}
-              value={recipientName} onChange={(event) => setRecipientName(event.target.value)} />
+              value={recipientName} onChange={(event) => setRecipientName(event.target.value)} disabled={patchOrder.isPending || Boolean(recipientUser)} />
           </div>
           <SignaturePad onChange={setSignatureData} disabled={patchOrder.isPending} />
           {handoverBoxes.length > 0 && <div className="space-y-3">

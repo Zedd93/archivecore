@@ -49,6 +49,7 @@ export const updateOrderItemStatusSchema = z.object({
 export const deliverOrderSchema = z.object({
   proof: z.object({
     recipientName: z.string().trim().min(2).max(120),
+    recipientUserId: z.string().uuid().optional(),
     signatureData: z.string().max(170000).regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/).optional(),
     latitude: z.number().finite().min(-90).max(90).optional(),
     longitude: z.number().finite().min(-180).max(180).optional(),

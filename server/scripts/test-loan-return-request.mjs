@@ -17,7 +17,7 @@ const item = {
   },
 };
 
-function setup({ found = item, returned = null, recent = null, lock = [{ id: 'order-a' }], actor = { firstName: 'Anna', lastName: 'Nowak' } } = {}) {
+function setup({ found = item, returned = null, recent = null, handover = null, linkedRecipient = { id: 'recipient-a' }, lock = [{ id: 'order-a' }], actor = { firstName: 'Anna', lastName: 'Nowak' } } = {}) {
   const queries = [];
   const notifications = [];
   const audits = [];
@@ -25,10 +25,12 @@ function setup({ found = item, returned = null, recent = null, lock = [{ id: 'or
     $transaction: async (fn) => fn(db),
     $queryRaw: async () => lock,
     user: { findFirst: async ({ where }) => {
-      assert.equal(where.id, 'requester-b');
       assert.equal(where.isActive, true);
+      if (where.id === 'recipient-a') return linkedRecipient;
+      assert.equal(where.id, 'requester-b');
       return actor;
     } },
+    custodyEvent: { findFirst: async (query) => { queries.push(query); return handover; } },
     orderItem: { findFirst: async (query) => {
       queries.push(query);
       return queries.length === 1 ? found : returned;
@@ -44,17 +46,37 @@ function setup({ found = item, returned = null, recent = null, lock = [{ id: 'or
 
 test('return request targets the responsible borrower and records an audit', async () => {
   const state = setup();
-  assert.deepEqual(await state.service.request('order-a', 'item-a', 'tenant-a', 'requester-b', 'Accounting', now), { requested: true });
+  assert.deepEqual(await state.service.request('order-a', 'item-a', 'tenant-a', 'requester-b', 'Accounting', now), { requested: true, recipientSource: 'requester' });
   assert.equal(state.queries[0].where.order.tenantId, 'tenant-a');
   assert.equal(state.queries[0].where.AND[0].OR[0].box.department.equals, 'Accounting');
-  assert.equal(state.queries[1].where.OR.some((target) => target.boxId === 'box-a'), true);
-  assert.equal(state.queries[1].where.OR.some((target) => target.folderId === 'folder-a'), true);
+  assert.equal(state.queries[1].where.folderId, 'folder-a');
+  assert.equal(state.queries[2].where.OR.some((target) => target.boxId === 'box-a'), true);
+  assert.equal(state.queries[2].where.OR.some((target) => target.folderId === 'folder-a'), true);
   assert.equal(state.notifications.length, 1);
   assert.equal(state.notifications[0].userId, 'borrower-a');
   assert.equal(state.notifications[0].actionUrl, '/orders/order-a');
   assert.match(state.notifications[0].message, /Anna Nowak prosi o zwrot: Akta umów/);
   assert.equal(state.notifications[0].emailDelivery, undefined);
   assert.equal(state.audits[0].userId, 'requester-b');
+});
+
+test('return request targets the active account linked at handover', async () => {
+  const state = setup({ handover: { toUserId: 'recipient-a' } });
+  assert.deepEqual(await state.service.request('order-a', 'item-a', 'tenant-a', 'requester-b', undefined, now), { requested: true, recipientSource: 'handover' });
+  assert.equal(state.notifications[0].userId, 'recipient-a');
+  assert.equal(state.audits[0].newValues.recipientSource, 'handover');
+});
+
+test('inactive or foreign linked recipient falls back to the requester', async () => {
+  const state = setup({ handover: { toUserId: 'recipient-a' }, linkedRecipient: null });
+  assert.deepEqual(await state.service.request('order-a', 'item-a', 'tenant-a', 'requester-b', undefined, now), { requested: true, recipientSource: 'requester' });
+  assert.equal(state.notifications[0].userId, 'borrower-a');
+});
+
+test('the linked recipient cannot send a return request to themselves', async () => {
+  const state = setup({ handover: { toUserId: 'recipient-a' } });
+  await assert.rejects(state.service.request('order-a', 'item-a', 'tenant-a', 'recipient-a', undefined, now), { statusCode: 409 });
+  assert.equal(state.notifications.length, 0);
 });
 
 test('tenant mismatch, returned item, and non-active loan create no notification', async () => {
@@ -90,8 +112,9 @@ test('a return request is limited to one per loan item in 24 hours', async () =>
   const state = setup({ recent: { id: 'notification-a' } });
   await assert.rejects(state.service.request('order-a', 'item-a', 'tenant-a', 'requester-b', undefined, now), { statusCode: 409 });
   assert.equal(state.notifications.length, 0);
-  assert.equal(state.queries[2].where.entityId, 'item-a');
-  assert.equal(state.queries[2].where.createdAt.gte.toISOString(), '2026-10-16T10:00:00.000Z');
+  assert.equal(state.queries[3].where.entityId, 'item-a');
+  assert.equal(state.queries[3].where.userId, undefined);
+  assert.equal(state.queries[3].where.createdAt.gte.toISOString(), '2026-10-16T10:00:00.000Z');
 });
 
 test('return request endpoint requires permission and UUIDs', () => {
@@ -109,5 +132,22 @@ test('return request endpoint requires permission and UUIDs', () => {
   assert.equal(allowed, true);
   const invalid = res();
   validation({ params: { id: 'invalid', itemId: 'invalid' } }, invalid, () => { throw new Error('validation bypassed'); });
+  assert.equal(invalid.statusCode, 400);
+});
+
+test('recipient account lookup requires order processing permission', () => {
+  const route = orderRoutes.stack.find((layer) => layer.route?.path === '/recipient-users')?.route;
+  assert.ok(route);
+  const permission = route.stack[2].handle;
+  const validation = route.stack[3].handle;
+  const res = () => ({ status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
+  const denied = res();
+  permission({ user: { permissions: ['order.read'] } }, denied, () => { throw new Error('permission bypassed'); });
+  assert.equal(denied.statusCode, 403);
+  let allowed = false;
+  permission({ user: { permissions: ['order.process'] } }, res(), () => { allowed = true; });
+  assert.equal(allowed, true);
+  const invalid = res();
+  validation({ query: { search: 'x'.repeat(101) } }, invalid, () => { throw new Error('validation bypassed'); });
   assert.equal(invalid.statusCode, 400);
 });
