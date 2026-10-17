@@ -67,6 +67,8 @@ jobs:
         run: npm run test:order-notifications
       - name: Verify loan return reminders
         run: npm run test:order-return-reminders
+      - name: Verify complete loan reminder flow
+        run: npm run test:order-reminder-flow
       - name: Verify email delivery of loan reminders
         run: npm run test:notification-email
       - name: Verify controlled SMTP test message

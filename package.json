@@ -48,6 +48,7 @@
     "test:order-history": "node --import tsx --test server/scripts/test-order-history.mjs",
     "test:order-notifications": "node --import tsx --test server/scripts/test-order-notifications.mjs",
     "test:order-return-reminders": "node --import tsx --test server/scripts/test-order-return-reminders.mjs",
+    "test:order-reminder-flow": "node --import tsx --test server/scripts/test-order-reminder-flow.mjs",
     "test:notification-email": "node --import tsx --test server/scripts/test-notification-email.mjs",
     "email:check": "node server/scripts/check-smtp.cjs",
     "email:send-test": "node server/scripts/send-test-email.cjs",
