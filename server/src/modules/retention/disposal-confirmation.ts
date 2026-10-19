@@ -12,7 +12,13 @@ export type DisposalConfirmation = {
   methodDescription: string | null;
   weightKg: number | null;
   executionNote: string | null;
-  boxes: Array<{ id: string; boxNumber: string; title: string; location: string | null }>;
+  boxes: Array<{
+    id: string; boxNumber: string; title: string; location: string | null;
+    apDecision?: 'consent_received' | 'not_required' | null;
+    apDecisionReference?: string | null;
+    apDecisionDate?: string | null;
+    apDecisionReason?: string | null;
+  }>;
 };
 
 export type DisposalEvidenceImage = {
@@ -96,16 +102,23 @@ export function buildDisposalConfirmationPdf(record: DisposalConfirmation, evide
     for (const [index, box] of record.boxes.entries()) {
       const heading = `${index + 1}. ${box.boxNumber} - ${box.title}`;
       const detail = `ID: ${box.id}  |  Lokalizacja przed brakowaniem: ${box.location || 'brak'}`;
+      const apDetail = box.apDecision === 'consent_received'
+        ? `Zgoda AP: ${box.apDecisionReference || 'brak numeru'}, ${box.apDecisionDate || 'brak daty'}`
+        : box.apDecision === 'not_required'
+          ? `Zgoda AP niewymagana: ${box.apDecisionReason || 'brak uzasadnienia'}`
+          : null;
       doc.fontSize(10);
       const headingHeight = doc.heightOfString(heading);
       doc.fontSize(8);
       const detailHeight = doc.heightOfString(detail);
-      if (doc.y + headingHeight + detailHeight + 8 > doc.page.height - doc.page.margins.bottom) {
+      const apDetailHeight = apDetail ? doc.heightOfString(apDetail) : 0;
+      if (doc.y + headingHeight + detailHeight + apDetailHeight + 8 > doc.page.height - doc.page.margins.bottom) {
         doc.addPage();
         doc.fontSize(15).fillColor('#155e75').text('Kartony objęte operacją (ciąg dalszy)', { paragraphGap: 8 });
       }
       doc.fontSize(10).fillColor('#1f2937').text(heading);
       doc.fontSize(8).fillColor('#6b7280').text(detail, { paragraphGap: 6 });
+      if (apDetail) doc.text(apDetail, { paragraphGap: 6 });
     }
     for (const [index, photo] of evidence.entries()) {
       doc.addPage();

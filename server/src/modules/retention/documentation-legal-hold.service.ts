@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { clearedDisposalDecisions } from './disposal-state';
 
 export type DocumentationHoldTarget = 'folder' | 'document' | 'transfer_list';
 
@@ -63,7 +64,7 @@ export class DocumentationLegalHoldService {
       if (hold && uniqueBoxIds.length) {
         await tx.box.updateMany({
           where: { id: { in: uniqueBoxIds }, tenantId, deletedAt: null, status: { in: ['pending_disposal', 'approved_disposal'] } },
-          data: { status: 'active' },
+          data: { status: 'active', ...clearedDisposalDecisions },
         });
       }
       await tx.auditLog.create({ data: {

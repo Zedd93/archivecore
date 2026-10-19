@@ -46,6 +46,8 @@ test('a held folder withdraws every related box from disposal and records the re
     assert.equal(updates[0].where.tenantId, tenantId);
     assert.deepEqual(updates[1].where.status.in, ['pending_disposal', 'approved_disposal']);
     assert.equal(updates[1].data.status, 'active');
+    assert.equal(updates[1].data.disposalReviewedAt, null);
+    assert.equal(updates[1].data.apDecision, null);
     assert.equal(audit.action, 'legal_hold.placed');
     assert.equal(audit.userId, userId);
     assert.equal(audit.newValues.reason, 'Spór sądowy');

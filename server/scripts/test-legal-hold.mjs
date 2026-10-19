@@ -10,7 +10,7 @@ const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
 const { parseDisposalConfirmation, buildDisposalConfirmationPdf } = require('../dist/modules/retention/disposal-confirmation.js');
 const { boxLegalHoldSchema, changeBoxStatusSchema, bulkBoxStatusSchema } = require('../../shared/src/validators/box.schema.ts');
-const { approveDisposalSchema, rejectDisposalSchema, completeDisposalSchema } = require('../../shared/src/validators/retention.schema.ts');
+const { approveDisposalSchema, rejectDisposalSchema, completeDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema } = require('../../shared/src/validators/retention.schema.ts');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
@@ -42,6 +42,8 @@ test('holding a box cancels pending disposal in the same transaction', async () 
     assert.equal(updates[0].data.legalHoldReason, 'Spór sądowy');
     assert.deepEqual(updates[1].where.status.in, ['pending_disposal', 'approved_disposal']);
     assert.equal(updates[1].data.status, 'active');
+    assert.equal(updates[1].data.apDecision, null);
+    assert.equal(updates[1].data.disposalReviewedAt, null);
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -276,9 +278,9 @@ test('starting disposal submits only due, eligible boxes and notifies reviewers'
       } },
       auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
     })),
-    mock.method(notificationService, 'notifyTenantUsers', async ({ tenantId: recipientTenant, includeGlobalUsers }) => {
+    mock.method(notificationService, 'notifyTenantUsers', async ({ tenantId: recipientTenant, requiredPermissions }) => {
       assert.equal(recipientTenant, tenantId);
-      assert.equal(includeGlobalUsers, false);
+      assert.deepEqual(requiredPermissions, ['disposal.initiate']);
       notified = true;
     }),
   ];
@@ -290,6 +292,60 @@ test('starting disposal submits only due, eligible boxes and notifies reviewers'
     assert.equal(audits.length, 1);
     assert.equal(audits[0].userId, proposerId);
     assert.equal(audits[0].action, 'disposal.proposed');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('internal review is tenant-scoped, auditable and required before client approval', async () => {
+  const service = new RetentionService();
+  const audits = [];
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: { updateMany: async ({ where, data }) => {
+        assert.equal(where.tenantId, tenantId);
+        assert.equal(where.status, 'pending_disposal');
+        assert.equal(where.disposalReviewedAt, null);
+        assert.equal(data.disposalReviewedById, proposerId);
+        assert.equal(data.disposalReviewNotes, 'Sprawdzono akta');
+        return { count: 1 };
+      } },
+      auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async ({ requiredPermissions, includeGlobalUsers }) => {
+      assert.deepEqual(requiredPermissions, ['disposal.approve']);
+      assert.equal(includeGlobalUsers, false);
+    }),
+  ];
+  try {
+    assert.equal((await service.reviewDisposal(tenantId, [boxId], proposerId, 'Sprawdzono akta')).count, 1);
+    assert.equal(audits[0].action, 'disposal.reviewed');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('archives decision requires a real record or Super Admin justification', async () => {
+  const service = new RetentionService();
+  await assert.rejects(service.recordApDecision(tenantId, [boxId], approver, 'not_required', undefined, undefined, 'Dokumentacja prywatna'), { statusCode: 403 });
+  await assert.rejects(service.recordApDecision(tenantId, [boxId], { ...approver, roles: ['SA'] }, 'consent_received', 'AP-1', '2026-02-30'), { statusCode: 400 });
+  const audits = [];
+  const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
+    box: { updateMany: async ({ where, data }) => {
+      assert.equal(where.tenantId, tenantId);
+      assert.equal(where.status, 'approved_disposal');
+      assert.equal(where.apDecision, null);
+      assert.equal(data.apDecision, 'consent_received');
+      assert.equal(data.apDecisionReference, 'AP-1');
+      assert.equal(data.apDecisionDate.toISOString().slice(0, 10), '2026-10-10');
+      return { count: 1 };
+    } },
+    auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
+  }))];
+  try {
+    assert.equal((await service.recordApDecision(tenantId, [boxId], { ...approver, roles: ['SA'] }, 'consent_received', 'AP-1', '2026-10-10')).count, 1);
+    assert.equal(audits[0].action, 'disposal.ap_recorded');
+    assert.equal(audits[0].newValues.reference, 'AP-1');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -319,6 +375,7 @@ test('client approval records a decision without changing occupancy', async () =
         updateMany: async ({ where, data }) => {
           assert.equal(where.legalHold, false);
           assert.equal(where.status, 'pending_disposal');
+          assert.deepEqual(where.disposalReviewedAt, { not: null });
           assert.equal(data.status, 'approved_disposal');
           return { count: 2 };
         },
@@ -375,9 +432,10 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
       box: {
         findMany: async ({ where }) => {
           assert.equal(where.status, 'approved_disposal');
+          assert.deepEqual(where.apDecision, { not: null });
           return [
-            { id: boxId, locationId, boxNumber: 'K-1', title: 'Teczki Łódź', location: { fullPath: 'Magazyn / Regał 1' } },
-            { id: secondBoxId, locationId, boxNumber: 'K-2', title: 'Akta', location: { fullPath: 'Magazyn / Regał 1' } },
+            { id: boxId, locationId, boxNumber: 'K-1', title: 'Teczki Łódź', apDecision: 'consent_received', apDecisionReference: 'AP-1', apDecisionDate: new Date('2026-10-10'), apDecisionReason: null, location: { fullPath: 'Magazyn / Regał 1' } },
+            { id: secondBoxId, locationId, boxNumber: 'K-2', title: 'Akta', apDecision: 'not_required', apDecisionReference: null, apDecisionDate: null, apDecisionReason: 'Dokumentacja prywatna', location: { fullPath: 'Magazyn / Regał 1' } },
           ];
         },
         updateMany: async ({ data }) => { assert.equal(data.status, 'disposed'); assert.equal(data.locationId, null); return { count: 2 }; },
@@ -406,6 +464,8 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
     assert.equal(audits[2].newValues.protocolReference, 'PROT-2026-1');
     assert.deepEqual(audits[2].newValues.boxes.map((box) => box.boxNumber), ['K-1', 'K-2']);
     assert.equal(audits[2].newValues.boxes[0].location, 'Magazyn / Regał 1');
+    assert.equal(audits[2].newValues.boxes[0].apDecisionReference, 'AP-1');
+    assert.equal(audits[2].newValues.boxes[1].apDecisionReason, 'Dokumentacja prywatna');
     assert.equal(audits[2].newValues.tenantName, 'Spółdzielnia Łódź');
     assert.equal(audits[2].newValues.completedByName, 'Anna Nowak');
     assert.equal(audits[2].newValues.methodDescription, 'Niszczenie mechaniczne');
@@ -425,7 +485,8 @@ test('completed disposal history and confirmation are scoped to the selected ten
     newValues: {
       protocolReference: 'PROT-2026-1', tenantName: 'Spółdzielnia Łódź', completedByName: 'Anna Nowak',
       methodDescription: 'Niszczenie mechaniczne', weightKg: 12.5, executionNote: 'Protokół podpisano poza systemem',
-      boxes: [{ id: boxId, boxNumber: 'K-1', title: 'Teczki Łódź', location: 'Magazyn 1' }],
+      boxes: [{ id: boxId, boxNumber: 'K-1', title: 'Teczki Łódź', location: 'Magazyn 1',
+        apDecision: 'consent_received', apDecisionReference: 'AP-1', apDecisionDate: '2026-10-09', apDecisionReason: null }],
     },
     tenant: null,
     user: { firstName: 'Nowe', lastName: 'Nazwisko' },
@@ -447,6 +508,7 @@ test('completed disposal history and confirmation are scoped to the selected ten
     assert.equal(confirmation.weightKg, 12.5);
     assert.equal(confirmation.executionNote, 'Protokół podpisano poza systemem');
     assert.equal(confirmation.boxes[0].title, 'Teczki Łódź');
+    assert.equal(confirmation.boxes[0].apDecisionReference, 'AP-1');
     const pdf = await buildDisposalConfirmationPdf(confirmation);
     assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
     assert.ok(pdf.length > 5000);
@@ -474,6 +536,12 @@ test('older disposal confirmations remain readable without execution details', (
 });
 
 test('disposal decisions require a reason, protocol and explicit confirmation', () => {
+  assert.equal(reviewDisposalSchema.safeParse({ boxIds: [boxId], notes: 'ok' }).success, false);
+  assert.equal(reviewDisposalSchema.safeParse({ boxIds: [boxId], notes: 'Sprawdzono' }).success, true);
+  assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'consent_received', reference: 'AP-1', decisionDate: '2026-10-10' }).success, true);
+  assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'consent_received', reference: 'AP-1' }).success, false);
+  assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'not_required', reason: 'Dokumentacja prywatna' }).success, true);
+  assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'not_required', reason: 'x' }).success, false);
   assert.equal(approveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Nie' }).success, false);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);

@@ -38,8 +38,11 @@ export default function RetentionPage() {
   const [selectedDueIds, setSelectedDueIds] = useState<Set<string>>(new Set());
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
   const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<string>>(new Set());
-  const [disposalAction, setDisposalAction] = useState<'approve' | 'reject' | 'complete' | null>(null);
+  const [disposalAction, setDisposalAction] = useState<'review' | 'approve' | 'reject' | 'ap-decision' | 'complete' | null>(null);
   const [decisionText, setDecisionText] = useState('');
+  const [apDecision, setApDecision] = useState<'consent_received' | 'not_required'>('consent_received');
+  const [apReference, setApReference] = useState('');
+  const [apDate, setApDate] = useState('');
   const [protocolReference, setProtocolReference] = useState('');
   const [methodDescription, setMethodDescription] = useState('');
   const [weightKg, setWeightKg] = useState('');
@@ -65,6 +68,7 @@ export default function RetentionPage() {
     && user?.tenantId === activeTenantId
     && user.roles.some((role) => role === RoleCode.TENANT_LEADERSHIP || role === RoleCode.ADMIN_TENANT);
   const canCompleteDisposal = hasPermission(Permissions.DISPOSAL_COMPLETE);
+  const canMarkApNotRequired = user?.roles.includes(RoleCode.SUPER_ADMIN);
   const reviewLimit = 25;
 
   const { data: policies, isLoading: polLoading } = useQuery({
@@ -238,6 +242,11 @@ export default function RetentionPage() {
     },
     { key: 'retentionPolicy', header: t('admin.retention.policies'), render: (item) => item.retentionPolicy?.name || '—' },
     { key: 'status', header: t('common.status'), render: (item) => <div className="flex flex-wrap gap-1"><StatusBadge status={item.status} type="box" />{item.legalHold && <span className="badge-red">{t('boxes.legalHold')}</span>}</div> },
+    { key: 'disposalStep', header: t('admin.retention.disposal.step'), render: (item) => item.status === 'pending_disposal'
+      ? t(item.disposalReviewedAt ? 'admin.retention.disposal.reviewed' : 'admin.retention.disposal.awaitingReview')
+      : item.status === 'approved_disposal'
+        ? t(item.apDecision === 'consent_received' ? 'admin.retention.disposal.apReceived' : item.apDecision === 'not_required' ? 'admin.retention.disposal.apNotRequired' : 'admin.retention.disposal.awaitingAp')
+        : '—' },
   ];
 
   const downloadConfirmation = async (id: string) => {
@@ -419,9 +428,13 @@ export default function RetentionPage() {
 
   const handleDisposalDecision = async () => {
     if (!disposalAction) return;
-    const boxIds = [...(disposalAction === 'complete' ? selectedApprovedIds : selectedPendingIds)];
+    const boxIds = [...(['complete', 'ap-decision'].includes(disposalAction) ? selectedApprovedIds : selectedPendingIds)];
     if (!boxIds.length) return;
+    if (disposalAction === 'review' && decisionText.trim().length < 5) return;
     if (disposalAction === 'reject' && decisionText.trim().length < 5) return;
+    if (disposalAction === 'ap-decision' && (apDecision === 'consent_received'
+      ? apReference.trim().length < 3 || !apDate
+      : decisionText.trim().length < 10)) return;
     if (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed)) return;
     const parsedWeight = weightKg.trim() ? Number(weightKg) : undefined;
     if (disposalAction === 'complete' && (
@@ -435,8 +448,12 @@ export default function RetentionPage() {
     try {
       await api.post(`/retention/disposal/${disposalAction}`, {
         boxIds,
+        ...(disposalAction === 'review' ? { notes: decisionText.trim() } : {}),
         ...(disposalAction === 'approve' && decisionText.trim() ? { notes: decisionText.trim() } : {}),
         ...(disposalAction === 'reject' ? { reason: decisionText.trim() } : {}),
+        ...(disposalAction === 'ap-decision' ? apDecision === 'consent_received'
+          ? { decision: apDecision, reference: apReference.trim(), decisionDate: apDate }
+          : { decision: apDecision, reason: decisionText.trim() } : {}),
         ...(disposalAction === 'complete' ? {
           protocolReference: protocolReference.trim(),
           ...(methodDescription.trim() ? { methodDescription: methodDescription.trim() } : {}),
@@ -449,6 +466,8 @@ export default function RetentionPage() {
       setSelectedPendingIds(new Set());
       setSelectedApprovedIds(new Set());
       setDecisionText('');
+      setApReference('');
+      setApDate('');
       setProtocolReference('');
       setMethodDescription('');
       setWeightKg('');
@@ -552,13 +571,16 @@ export default function RetentionPage() {
         <div className="card">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
             <h2 className="text-lg font-semibold">{t('admin.retention.disposal.pendingTitle')}</h2>
-            {canApproveDisposal && <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn-primary" disabled={!selectedPendingIds.size} onClick={() => setDisposalAction('approve')}>{t('admin.retention.disposal.approve', { count: selectedPendingIds.size })}</button>
+            <div className="flex flex-wrap gap-2">
+              {canInitiateDisposal && <button type="button" className="btn-secondary" disabled={!selectedPendingIds.size || (pendingBoxes?.data || []).some((box: any) => selectedPendingIds.has(box.id) && box.disposalReviewedAt)} onClick={() => setDisposalAction('review')}>{t('admin.retention.disposal.review', { count: selectedPendingIds.size })}</button>}
+              {canApproveDisposal && <button type="button" className="btn-primary" disabled={!selectedPendingIds.size || (pendingBoxes?.data || []).some((box: any) => selectedPendingIds.has(box.id) && !box.disposalReviewedAt)} onClick={() => setDisposalAction('approve')}>{t('admin.retention.disposal.approve', { count: selectedPendingIds.size })}</button>}
+              {canApproveDisposal && <>
               <button type="button" className="btn-secondary" disabled={!selectedPendingIds.size} onClick={() => setDisposalAction('reject')}>{t('admin.retention.disposal.reject', { count: selectedPendingIds.size })}</button>
-            </div>}
+              </>}
+            </div>
           </div>
           <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.pendingHint')}</p>
-          {pendingError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={pendingBoxes?.data || []} isLoading={pendingLoading} emptyMessage={t('admin.retention.disposal.noPending')} selectable={canApproveDisposal} selectedIds={selectedPendingIds} onSelectionChange={setSelectedPendingIds} />}
+          {pendingError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={pendingBoxes?.data || []} isLoading={pendingLoading} emptyMessage={t('admin.retention.disposal.noPending')} selectable={canInitiateDisposal || canApproveDisposal} selectedIds={selectedPendingIds} onSelectionChange={setSelectedPendingIds} />}
           <Pagination page={pendingPage} limit={reviewLimit} total={pendingBoxes?.total || 0} onPageChange={(page) => { setSelectedPendingIds(new Set()); setPendingPage(page); }} />
         </div>
       )}
@@ -567,7 +589,10 @@ export default function RetentionPage() {
         <div className="card">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
             <h2 className="text-lg font-semibold">{t('admin.retention.disposal.approvedTitle')}</h2>
-            {canCompleteDisposal && <button type="button" className="btn-primary" disabled={!selectedApprovedIds.size} onClick={() => setDisposalAction('complete')}>{t('admin.retention.disposal.complete', { count: selectedApprovedIds.size })}</button>}
+            {canCompleteDisposal && <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-secondary" disabled={!selectedApprovedIds.size || (approvedBoxes?.data || []).some((box: any) => selectedApprovedIds.has(box.id) && box.apDecision)} onClick={() => setDisposalAction('ap-decision')}>{t('admin.retention.disposal.apDecision', { count: selectedApprovedIds.size })}</button>
+              <button type="button" className="btn-primary" disabled={!selectedApprovedIds.size || (approvedBoxes?.data || []).some((box: any) => selectedApprovedIds.has(box.id) && !box.apDecision)} onClick={() => setDisposalAction('complete')}>{t('admin.retention.disposal.complete', { count: selectedApprovedIds.size })}</button>
+            </div>}
           </div>
           <p className="text-sm text-gray-500 mb-4">{t('admin.retention.disposal.approvedHint')}</p>
           {approvedError ? <p role="alert" className="text-sm text-red-700">{t('admin.retention.disposal.loadError')}</p> : <DataTable columns={reviewColumns} data={approvedBoxes?.data || []} isLoading={approvedLoading} emptyMessage={t('admin.retention.disposal.noApproved')} selectable={canCompleteDisposal} selectedIds={selectedApprovedIds} onSelectionChange={setSelectedApprovedIds} />}
@@ -622,7 +647,7 @@ export default function RetentionPage() {
 
       {disposalAction && <Modal isOpen onClose={() => setDisposalAction(null)} title={t(`admin.retention.disposal.${disposalAction}Title`)} size="md">
         <div className="space-y-4">
-          <p className="text-sm text-gray-700">{t(`admin.retention.disposal.${disposalAction}Hint`, { count: disposalAction === 'complete' ? selectedApprovedIds.size : selectedPendingIds.size })}</p>
+          <p className="text-sm text-gray-700">{t(`admin.retention.disposal.${disposalAction}Hint`, { count: ['complete', 'ap-decision'].includes(disposalAction) ? selectedApprovedIds.size : selectedPendingIds.size })}</p>
           {disposalAction === 'complete' ? <>
             <div>
               <label htmlFor="disposal-protocol" className="label-text">{t('admin.retention.disposal.protocolReference')} *</label>
@@ -644,13 +669,28 @@ export default function RetentionPage() {
               <input type="checkbox" className="mt-1" checked={completionConfirmed} onChange={(e) => setCompletionConfirmed(e.target.checked)} />
               <span>{t('admin.retention.disposal.completionConfirmation')}</span>
             </label>
-          </> : <div>
-            <label htmlFor="disposal-decision-text" className="label-text">{t(disposalAction === 'reject' ? 'admin.retention.disposal.rejectReason' : 'admin.retention.disposal.approvalNotes')}{disposalAction === 'reject' ? ' *' : ''}</label>
+          </> : disposalAction === 'ap-decision' ? <div className="space-y-3">
+            <label htmlFor="ap-decision" className="label-text">{t('admin.retention.disposal.apDecisionType')}</label>
+            <select id="ap-decision" className="input-field" value={apDecision} onChange={(e) => setApDecision(e.target.value as 'consent_received' | 'not_required')}>
+              <option value="consent_received">{t('admin.retention.disposal.apReceived')}</option>
+              {canMarkApNotRequired && <option value="not_required">{t('admin.retention.disposal.apNotRequired')}</option>}
+            </select>
+            {apDecision === 'consent_received' ? <>
+              <label htmlFor="ap-reference" className="label-text">{t('admin.retention.disposal.apReference')} *</label>
+              <input id="ap-reference" className="input-field" value={apReference} onChange={(e) => setApReference(e.target.value)} maxLength={200} />
+              <label htmlFor="ap-date" className="label-text">{t('admin.retention.disposal.apDate')} *</label>
+              <input id="ap-date" type="date" max={today} className="input-field" value={apDate} onChange={(e) => setApDate(e.target.value)} />
+            </> : <>
+              <label htmlFor="disposal-decision-text" className="label-text">{t('admin.retention.disposal.apReason')} *</label>
+              <textarea id="disposal-decision-text" className="input-field" value={decisionText} onChange={(e) => setDecisionText(e.target.value)} rows={3} maxLength={1000} />
+            </>}
+          </div> : <div>
+            <label htmlFor="disposal-decision-text" className="label-text">{t(disposalAction === 'reject' ? 'admin.retention.disposal.rejectReason' : disposalAction === 'review' ? 'admin.retention.disposal.reviewNotes' : 'admin.retention.disposal.approvalNotes')}{disposalAction === 'reject' || disposalAction === 'review' ? ' *' : ''}</label>
             <textarea id="disposal-decision-text" className="input-field" value={decisionText} onChange={(e) => setDecisionText(e.target.value)} rows={3} maxLength={1000} />
           </div>}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
             <button type="button" className="btn-secondary" onClick={() => setDisposalAction(null)}>{t('common.cancel')}</button>
-            <button type="button" className="btn-primary" onClick={handleDisposalDecision} disabled={decisionSubmitting || (disposalAction === 'reject' && decisionText.trim().length < 5) || (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed))}>
+            <button type="button" className="btn-primary" onClick={handleDisposalDecision} disabled={decisionSubmitting || (['reject', 'review'].includes(disposalAction) && decisionText.trim().length < 5) || (disposalAction === 'ap-decision' && (apDecision === 'consent_received' ? apReference.trim().length < 3 || !apDate : decisionText.trim().length < 10)) || (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed))}>
               {decisionSubmitting ? t('common.processing') : t(`admin.retention.disposal.${disposalAction}Confirm`)}
             </button>
           </div>

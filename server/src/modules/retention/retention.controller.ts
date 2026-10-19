@@ -197,6 +197,13 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
+  async reviewDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      return successResponse(res, await retentionService.reviewDisposal(req.tenantId, req.body.boxIds, req.user!.userId, req.body.notes));
+    } catch (err) { next(err); }
+  }
+
   async approveDisposal(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
@@ -210,6 +217,16 @@ export class RetentionController {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const result = await retentionService.rejectDisposal(req.tenantId, req.body.boxIds, req.user!, req.body.reason);
       return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async recordApDecision(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      return successResponse(res, await retentionService.recordApDecision(
+        req.tenantId, req.body.boxIds, req.user!, req.body.decision,
+        req.body.reference, req.body.decisionDate, req.body.reason,
+      ));
     } catch (err) { next(err); }
   }
 

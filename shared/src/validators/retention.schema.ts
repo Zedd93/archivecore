@@ -29,6 +29,25 @@ export const initiateDisposalSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+export const reviewDisposalSchema = z.object({
+  boxIds: z.array(z.string().uuid()).min(1),
+  notes: z.string().trim().min(5, 'Podaj wynik weryfikacji').max(1000),
+});
+
+export const apDisposalDecisionSchema = z.discriminatedUnion('decision', [
+  z.object({
+    boxIds: z.array(z.string().uuid()).min(1),
+    decision: z.literal('consent_received'),
+    reference: z.string().trim().min(3).max(200),
+    decisionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+  z.object({
+    boxIds: z.array(z.string().uuid()).min(1),
+    decision: z.literal('not_required'),
+    reason: z.string().trim().min(10).max(1000),
+  }),
+]);
+
 export const approveDisposalSchema = z.object({
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
   notes: z.string().trim().max(1000).optional(),

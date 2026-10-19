@@ -32,6 +32,11 @@ enum BoxStatus {
   damaged
 }
 
+enum ApDisposalDecision {
+  consent_received
+  not_required
+}
+
 enum InventorySessionStatus {
   in_progress
   completed
@@ -543,6 +548,15 @@ model Box {
   retentionPolicyId String?   @db.Uuid
   retentionDate     DateTime? @db.Date
   disposalDate      DateTime? @db.Date
+  disposalReviewedAt DateTime?
+  disposalReviewedById String? @db.Uuid
+  disposalReviewNotes String? @db.Text
+  apDecision ApDisposalDecision?
+  apDecisionReference String? @db.VarChar(200)
+  apDecisionDate DateTime? @db.Date
+  apDecisionReason String? @db.Text
+  apDecisionById String? @db.Uuid
+  apDecisionAt DateTime?
   legalHold         Boolean   @default(false)
   legalHoldReason   String?   @db.Text
   legalHoldAt       DateTime?

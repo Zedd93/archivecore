@@ -80,7 +80,9 @@ test('placing a JRWA series hold updates every version, withdraws pending boxes 
     assert.equal(calls[1][1].tenantId, tenantId);
     assert.deepEqual(calls[1][1].status.in, ['pending_disposal', 'approved_disposal']);
     assert.equal(calls[1][1].OR.length, 3);
-    assert.deepEqual(calls[1][2], { status: 'active' });
+    assert.equal(calls[1][2].status, 'active');
+    assert.equal(calls[1][2].disposalReviewedAt, null);
+    assert.equal(calls[1][2].apDecision, null);
     assert.equal(calls[2][1].action, 'legal_hold.placed');
     assert.equal(calls[2][1].newValues.jrwaCode, '1234');
   } finally {

@@ -3,6 +3,7 @@ import { generateQrData } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 import { billingService } from '../pricing/billing.service';
 import { executeWarehouseOperation } from './warehouse-operation.service';
+import { clearedDisposalDecisions } from '../retention/disposal-state';
 
 function getBoxOrderBy(sortBy: string, sortOrder: Prisma.SortOrder): Prisma.BoxOrderByWithRelationInput {
   switch (sortBy) {
@@ -674,7 +675,7 @@ export class BoxService {
       if (hold) {
         await tx.box.updateMany({
           where: { id, tenantId, status: { in: ['pending_disposal', 'approved_disposal'] } },
-          data: { status: 'active' },
+          data: { status: 'active', ...clearedDisposalDecisions },
         });
       }
     });
