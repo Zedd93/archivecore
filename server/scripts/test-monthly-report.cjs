@@ -1,15 +1,26 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const { parseReportMonth, getMonthlyReport, buildMonthlyReportPdf } = require('../dist/modules/reports/monthly-report.service');
 
 const now = new Date('2026-10-09T10:00:00Z');
 
-test('accepts only valid past or current UTC months', () => {
+test('accepts only valid past or current Warsaw months across DST and year boundaries', () => {
   assert.deepEqual(parseReportMonth('2026-09', now), {
     month: '2026-09',
-    start: new Date('2026-09-01T00:00:00Z'),
-    end: new Date('2026-10-01T00:00:00Z'),
+    start: new Date('2026-08-31T22:00:00Z'),
+    end: new Date('2026-09-30T22:00:00Z'),
   });
+  assert.deepEqual(parseReportMonth('2026-03', now), {
+    month: '2026-03', start: new Date('2026-02-28T23:00:00Z'), end: new Date('2026-03-31T22:00:00Z'),
+  });
+  assert.deepEqual(parseReportMonth('2025-10', now), {
+    month: '2025-10', start: new Date('2025-09-30T22:00:00Z'), end: new Date('2025-10-31T23:00:00Z'),
+  });
+  assert.deepEqual(parseReportMonth('2025-12', now), {
+    month: '2025-12', start: new Date('2025-11-30T23:00:00Z'), end: new Date('2025-12-31T23:00:00Z'),
+  });
+  assert.equal(parseReportMonth('2026-01', new Date('2025-12-31T23:30:00Z'))?.month, '2026-01');
   for (const value of ['2026-13', '2026-00', '2026-11', '1999-12', '2026-9', undefined, ['2026-09']]) {
     assert.equal(parseReportMonth(value, now), null);
   }
@@ -22,7 +33,12 @@ function database() {
     return result;
   };
   const db = {
+    $transaction: async (run, options) => {
+      assert.equal(options.isolationLevel, 'RepeatableRead');
+      return run(db);
+    },
     tenant: { findUnique: record('tenant', 'findUnique', { name: 'Spółdzielnia Łódź' }) },
+    $queryRaw: record('ledger', '$queryRaw', [{ acquisitions: 3n, disposals: 1n }]),
     box: { count: record('box', 'count', 7) },
     folder: { count: record('folder', 'count', 12) },
     order: {
@@ -34,6 +50,7 @@ function database() {
       ]),
     },
     hRFolder: { count: record('hRFolder', 'count', 4) },
+    inventorySession: { count: record('inventorySession', 'count', 1) },
     billingEvent: { groupBy: record('billingEvent', 'groupBy', [
       { status: 'pending', currency: 'PLN', _count: 2, _sum: { netAmount: { toFixed: () => '125.50' } } },
       { status: 'unpriced', currency: 'PLN', _count: 1, _sum: { netAmount: null } },
@@ -47,10 +64,20 @@ test('scopes every query to tenant and period and omits billing without permissi
   const report = await getMonthlyReport('tenant-1', '2026-09', false, db, now);
   assert.equal(report.billing, null);
   assert.equal(calls.some((call) => call.model === 'billingEvent'), false);
-  assert.equal(calls.every((call) => call.args.where.tenantId === 'tenant-1' || call.args.where.id === 'tenant-1'), true);
+  assert.equal(calls.every((call) => call.model === 'ledger' || call.args.where.tenantId === 'tenant-1' || call.args.where.id === 'tenant-1'), true);
+  const ledgerQuery = calls.find((call) => call.model === 'ledger').args;
+  assert.match(ledgerQuery.sql, /box\.create/);
+  assert.match(ledgerQuery.sql, /eventType" = 'receipt'/);
+  assert.match(ledgerQuery.sql, /disposal\.batch_completed/);
+  assert.ok(ledgerQuery.values.includes('tenant-1'));
+  assert.ok(ledgerQuery.values.some((value) => value instanceof Date && value.toISOString() === '2026-08-31T22:00:00.000Z'));
   assert.deepEqual(calls.find((call) => call.model === 'order' && call.method === 'groupBy').args.where.createdAt, {
-    gte: new Date('2026-09-01T00:00:00Z'), lt: new Date('2026-10-01T00:00:00Z'),
+    gte: new Date('2026-08-31T22:00:00Z'), lt: new Date('2026-09-30T22:00:00Z'),
   });
+  assert.equal(report.activity.acquisitions, 3);
+  assert.equal(report.activity.disposals, 1);
+  assert.equal(report.activity.newHrFolders, 4);
+  assert.equal(report.activity.inventorySessions, 1);
   assert.deepEqual(report.activity.sla, { total: 2, onTime: 1 });
   assert.equal(report.activity.createdOrders[0].count, 3);
 });
@@ -63,11 +90,12 @@ test('includes tenant billing only with permission and renders a PDF with Polish
     { status: 'unpriced', currency: 'PLN', count: 1, netAmount: null },
   ]);
   assert.deepEqual(calls.find((call) => call.model === 'billingEvent').args.where.billingPeriod, {
-    gte: new Date('2026-09-01T00:00:00Z'), lt: new Date('2026-10-01T00:00:00Z'),
+    gte: new Date('2026-08-31T22:00:00Z'), lt: new Date('2026-09-30T22:00:00Z'),
   });
   const pdf = await buildMonthlyReportPdf(report);
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
   assert.ok(pdf.length > 5000);
+  if (process.env.MONTHLY_REPORT_PDF_PREVIEW) fs.writeFileSync(process.env.MONTHLY_REPORT_PDF_PREVIEW, pdf);
 });
 
 test('renders a report for an empty month without financial access', async () => {
@@ -78,9 +106,12 @@ test('renders a report for an empty month without financial access', async () =>
   db.order.count = async () => 0;
   db.order.findMany = async () => [];
   db.hRFolder.count = async () => 0;
+  db.$queryRaw = async () => [{ acquisitions: 0n, disposals: 0n }];
+  db.inventorySession.count = async () => 0;
   const report = await getMonthlyReport('tenant-1', '2026-09', false, db, now);
   const pdf = await buildMonthlyReportPdf(report);
   assert.equal(report.activity.createdOrders.length, 0);
+  assert.equal(report.activity.acquisitions, 0);
   assert.equal(report.billing, null);
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
 });

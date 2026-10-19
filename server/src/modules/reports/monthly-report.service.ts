@@ -4,13 +4,19 @@ import path from 'node:path';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { ORDER_TYPE_LABELS } from '@archivecore/shared';
+import { getAccessionLedgerMonthSummary, reportMonthRange } from './accession-ledger.service';
 
 export function parseReportMonth(value: unknown, now = new Date()) {
   if (typeof value !== 'string' || !/^(20\d{2})-(0[1-9]|1[0-2])$/.test(value)) return null;
   const [year, month] = value.split('-').map(Number);
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  if (start > new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))) return null;
-  return { month: value, start, end: new Date(Date.UTC(year, month, 1)) };
+  const { start, end } = reportMonthRange(year, month);
+  const currentParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit',
+  }).formatToParts(now);
+  const currentYear = Number(currentParts.find((part) => part.type === 'year')?.value);
+  const currentMonth = Number(currentParts.find((part) => part.type === 'month')?.value);
+  if (year > currentYear || (year === currentYear && month > currentMonth)) return null;
+  return { month: value, start, end };
 }
 
 export async function getMonthlyReport(tenantId: string, month: string, includeBilling: boolean, db = prisma, now = new Date()) {
@@ -23,55 +29,64 @@ export async function getMonthlyReport(tenantId: string, month: string, includeB
   const monthlyRange = { gte: period.start, lt: period.end };
   const upcomingRange = { gte: generatedAt, lt: nextYear };
 
-  const [tenant, boxes, folders, newBoxes, newFolders, createdOrders, completedOrders, slaOrders, dueBoxes, dueHrFolders, billing] = await Promise.all([
-    db.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
-    db.box.count({ where: { tenantId, deletedAt: null, status: { not: 'disposed' } } }),
-    db.folder.count({ where: { tenantId, status: { not: 'disposed' } } }),
-    db.box.count({ where: { tenantId, createdAt: monthlyRange } }),
-    db.folder.count({ where: { tenantId, createdAt: monthlyRange } }),
-    db.order.groupBy({ by: ['orderType'], where: { tenantId, createdAt: monthlyRange }, _count: true }),
-    db.order.count({ where: { tenantId, status: 'completed', completedAt: monthlyRange } }),
-    db.order.findMany({
-      where: { tenantId, status: 'completed', completedAt: monthlyRange, slaDeadline: { not: null } },
-      select: { completedAt: true, slaDeadline: true },
-    }),
-    db.box.count({ where: { tenantId, deletedAt: null, status: { not: 'disposed' }, retentionDate: upcomingRange } }),
-    db.hRFolder.count({ where: { tenantId, disposalStatus: 'active', retentionEndDate: upcomingRange, retentionBasis: { not: 'needs_review' }, litigationHold: false } }),
-    includeBilling
-      ? db.billingEvent.groupBy({
-        by: ['status', 'currency'],
-        where: { tenantId, billingPeriod: monthlyRange },
-        _count: true,
-        _sum: { netAmount: true },
-      })
-      : Promise.resolve(null),
-  ]);
+  return db.$transaction(async (tx) => {
+    const [tenant, boxes, folders, hrFolders, ledger, newFolders, newHrFolders, createdOrders,
+      completedOrders, slaOrders, inventorySessions, dueBoxes, dueHrFolders, billing] = await Promise.all([
+      tx.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+      tx.box.count({ where: { tenantId, deletedAt: null, status: { not: 'disposed' } } }),
+      tx.folder.count({ where: { tenantId, status: { not: 'disposed' } } }),
+      tx.hRFolder.count({ where: { tenantId, disposalStatus: { not: 'disposed' } } }),
+      getAccessionLedgerMonthSummary(tenantId, Number(month.slice(0, 4)), Number(month.slice(5, 7)), tx),
+      tx.folder.count({ where: { tenantId, createdAt: monthlyRange } }),
+      tx.hRFolder.count({ where: { tenantId, createdAt: monthlyRange } }),
+      tx.order.groupBy({ by: ['orderType'], where: { tenantId, createdAt: monthlyRange }, _count: true }),
+      tx.order.count({ where: { tenantId, completedAt: monthlyRange } }),
+      tx.order.findMany({
+        where: { tenantId, completedAt: monthlyRange, slaDeadline: { not: null } },
+        select: { completedAt: true, slaDeadline: true },
+      }),
+      tx.inventorySession.count({ where: { tenantId, status: 'completed', finishedAt: monthlyRange } }),
+      tx.box.count({ where: { tenantId, deletedAt: null, status: { not: 'disposed' }, retentionDate: upcomingRange } }),
+      tx.hRFolder.count({ where: { tenantId, disposalStatus: 'active', retentionEndDate: upcomingRange, retentionBasis: { not: 'needs_review' }, litigationHold: false } }),
+      includeBilling
+        ? tx.billingEvent.groupBy({
+          by: ['status', 'currency'],
+          where: { tenantId, billingPeriod: monthlyRange },
+          _count: true,
+          _sum: { netAmount: true },
+        })
+        : Promise.resolve(null),
+    ]);
 
-  if (!tenant) throw Object.assign(new Error('Nie znaleziono tenanta'), { statusCode: 404 });
+    if (!tenant) throw Object.assign(new Error('Nie znaleziono tenanta'), { statusCode: 404 });
 
-  return {
-    tenantName: tenant.name,
-    month,
-    generatedAt,
-    current: { boxes, folders },
-    activity: {
-      newBoxes,
-      newFolders,
-      createdOrders: createdOrders.map((row) => ({ type: row.orderType, count: row._count })),
-      completedOrders,
-      sla: {
-        total: slaOrders.length,
-        onTime: slaOrders.filter((order) => order.completedAt && order.slaDeadline && order.completedAt <= order.slaDeadline).length,
+    return {
+      tenantName: tenant.name,
+      month,
+      generatedAt,
+      current: { boxes, folders, hrFolders },
+      activity: {
+        acquisitions: ledger.acquisitions,
+        disposals: ledger.disposals,
+        newFolders,
+        newHrFolders,
+        createdOrders: createdOrders.map((row) => ({ type: row.orderType, count: row._count })),
+        completedOrders,
+        inventorySessions,
+        sla: {
+          total: slaOrders.length,
+          onTime: slaOrders.filter((order) => order.completedAt && order.slaDeadline && order.completedAt <= order.slaDeadline).length,
+        },
       },
-    },
-    upcoming: { boxes: dueBoxes, hrFolders: dueHrFolders },
-    billing: billing?.map((row) => ({
-      status: row.status,
-      currency: row.currency,
-      count: row._count,
-      netAmount: row._sum.netAmount?.toFixed(2) ?? null,
-    })) ?? null,
-  };
+      upcoming: { boxes: dueBoxes, hrFolders: dueHrFolders },
+      billing: billing?.map((row) => ({
+        status: row.status,
+        currency: row.currency,
+        count: row._count,
+        netAmount: row._sum.netAmount?.toFixed(2) ?? null,
+      })) ?? null,
+    };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 });
 }
 
 export type MonthlyReport = Awaited<ReturnType<typeof getMonthlyReport>>;
@@ -112,15 +127,24 @@ export function buildMonthlyReportPdf(report: MonthlyReport): Promise<Buffer> {
     doc.fontSize(9).fillColor('#6b7280').text('Stan bieżący w dniu wygenerowania, nie historyczny stan na koniec miesiąca.');
     line('Kartony (bez usuniętych i wybrakowanych)', report.current.boxes);
     line('Teczki (bez wybrakowanych)', report.current.folders);
+    line('Akta osobowe (bez wybrakowanych)', report.current.hrFolders);
 
-    heading('Operacje w wybranym miesiącu');
-    line('Dodane kartony', report.activity.newBoxes);
+    heading('Ruch zasobu w wybranym miesiącu');
+    line('Nabytki kartonów', report.activity.acquisitions);
+    line('Ubytki kartonów (zakończone brakowania)', report.activity.disposals);
+    doc.fontSize(9).fillColor('#6b7280').text('Nabytki obejmują kartony utworzone na półce i potwierdzone przyjęcia. Przeniesienia nie są liczone ponownie.');
+
+    heading('Pozostałe operacje w wybranym miesiącu');
     line('Dodane teczki', report.activity.newFolders);
+    line('Dodane teczki akt osobowych', report.activity.newHrFolders);
     const createdTotal = report.activity.createdOrders.reduce((sum, row) => sum + row.count, 0);
     line('Utworzone zlecenia', createdTotal);
     for (const row of report.activity.createdOrders) line(`  ${ORDER_TYPE_LABELS[row.type] ?? row.type}`, row.count);
     line('Zlecenia zakończone', report.activity.completedOrders);
+    line('Zakończone inwentaryzacje', report.activity.inventorySessions);
     line('Zakończone w terminie (ze zdefiniowanym SLA)', `${report.activity.sla.onTime}/${report.activity.sla.total}`);
+
+    doc.fontSize(8).fillColor('#6b7280').text('Starsze operacje bez zapisanego potwierdzenia w systemie mogą nie być ujęte w ruchu kartonów.');
 
     heading('Terminy retencji w ciągu 12 miesięcy');
     doc.fontSize(9).fillColor('#6b7280').text('Liczone od daty wygenerowania raportu; kartony i akta osobowe są wykazane osobno.');

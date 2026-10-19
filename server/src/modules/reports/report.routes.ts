@@ -10,6 +10,7 @@ const auth = [authenticate, tenantContext];
 
 router.get('/dashboard', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getDashboard(req, res, next));
 router.get('/monthly/pdf', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getMonthlyPdf(req, res, next));
+router.get('/monthly', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getMonthly(req, res, next));
 router.get('/annual', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getAnnual(req, res, next));
 router.get('/annual/pdf', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getAnnualPdf(req, res, next));
 router.get('/accession-ledger', ...auth, requirePermission(Permissions.REPORT_VIEW), (req, res, next) => reportController.getAccessionLedger(req, res, next));

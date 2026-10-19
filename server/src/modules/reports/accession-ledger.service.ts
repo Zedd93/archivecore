@@ -86,6 +86,24 @@ export function reportYearRange(year: number) {
   };
 }
 
+function warsawMonthStart(year: number, month: number): Date {
+  const anchor = new Date(Date.UTC(year, month - 1, 1, 12));
+  const zone = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Warsaw', timeZoneName: 'longOffset',
+  }).formatToParts(anchor).find((part) => part.type === 'timeZoneName')?.value;
+  if (!zone || !/^GMT[+-]\d{2}:\d{2}$/.test(zone)) throw new Error('Nie można ustalić polskiej strefy czasowej');
+  return new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00${zone.slice(3)}`);
+}
+
+export function reportMonthRange(year: number, month: number) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error('Nieprawidłowy miesiąc raportu');
+  }
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  return { start: warsawMonthStart(year, month), end: warsawMonthStart(nextYear, nextMonth) };
+}
+
 export async function getAccessionLedger(tenantId: string, options: LedgerOptions) {
   const source = ledgerSource(tenantId, options.year);
   const kindFilter = options.kind ? Prisma.sql`WHERE kind = ${options.kind}` : Prisma.empty;
@@ -142,6 +160,17 @@ export async function getAccessionLedgerAnnualSummary(tenantId: string, year: nu
     acquisitions: months.reduce((sum, row) => sum + row.acquisitions, 0),
     disposals: months.reduce((sum, row) => sum + row.disposals, 0),
   };
+}
+
+export async function getAccessionLedgerMonthSummary(tenantId: string, year: number, month: number, db: Pick<typeof prisma, '$queryRaw'> = prisma) {
+  const { start, end } = reportMonthRange(year, month);
+  const rows = await db.$queryRaw<Array<{ acquisitions: bigint; disposals: bigint }>>(
+    Prisma.sql`${ledgerSource(tenantId, year)}
+      SELECT COUNT(*) FILTER (WHERE kind = 'acquisition') AS acquisitions,
+        COUNT(*) FILTER (WHERE kind = 'disposal') AS disposals
+      FROM entries WHERE "eventAt" >= ${start} AND "eventAt" < ${end}`,
+  );
+  return { acquisitions: Number(rows[0]?.acquisitions ?? 0), disposals: Number(rows[0]?.disposals ?? 0) };
 }
 
 function csvCell(value: unknown): string {

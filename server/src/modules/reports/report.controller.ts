@@ -28,6 +28,17 @@ function parseSlaReportOptions(req: Request): SlaReportOptions {
 }
 
 export class ReportController {
+  async getMonthly(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const period = parseReportMonth(req.query.month);
+      if (!period) return errorResponse(res, 'Nieprawidłowy miesiąc raportu', 400);
+      const includeBilling = Boolean(req.user?.permissions.includes(Permissions.BILLING_VIEW));
+      res.setHeader('Cache-Control', 'no-store');
+      return successResponse(res, await getMonthlyReport(req.tenantId, period.month, includeBilling));
+    } catch (err) { next(err); }
+  }
+
   async getAnnual(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
@@ -94,8 +105,15 @@ export class ReportController {
       const includeBilling = Boolean(req.user?.permissions.includes(Permissions.BILLING_VIEW));
       const report = await getMonthlyReport(req.tenantId, period.month, includeBilling);
       const pdf = await buildMonthlyReportPdf(report);
+      await prisma.auditLog.create({ data: {
+        tenantId: req.tenantId, userId: req.user!.userId,
+        action: 'report.monthly.export', entityType: 'report',
+        newValues: { month: period.month, includeBilling },
+        ipAddress: req.ip, userAgent: req.headers['user-agent']?.substring(0, 500),
+      } });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="archivecore-raport-${period.month}.pdf"`);
+      res.setHeader('Content-Length', pdf.length);
       res.setHeader('Cache-Control', 'no-store');
       return res.send(pdf);
     } catch (err) { next(err); }

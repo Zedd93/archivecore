@@ -25,6 +25,21 @@ interface StorageHealth {
   };
 }
 
+interface MonthlyReportSummary {
+  activity: {
+    acquisitions: number;
+    disposals: number;
+    newFolders: number;
+    newHrFolders: number;
+    createdOrders: Array<{ type: string; count: number }>;
+    completedOrders: number;
+    inventorySessions: number;
+    sla: { total: number; onTime: number };
+  };
+  current: { boxes: number; folders: number; hrFolders: number };
+  upcoming: { boxes: number; hrFolders: number };
+}
+
 interface SlaBreakdown {
   days: number;
   asOf: string;
@@ -75,15 +90,15 @@ const SLA_ORDER_TYPES = [
 ] as const;
 
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date());
+  return `${parts.find((part) => part.type === 'year')?.value}-${parts.find((part) => part.type === 'month')?.value}`;
 };
 
 const previousMonth = () => {
-  const date = new Date();
-  date.setDate(1);
-  date.setMonth(date.getMonth() - 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const [year, month] = currentMonth().split('-').map(Number);
+  return month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, '0')}`;
 };
 
 export default function ReportsPage() {
@@ -105,6 +120,14 @@ export default function ReportsPage() {
   }, [location.search, canViewAllSla]);
   const canOpenSlaOrders = hasPermission(Permissions.ORDER_READ);
   const activeTenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
+  const { data: monthlySummary, isLoading: monthlyLoading, isError: monthlyError, refetch: refetchMonthly } = useQuery<MonthlyReportSummary>({
+    queryKey: ['report-monthly-summary', user?.id, activeTenantId, reportMonth],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/monthly', { params: { month: reportMonth } });
+      return data.data;
+    },
+    enabled: Boolean(activeTenantId && reportMonth),
+  });
   const orderTypeLabels = Object.fromEntries(SLA_ORDER_TYPES.map(({ code, labelKey }) => [code, t(labelKey)]));
   const slaCount = (row: SlaBreakdown['data'][number], kind: SlaReportKind, count: number, report: SlaBreakdown) => (
     canOpenSlaOrders && count > 0 ? <a
@@ -131,7 +154,7 @@ export default function ReportsPage() {
   });
 
   const downloadMonthlyReport = async () => {
-    if (!reportMonth || downloadingReport) return;
+    if (!reportMonth || !activeTenantId || downloadingReport) return;
     setDownloadingReport(true);
     try {
       const { data } = await api.get('/reports/monthly/pdf', {
@@ -310,7 +333,7 @@ export default function ReportsPage() {
         )}
       </section>
 
-      <section className="card">
+      <section className="card space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">{t('reports.monthlyTitle')}</h2>
         <p className="mt-1 text-sm text-gray-500">{t('reports.monthlyDescription')}</p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -325,11 +348,43 @@ export default function ReportsPage() {
               className="input mt-1 block"
             />
           </label>
-          <button type="button" className="btn-primary flex items-center gap-2" disabled={!reportMonth || downloadingReport} onClick={downloadMonthlyReport}>
+          <button type="button" className="btn-primary flex items-center gap-2" disabled={!reportMonth || !activeTenantId || downloadingReport} onClick={downloadMonthlyReport}>
             {downloadingReport ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             {t('reports.monthlyDownload')}
           </button>
         </div>
+        {!activeTenantId ? <p className="text-sm text-gray-500">{t('reports.ledgerChooseTenant')}</p>
+          : monthlyLoading ? <p className="text-sm text-gray-500">{t('common.loading')}</p>
+            : monthlyError ? <button type="button" className="btn-secondary" onClick={() => { void refetchMonthly(); }}>{t('common.tryAgain')}</button>
+              : monthlySummary && <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {[
+                    [t('reports.ledgerAcquisition'), monthlySummary.activity.acquisitions],
+                    [t('reports.ledgerDisposal'), monthlySummary.activity.disposals],
+                    [t('reports.annualNewFolders'), monthlySummary.activity.newFolders],
+                    [t('reports.annualOrdersCreated'), monthlySummary.activity.createdOrders.reduce((sum, row) => sum + row.count, 0)],
+                  ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-gray-200 p-3">
+                    <div className="text-sm text-gray-600">{label}</div><div className="text-2xl font-semibold text-gray-900">{value}</div>
+                  </div>)}
+                </div>
+                <div className="grid gap-4 text-sm text-gray-700 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-gray-900">{t('reports.annualOtherActivity')}</h3>
+                    <p>{t('reports.annualNewHrFolders')}: <strong>{monthlySummary.activity.newHrFolders}</strong></p>
+                    <p>{t('reports.annualOrdersCompleted')}: <strong>{monthlySummary.activity.completedOrders}</strong></p>
+                    <p>{t('reports.annualInventories')}: <strong>{monthlySummary.activity.inventorySessions}</strong></p>
+                    <p>{t('reports.monthlySlaOnTime')}: <strong>{monthlySummary.activity.sla.onTime}/{monthlySummary.activity.sla.total}</strong></p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-gray-900">{t('reports.annualCurrentState')}</h3>
+                    <p className="text-gray-500">{t('reports.monthlyCurrentNote')}</p>
+                    <p>{t('reports.annualCurrentBoxes')}: <strong>{monthlySummary.current.boxes}</strong></p>
+                    <p>{t('reports.annualCurrentFolders')}: <strong>{monthlySummary.current.folders}</strong></p>
+                    <p>{t('reports.annualCurrentHrFolders')}: <strong>{monthlySummary.current.hrFolders}</strong></p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">{t('reports.annualSourceNote')}</p>
+              </>}
       </section>
 
       <section className="card space-y-4">
