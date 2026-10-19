@@ -147,6 +147,60 @@ test('a document inherits a transfer-list hold through its folder', async () => 
   } finally { prisma.$transaction = original; }
 });
 
+test('a document in a held JRWA series cannot be deleted', async () => {
+  const original = prisma.$transaction;
+  let deleted = false;
+  prisma.$transaction = async (callback) => callback({ document: {
+    findFirst: async () => ({
+      legalHold: false, box: null,
+      folder: { legalHold: false, retentionPolicy: { seriesLegalHold: true }, box: null, transferListItem: null },
+    }),
+    delete: async () => { deleted = true; },
+  } });
+  try {
+    await assert.rejects(new DocumentService().delete(folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally { prisma.$transaction = original; }
+});
+
+test('a document inherits a JRWA hold from a box linked through its transfer-list item', async () => {
+  const original = prisma.$transaction;
+  let deleted = false;
+  prisma.$transaction = async (callback) => callback({ document: {
+    findFirst: async () => ({
+      legalHold: false, box: null,
+      folder: {
+        legalHold: false, retentionPolicy: null, box: null,
+        transferListItem: { transferList: { legalHold: false }, box: { legalHold: false, retentionPolicy: { seriesLegalHold: true } } },
+      },
+    }),
+    delete: async () => { deleted = true; },
+  } });
+  try {
+    await assert.rejects(new DocumentService().delete(folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally { prisma.$transaction = original; }
+});
+
+test('an item classified under a held JRWA series cannot be deleted', async () => {
+  const original = prisma.$transaction;
+  let deleted = false;
+  prisma.$transaction = async (callback) => callback({
+    transferList: { findFirst: async () => ({ status: 'draft', legalHold: false }) },
+    transferListItem: {
+      findFirst: async () => ({
+        id: folderId, box: null,
+        folder: { legalHold: false, retentionPolicy: { seriesLegalHold: true }, box: null, documents: [] },
+      }),
+      delete: async () => { deleted = true; },
+    },
+  });
+  try {
+    await assert.rejects(new TransferListService().deleteItem(folderId, folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally { prisma.$transaction = original; }
+});
+
 test('items cannot be removed from a held transfer list', async () => {
   const original = prisma.$transaction;
   let deleted = false;
@@ -168,7 +222,7 @@ test('bulk deletion refuses a held folder without deleting any selected item', a
   prisma.$transaction = async (callback) => callback({
     transferList: { findFirst: async () => ({ status: 'draft', legalHold: false }) },
     transferListItem: {
-      count: async ({ where }) => { assert.equal(where.OR[2].folder.legalHold, true); return 1; },
+      count: async ({ where }) => { assert.equal(where.OR[4].folder.legalHold, true); return 1; },
       deleteMany: async () => { deleted = true; return { count: 1 }; },
     },
   });

@@ -127,6 +127,7 @@ const AUDIT_ENTITY_OPTIONS = [
   'billing_event',
   'billing_period',
   'retention_policy',
+  'jrwa_series',
   'tenant',
   'transfer_list',
   'transfer_list_item',

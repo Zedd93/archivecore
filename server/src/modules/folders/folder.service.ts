@@ -124,7 +124,7 @@ export class FolderService {
             transferList: { select: { id: true, listNumber: true, title: true, status: true, legalHold: true } },
           },
         },
-        retentionPolicy: { select: { id: true, jrwaCode: true, name: true, archivalCategory: true, retentionYears: true, jrwaVersion: { select: { label: true, validFrom: true, validTo: true } } } },
+        retentionPolicy: { select: { id: true, jrwaCode: true, name: true, archivalCategory: true, retentionYears: true, seriesLegalHold: true, jrwaVersion: { select: { label: true, validFrom: true, validTo: true } } } },
         documents: {
           orderBy: { orderInFolder: 'asc' },
           include: {

@@ -1006,6 +1006,8 @@
       "importJrwa": "Importuj JRWA",
       "noPolicies": "Brak polityk retencji",
       "jrwaCode": "Symbol JRWA",
+      "seriesHold": "Blokada serii",
+      "seriesHoldHint": "Blokada serii JRWA obejmuje wszystkie wersje danego symbolu dla tego tenanta i wstrzymuje brakowanie powiązanych kartonów.",
       "jrwaVersion": "Wersja JRWA",
       "jrwaVersionFilter": "Filtruj wersję JRWA",
       "jrwaCurrent": "Bieżąca wersja JRWA",
@@ -2118,6 +2120,7 @@
       "tenant": "Tenant",
       "location": "Lokalizacja",
       "retention_policy": "Polityka retencji",
+      "jrwa_series": "Seria JRWA",
       "custody": "Custody"
     }
   },

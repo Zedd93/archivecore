@@ -100,6 +100,17 @@ test('bulk deletion preserves boxes already submitted for disposal', async () =>
   }
 });
 
+test('bulk deletion refuses a box in a held JRWA series', async () => {
+  const service = new BoxService();
+  const originalFindMany = prisma.box.findMany;
+  prisma.box.findMany = async () => [{ id: boxId, status: 'active', legalHold: false, retentionPolicy: { seriesLegalHold: true } }];
+  try {
+    await assert.rejects(service.bulkDelete([boxId], tenantId), { statusCode: 409 });
+  } finally {
+    prisma.box.findMany = originalFindMany;
+  }
+});
+
 test('disposal candidates require a live policy and exclude permanent, review and personnel records', () => {
   const where = new RetentionService().disposalEligibility(tenantId);
   assert.equal(where.tenantId, tenantId);
@@ -107,19 +118,22 @@ test('disposal candidates require a live policy and exclude permanent, review an
   assert.deepEqual(where.hrFolders, { none: {} });
   assert.equal(where.retentionPolicy.is.isPermanent, false);
   assert.equal(where.retentionPolicy.is.isActive, true);
+  assert.equal(where.retentionPolicy.is.seriesLegalHold, false);
   assert.deepEqual(where.retentionPolicy.is.AND[0].OR, [{ tenantId: null }, { tenantId }]);
   assert.equal(where.retentionPolicy.is.AND[1].OR[1].NOT.OR[0].archivalCategory.startsWith, 'A');
   assert.equal(where.retentionPolicy.is.AND[1].OR[1].NOT.OR[1].archivalCategory.startsWith, 'BE');
   assert.equal(where.folders.none.OR[0].legalHold, true);
-  assert.equal(where.folders.none.OR[1].documents.some.legalHold, true);
-  assert.equal(where.folders.none.OR[2].transferListItem.is.transferList.legalHold, true);
+  assert.equal(where.folders.none.OR[1].retentionPolicy.is.seriesLegalHold, true);
+  assert.equal(where.folders.none.OR[2].documents.some.legalHold, true);
+  assert.equal(where.folders.none.OR[3].transferListItem.is.transferList.legalHold, true);
   assert.equal(where.documents.none.legalHold, true);
   assert.equal(where.transferListItems.none.OR[0].transferList.legalHold, true);
   assert.equal(where.transferListItems.none.OR[1].folder.legalHold, true);
-  assert.equal(where.transferListItems.none.OR[2].folder.documents.some.legalHold, true);
-  assert.equal(where.transferListItems.none.OR[3].categoryCode.startsWith, 'A');
-  assert.equal(where.transferListItems.none.OR[4].categoryCode.startsWith, 'BE');
-  assert.ok(where.transferListItems.none.OR[5].disposalOrTransferDate.gt instanceof Date);
+  assert.equal(where.transferListItems.none.OR[2].folder.retentionPolicy.is.seriesLegalHold, true);
+  assert.equal(where.transferListItems.none.OR[3].folder.documents.some.legalHold, true);
+  assert.equal(where.transferListItems.none.OR[4].categoryCode.startsWith, 'A');
+  assert.equal(where.transferListItems.none.OR[5].categoryCode.startsWith, 'BE');
+  assert.ok(where.transferListItems.none.OR[6].disposalOrTransferDate.gt instanceof Date);
 });
 
 test('review list separates due and upcoming dates and paginates each tenant', async () => {

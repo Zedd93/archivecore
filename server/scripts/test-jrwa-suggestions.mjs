@@ -119,7 +119,10 @@ test('editing a historically classified folder preserves its policy link', async
   });
   let updatedFolder;
   const tx = {
-    folder: { update: async ({ data }) => { updatedFolder = data; } },
+    folder: {
+      findFirst: async () => ({ retentionPolicyId: policyId, retentionPolicy: { seriesLegalHold: false } }),
+      update: async ({ data }) => { updatedFolder = data; },
+    },
     transferListItem: { update: async ({ data }) => data },
   };
   prisma.$transaction = async (fn) => fn(tx);
@@ -127,6 +130,37 @@ test('editing a historically classified folder preserves its policy link', async
     const data = { folderSignature: '1234/2026', folderTitle: 'Umowy zmienione', categoryCode: 'B10' };
     await service.updateItem('list-a', 'item-a', tenantId, 'user-a', data);
     assert.equal(updatedFolder.retentionPolicyId, policyId);
+  } finally {
+    jrwaSuggestionService.validateSelection = originalValidation;
+    prisma.transferListItem.findFirst = originalFindFirst;
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('a held JRWA series cannot be removed from a classified folder', async () => {
+  const service = new TransferListService();
+  service.getById = async () => ({ id: 'list-a', tenantId, status: 'draft', listNumber: 'S-1' });
+  service.resolveTransferListBox = async () => ({ boxId: null, sourceBoxNumber: null });
+  const originalValidation = jrwaSuggestionService.validateSelection;
+  const originalFindFirst = prisma.transferListItem.findFirst;
+  const originalTransaction = prisma.$transaction;
+  jrwaSuggestionService.validateSelection = async () => null;
+  prisma.transferListItem.findFirst = async () => ({
+    id: 'item-a', folderId: 'folder-a', ordinalNumber: 1, categoryCode: 'B10',
+    folder: { retentionPolicyId: policyId },
+  });
+  let updated = false;
+  prisma.$transaction = async (fn) => fn({
+    folder: {
+      findFirst: async () => ({ retentionPolicyId: policyId, retentionPolicy: { seriesLegalHold: true } }),
+      update: async () => { updated = true; },
+    },
+  });
+  try {
+    await assert.rejects(service.updateItem('list-a', 'item-a', tenantId, 'user-a', {
+      retentionPolicyId: null, folderSignature: '1234/2026', folderTitle: 'Umowy', categoryCode: 'B10',
+    }), { statusCode: 409 });
+    assert.equal(updated, false);
   } finally {
     jrwaSuggestionService.validateSelection = originalValidation;
     prisma.transferListItem.findFirst = originalFindFirst;

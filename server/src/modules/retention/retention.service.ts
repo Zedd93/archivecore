@@ -50,6 +50,7 @@ export class RetentionService {
       hrFolders: { none: {} },
       folders: { none: { OR: [
         { legalHold: true },
+        { retentionPolicy: { is: { seriesLegalHold: true } } },
         { documents: { some: { legalHold: true } } },
         { transferListItem: { is: { transferList: { legalHold: true } } } },
       ] } },
@@ -58,6 +59,7 @@ export class RetentionService {
         is: {
           isActive: true,
           isPermanent: false,
+          seriesLegalHold: false,
           AND: [
             { OR: [{ tenantId: null }, { tenantId }] },
             { OR: [
@@ -74,6 +76,7 @@ export class RetentionService {
         none: { OR: [
           { transferList: { legalHold: true } },
           { folder: { legalHold: true } },
+          { folder: { retentionPolicy: { is: { seriesLegalHold: true } } } },
           { folder: { documents: { some: { legalHold: true } } } },
           { categoryCode: restrictedCategory },
           { categoryCode: { startsWith: 'BE', mode: 'insensitive' } },
@@ -237,6 +240,11 @@ export class RetentionService {
         const createdVersion = await tx.jrwaVersion.create({
           data: { tenantId: targetTenantId, label, validFrom, sourceFileName: originalName },
         });
+        const heldPolicies = await tx.retentionPolicy.findMany({
+          where: { tenantId: targetTenantId, jrwaCode: { in: [...codes] }, seriesLegalHold: true },
+          select: { jrwaCode: true, seriesLegalHoldReason: true, seriesLegalHoldAt: true },
+        });
+        const holds = new Map(heldPolicies.map((policy) => [policy.jrwaCode, policy]));
         if (latest) {
           await tx.jrwaVersion.update({ where: { id: latest.id }, data: { validTo: previousJrwaDay(validFrom) } });
         }
@@ -254,6 +262,9 @@ export class RetentionService {
             isPermanent: row.isPermanent,
             sourceFileName: originalName,
             isActive: true,
+            seriesLegalHold: holds.has(row.jrwaCode),
+            seriesLegalHoldReason: holds.get(row.jrwaCode)?.seriesLegalHoldReason ?? null,
+            seriesLegalHoldAt: holds.get(row.jrwaCode)?.seriesLegalHoldAt ?? null,
           })),
         });
         return createdVersion;
@@ -274,6 +285,54 @@ export class RetentionService {
       tenant: preview.tenant,
       fileName: originalName,
     };
+  }
+
+  async setJrwaSeriesLegalHold(policyId: string, tenantId: string | null, actor: IJwtPayload, hold: boolean, reason: string) {
+    return prisma.$transaction(async (tx) => {
+      const policy = await tx.retentionPolicy.findUnique({
+        where: { id: policyId },
+        select: { tenantId: true, jrwaCode: true },
+      });
+      if (!policy?.tenantId || !policy.jrwaCode) {
+        throw Object.assign(new Error('Nie znaleziono serii JRWA'), { statusCode: 404 });
+      }
+      if (!this.isSuperAdmin(actor) && policy.tenantId !== tenantId) {
+        throw Object.assign(new Error('Nie masz dostępu do serii JRWA tego tenanta'), { statusCode: 403 });
+      }
+      const series = { tenantId: policy.tenantId, jrwaCode: policy.jrwaCode };
+      const previous = await tx.retentionPolicy.findFirst({
+        where: { ...series, seriesLegalHold: true },
+        select: { seriesLegalHoldReason: true },
+      });
+      if (Boolean(previous) === hold) {
+        throw Object.assign(new Error('Stan blokady zmienił się. Odśwież stronę i spróbuj ponownie.'), { statusCode: 409 });
+      }
+      const data = {
+        seriesLegalHold: hold,
+        seriesLegalHoldReason: hold ? reason : null,
+        seriesLegalHoldAt: hold ? new Date() : null,
+      };
+      await tx.retentionPolicy.updateMany({ where: series, data });
+      const affected = hold ? await tx.box.updateMany({
+        where: {
+          tenantId: policy.tenantId, deletedAt: null,
+          status: { in: ['pending_disposal', 'approved_disposal'] },
+          OR: [
+            { retentionPolicy: { is: series } },
+            { folders: { some: { retentionPolicy: { is: series } } } },
+            { transferListItems: { some: { folder: { retentionPolicy: { is: series } } } } },
+          ],
+        },
+        data: { status: 'active' },
+      }) : { count: 0 };
+      await tx.auditLog.create({ data: {
+        tenantId: policy.tenantId, userId: actor.userId, entityType: 'jrwa_series', entityId: policyId,
+        action: hold ? 'legal_hold.placed' : 'legal_hold.released',
+        oldValues: { seriesLegalHold: Boolean(previous), seriesLegalHoldReason: previous?.seriesLegalHoldReason ?? null },
+        newValues: { ...data, jrwaCode: policy.jrwaCode, reason, withdrawnBoxes: affected.count },
+      } });
+      return { ...data, jrwaCode: policy.jrwaCode, withdrawnBoxes: affected.count };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async updatePolicy(id: string, tenantId: string | null, actor: IJwtPayload, data: any) {
@@ -475,7 +534,7 @@ export class RetentionService {
       }
       await this.recordDisposalAudit(tx, tenantId, uniqueIds, actorId, 'disposal.proposed', 'active', 'pending_disposal', notes ? { notes } : {});
       return result;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     if (updated.count > 0) {
       await notificationService.notifyTenantUsers({
@@ -520,7 +579,7 @@ export class RetentionService {
       }
       await this.recordDisposalAudit(tx, tenantId, uniqueIds, actor.userId, 'disposal.client_approved', 'pending_disposal', 'approved_disposal', notes ? { notes } : {});
       return result;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     if (updated.count > 0) {
       await notificationService.notifyTenantUsers({
@@ -638,7 +697,7 @@ export class RetentionService {
         }],
       });
       return result;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     if (updated.count > 0) {
       await notificationService.notifyTenantUsers({

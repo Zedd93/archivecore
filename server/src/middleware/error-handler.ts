@@ -55,6 +55,10 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
       ? 'Nie udało się nadać unikalnego numeru zlecenia. Spróbuj ponownie.'
       : 'Konflikt unikalności danych w bazie. Szczegóły zapisano w logach serwera.';
   }
+  if (prismaCode === 'P2034') {
+    statusCode = 409;
+    message = 'Dane zmieniły się podczas operacji. Odśwież stronę i spróbuj ponownie.';
+  }
   if (statusCode === 500 && prismaCode) {
     statusCode = 400;
     message = `Błąd bazy danych (${prismaCode}). Szczegóły zapisano w logach serwera.`;

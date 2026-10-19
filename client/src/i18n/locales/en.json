@@ -1006,6 +1006,8 @@
       "importJrwa": "Import JRWA",
       "noPolicies": "No retention policies",
       "jrwaCode": "JRWA symbol",
+      "seriesHold": "Series hold",
+      "seriesHoldHint": "A JRWA series hold covers every version of that symbol for this tenant and suspends disposal of related boxes.",
       "jrwaVersion": "JRWA version",
       "jrwaVersionFilter": "Filter JRWA version",
       "jrwaCurrent": "Current JRWA version",
@@ -2118,6 +2120,7 @@
       "tenant": "Tenant",
       "location": "Location",
       "retention_policy": "Retention policy",
+      "jrwa_series": "JRWA series",
       "custody": "Custody"
     }
   },

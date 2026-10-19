@@ -1186,6 +1186,9 @@ model RetentionPolicy {
   isPermanent      Boolean          @default(false)
   sourceFileName   String?          @db.VarChar(500)
   isActive         Boolean          @default(true)
+  seriesLegalHold  Boolean          @default(false)
+  seriesLegalHoldReason String?      @db.Text
+  seriesLegalHoldAt DateTime?
   createdAt        DateTime         @default(now())
 
   tenant Tenant?         @relation(fields: [tenantId], references: [id])

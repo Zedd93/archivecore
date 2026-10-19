@@ -7,11 +7,12 @@ import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
 
-export default function DocumentationLegalHoldControl({ path, held, holdReason, onChanged }: {
+export default function DocumentationLegalHoldControl({ path, held, holdReason, onChanged, compact = false }: {
   path: string;
   held: boolean;
   holdReason: string | null;
   onChanged: () => void | Promise<unknown>;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const { hasPermission } = useAuth();
@@ -41,10 +42,10 @@ export default function DocumentationLegalHoldControl({ path, held, holdReason, 
 
   return <>
     <div className="flex flex-wrap items-center gap-3">
-      {held && <span className="badge-red flex items-center gap-1"><ShieldAlert size={14} />{t('documentationHold.active')}</span>}
+      {held && <span className="badge-red flex items-center gap-1" title={compact ? holdReason || undefined : undefined}><ShieldAlert size={14} />{t('documentationHold.active')}</span>}
       {hasPermission('retention.manage') && <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>{t(held ? 'documentationHold.release' : 'documentationHold.place')}</button>}
     </div>
-    {held && holdReason && <p className="text-sm text-red-700 whitespace-pre-wrap break-words">{holdReason}</p>}
+    {!compact && held && holdReason && <p className="text-sm text-red-700 whitespace-pre-wrap break-words">{holdReason}</p>}
     <Modal isOpen={open} onClose={close} title={t(held ? 'documentationHold.release' : 'documentationHold.place')}>
       <div className="space-y-4">
         <p className="text-sm text-gray-600">{t(held ? 'documentationHold.releaseHint' : 'documentationHold.placeHint')}</p>

@@ -229,10 +229,12 @@ export class BoxService {
       where: { id, tenantId, deletedAt: null, ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}) },
       include: {
         location: { select: { id: true, fullPath: true, code: true, name: true } },
+        retentionPolicy: { select: { jrwaCode: true, seriesLegalHold: true } },
         tenant: { select: { id: true, name: true, shortCode: true } },
         folders: {
           orderBy: { orderInBox: 'asc' },
           include: {
+            retentionPolicy: { select: { seriesLegalHold: true } },
             transferListItem: {
               include: {
                 transferList: { select: { id: true, listNumber: true, title: true } },
@@ -562,6 +564,7 @@ export class BoxService {
         boxNumber: true,
         status: true,
         legalHold: true,
+        retentionPolicy: { select: { seriesLegalHold: true } },
         locationId: true,
         _count: {
           select: {
@@ -593,7 +596,7 @@ export class BoxService {
       throw Object.assign(new Error('Nie znaleziono części wybranych kartonów lub nie masz do nich dostępu'), { statusCode: 404 });
     }
 
-    if (boxes.some((box) => box.legalHold)) {
+    if (boxes.some((box) => box.legalHold || box.retentionPolicy?.seriesLegalHold)) {
       throw Object.assign(new Error('Nie można usunąć kartonu objętego blokadą brakowania'), { statusCode: 409 });
     }
 
@@ -633,7 +636,11 @@ export class BoxService {
         where: { entityType: 'box', entityId: { in: uniqueIds } },
       });
       const deleted = await tx.box.updateMany({
-        where: { id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false, status: { notIn: ['pending_disposal', 'approved_disposal', 'disposed'] } },
+        where: {
+          id: { in: uniqueIds }, tenantId, deletedAt: null, legalHold: false,
+          status: { notIn: ['pending_disposal', 'approved_disposal', 'disposed'] },
+          OR: [{ retentionPolicyId: null }, { retentionPolicy: { is: { seriesLegalHold: false } } }],
+        },
         data: { deletedAt: new Date(), locationId: null },
       });
       if (deleted.count !== uniqueIds.length) {
@@ -644,7 +651,7 @@ export class BoxService {
         const currentCount = await tx.box.count({ where: { locationId, deletedAt: null, status: { not: 'disposed' } } });
         await tx.location.update({ where: { id: locationId }, data: { currentCount } });
       }
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     return { deleted: boxes.length };
   }

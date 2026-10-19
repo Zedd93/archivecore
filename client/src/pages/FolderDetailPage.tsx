@@ -25,7 +25,7 @@ interface FolderDetail {
   description: string | null;
   dateFrom: string | null;
   dateTo: string | null;
-  retentionPolicy: { jrwaCode: string | null; name: string; archivalCategory: string | null; retentionYears: number | null; jrwaVersion: { label: string } | null } | null;
+  retentionPolicy: { jrwaCode: string | null; name: string; archivalCategory: string | null; retentionYears: number | null; seriesLegalHold: boolean; jrwaVersion: { label: string } | null } | null;
   box: { id: string; boxNumber: string; legalHold: boolean; location: { fullPath: string } | null } | null;
   transferListItem: {
     id: string;
@@ -130,7 +130,7 @@ export default function FolderDetailPage() {
       </div>
 
       <DocumentationLegalHoldControl path={`/folders/${folder.id}`} held={folder.legalHold} holdReason={folder.legalHoldReason} onChanged={() => refetch()} />
-      {(folder.box?.legalHold || transferList?.legalHold) && <p className="text-sm text-red-700">{t('documentationHold.parentHeld')}</p>}
+      {(folder.box?.legalHold || transferList?.legalHold || folder.retentionPolicy?.seriesLegalHold) && <p className="text-sm text-red-700">{t('documentationHold.parentHeld')}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card space-y-4">

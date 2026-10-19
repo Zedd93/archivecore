@@ -58,6 +58,15 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
+  async setJrwaSeriesLegalHold(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await retentionService.setJrwaSeriesLegalHold(
+        req.params.id, req.tenantId || null, req.user!, req.body.hold, req.body.reason,
+      );
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
   async getPolicy(req: Request, res: Response, next: NextFunction) {
     try {
       const policy = await retentionService.getPolicy(req.params.id, req.tenantId || null);

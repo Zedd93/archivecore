@@ -364,6 +364,14 @@ export class TransferListService {
     return prisma.$transaction(async (tx) => {
       let folderId = item.folderId;
       if (folderId) {
+        const currentFolder = await tx.folder.findFirst({
+          where: { id: folderId, tenantId },
+          select: { retentionPolicyId: true, retentionPolicy: { select: { seriesLegalHold: true } } },
+        });
+        if (!currentFolder) throw Object.assign(new Error('Teczka nie znaleziona'), { statusCode: 404 });
+        if (currentFolder.retentionPolicyId !== selectedPolicyId && currentFolder.retentionPolicy?.seriesLegalHold) {
+          throw Object.assign(new Error('Nie można zmienić serii JRWA teczki objętej blokadą prawną'), { statusCode: 409 });
+        }
         await tx.folder.update({
           where: { id: folderId },
           data: this.getCanonicalFolderData(list, { ...data, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
@@ -386,7 +394,7 @@ export class TransferListService {
           folder: true,
         },
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   // ─── Delete item ───────────────────────────────────────
@@ -398,10 +406,12 @@ export class TransferListService {
       if (list.legalHold) throw Object.assign(new Error('Spis jest objęty blokadą prawną'), { statusCode: 409 });
       const item = await tx.transferListItem.findFirst({
         where: { id: itemId, transferListId: listId },
-        select: { id: true, box: { select: { legalHold: true } }, folder: { select: { legalHold: true, box: { select: { legalHold: true } }, documents: { where: { legalHold: true }, select: { id: true }, take: 1 } } } },
+        select: { id: true, box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } }, folder: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } }, box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } }, documents: { where: { legalHold: true }, select: { id: true }, take: 1 } } } },
       });
       if (!item) throw Object.assign(new Error('Pozycja spisu nie znaleziona'), { statusCode: 404 });
-      if (item.box?.legalHold || item.folder.box?.legalHold || item.folder.legalHold || item.folder.documents.length) {
+      if (item.box?.legalHold || item.box?.retentionPolicy?.seriesLegalHold
+        || item.folder.box?.legalHold || item.folder.box?.retentionPolicy?.seriesLegalHold
+        || item.folder.legalHold || item.folder.retentionPolicy?.seriesLegalHold || item.folder.documents.length) {
         throw Object.assign(new Error('Karton, teczka lub jej dokument jest objęty blokadą prawną'), { statusCode: 409 });
       }
       await tx.transferListItem.delete({ where: { id: itemId } });
@@ -466,8 +476,11 @@ export class TransferListService {
         id: { in: itemIds }, transferListId: listId,
         OR: [
           { box: { legalHold: true } },
+          { box: { retentionPolicy: { is: { seriesLegalHold: true } } } },
           { folder: { box: { legalHold: true } } },
+          { folder: { box: { retentionPolicy: { is: { seriesLegalHold: true } } } } },
           { folder: { legalHold: true } },
+          { folder: { retentionPolicy: { is: { seriesLegalHold: true } } } },
           { folder: { documents: { some: { legalHold: true } } } },
         ],
       } });

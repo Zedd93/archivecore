@@ -184,8 +184,8 @@ export class DocumentService {
         { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
       ] } : {}) },
       include: {
-        folder: { select: { id: true, folderNumber: true, title: true, boxId: true, legalHold: true, box: { select: { legalHold: true } }, transferListItem: { select: { transferList: { select: { legalHold: true } } } } } },
-        box: { select: { id: true, boxNumber: true, title: true, legalHold: true } },
+        folder: { select: { id: true, folderNumber: true, title: true, boxId: true, legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } }, box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } }, transferListItem: { select: { transferList: { select: { legalHold: true } }, box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } } } } } },
+        box: { select: { id: true, boxNumber: true, title: true, legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } },
         attachments: {
           select: { id: true, fileName: true, fileSize: true, mimeType: true, uploadedAt: true, version: true },
           orderBy: { version: 'desc' },
@@ -250,17 +250,23 @@ export class DocumentService {
         where: { id, tenantId },
         select: {
           legalHold: true,
-          box: { select: { legalHold: true } },
+          box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } },
           folder: { select: {
             legalHold: true,
-            box: { select: { legalHold: true } },
-            transferListItem: { select: { transferList: { select: { legalHold: true } } } },
+            retentionPolicy: { select: { seriesLegalHold: true } },
+            box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } },
+            transferListItem: { select: { transferList: { select: { legalHold: true } }, box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } } } },
           } },
         },
       });
       if (!document) throw Object.assign(new Error('Dokument nie znaleziony'), { statusCode: 404 });
-      if (document.legalHold || document.folder?.legalHold || document.folder?.box?.legalHold
-        || document.folder?.transferListItem?.transferList.legalHold || document.box?.legalHold) {
+      if (document.legalHold || document.folder?.legalHold || document.folder?.retentionPolicy?.seriesLegalHold
+        || document.folder?.box?.legalHold || document.folder?.box?.retentionPolicy?.seriesLegalHold
+        || document.folder?.transferListItem?.transferList.legalHold
+        || document.folder?.transferListItem?.box?.legalHold
+        || document.folder?.transferListItem?.box?.retentionPolicy?.seriesLegalHold
+        || document.box?.legalHold
+        || document.box?.retentionPolicy?.seriesLegalHold) {
         throw Object.assign(new Error('Nie można usunąć dokumentu objętego blokadą prawną'), { statusCode: 409 });
       }
       if (await tx.custodyEvent.count({ where: { documentId: id } })) {

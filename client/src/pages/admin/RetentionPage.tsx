@@ -10,6 +10,7 @@ import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
+import DocumentationLegalHoldControl from '@/components/retention/DocumentationLegalHoldControl';
 import toast from 'react-hot-toast';
 import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2, Download, Image } from 'lucide-react';
 
@@ -181,6 +182,15 @@ export default function RetentionPage() {
 
   const policyColumns: Column<any>[] = [
     { key: 'jrwaCode', header: t('admin.retention.jrwaCode'), render: (item) => item.jrwaCode ? <span className="font-mono font-medium">{item.jrwaCode}</span> : '—' },
+    { key: 'seriesHold', header: t('admin.retention.seriesHold'), render: (item) => item.jrwaCode && item.tenantId
+      ? <DocumentationLegalHoldControl
+          path={`/retention/policies/${item.id}/series`}
+          held={Boolean(item.seriesLegalHold)}
+          holdReason={item.seriesLegalHoldReason || null}
+          onChanged={() => queryClient.invalidateQueries({ queryKey: ['retention-policies'] })}
+          compact
+        />
+      : '—' },
     { key: 'jrwaVersion', header: t('admin.retention.jrwaVersion'), render: (item) => item.jrwaVersion
       ? <span>{item.jrwaVersion.label} ({item.jrwaVersion.validFrom.slice(0, 10)} – {item.jrwaVersion.validTo?.slice(0, 10) || '…'})</span>
       : item.jrwaCode ? t('admin.retention.jrwaLegacy') : '—' },
@@ -518,6 +528,7 @@ export default function RetentionPage() {
             </button>
           </div>
         </div>
+        <p className="text-sm text-gray-500 mb-3">{t('admin.retention.seriesHoldHint')}</p>
         <DataTable columns={policyColumns} data={visiblePolicies} isLoading={polLoading} emptyMessage={t('admin.retention.noPolicies')} />
       </div>}
 

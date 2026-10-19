@@ -48,7 +48,7 @@ const REVERSIBLE_DELETE_ACTIONS = new Set([
   'transfer_list_item.delete',
 ]);
 
-const SYSTEM_FIELDS = new Set(['createdAt', 'updatedAt', 'legalHold', 'legalHoldReason', 'legalHoldAt', 'litigationHold', 'litigationHoldUntil', 'litigationNotes']);
+const SYSTEM_FIELDS = new Set(['createdAt', 'updatedAt', 'legalHold', 'legalHoldReason', 'legalHoldAt', 'seriesLegalHold', 'seriesLegalHoldReason', 'seriesLegalHoldAt', 'litigationHold', 'litigationHoldUntil', 'litigationNotes']);
 
 function getDelegate(entityType: string): any | null {
   const delegateName = ENTITY_DELEGATES[entityType];
@@ -142,16 +142,21 @@ async function ensureRevertIsNotHeld(entityType: string, entityId: string) {
   if (entityType === 'box') {
     held = Boolean(await prisma.box.findFirst({ where: { id: entityId, OR: [
       { legalHold: true },
+      { retentionPolicy: { is: { seriesLegalHold: true } } },
       { folders: { some: { legalHold: true } } },
+      { folders: { some: { retentionPolicy: { is: { seriesLegalHold: true } } } } },
       { folders: { some: { documents: { some: { legalHold: true } } } } },
       { folders: { some: { transferListItem: { is: { transferList: { legalHold: true } } } } } },
       { documents: { some: { legalHold: true } } },
       { transferListItems: { some: { transferList: { legalHold: true } } } },
+      { transferListItems: { some: { folder: { retentionPolicy: { is: { seriesLegalHold: true } } } } } },
     ] }, select: { id: true } }));
   } else if (entityType === 'folder') {
     held = Boolean(await prisma.folder.findFirst({ where: { id: entityId, OR: [
       { legalHold: true },
+      { retentionPolicy: { is: { seriesLegalHold: true } } },
       { box: { is: { legalHold: true } } },
+      { box: { is: { retentionPolicy: { is: { seriesLegalHold: true } } } } },
       { documents: { some: { legalHold: true } } },
       { transferListItem: { is: { transferList: { legalHold: true } } } },
     ] }, select: { id: true } }));
@@ -159,24 +164,37 @@ async function ensureRevertIsNotHeld(entityType: string, entityId: string) {
     held = Boolean(await prisma.document.findFirst({ where: { id: entityId, OR: [
       { legalHold: true },
       { box: { is: { legalHold: true } } },
+      { box: { is: { retentionPolicy: { is: { seriesLegalHold: true } } } } },
       { folder: { is: { legalHold: true } } },
+      { folder: { is: { retentionPolicy: { is: { seriesLegalHold: true } } } } },
       { folder: { is: { box: { is: { legalHold: true } } } } },
+      { folder: { is: { box: { is: { retentionPolicy: { is: { seriesLegalHold: true } } } } } } },
       { folder: { is: { transferListItem: { is: { transferList: { legalHold: true } } } } } },
+      { folder: { is: { transferListItem: { is: { box: { legalHold: true } } } } } },
+      { folder: { is: { transferListItem: { is: { box: { retentionPolicy: { is: { seriesLegalHold: true } } } } } } } },
     ] }, select: { id: true } }));
   } else if (entityType === 'transfer_list') {
     held = Boolean(await prisma.transferList.findFirst({ where: { id: entityId, OR: [
       { legalHold: true },
       { items: { some: { folder: { legalHold: true } } } },
+      { items: { some: { folder: { retentionPolicy: { is: { seriesLegalHold: true } } } } } },
       { items: { some: { folder: { documents: { some: { legalHold: true } } } } } },
     ] }, select: { id: true } }));
   } else if (entityType === 'transfer_list_item') {
     held = Boolean(await prisma.transferListItem.findFirst({ where: { id: entityId, OR: [
       { transferList: { legalHold: true } },
       { folder: { legalHold: true } },
+      { folder: { retentionPolicy: { is: { seriesLegalHold: true } } } },
       { folder: { documents: { some: { legalHold: true } } } },
       { box: { legalHold: true } },
+      { box: { retentionPolicy: { is: { seriesLegalHold: true } } } },
       { folder: { box: { legalHold: true } } },
+      { folder: { box: { retentionPolicy: { is: { seriesLegalHold: true } } } } },
     ] }, select: { id: true } }));
+  } else if (entityType === 'retention_policy') {
+    held = Boolean(await prisma.retentionPolicy.findFirst({
+      where: { id: entityId, seriesLegalHold: true }, select: { id: true },
+    }));
   }
   if (held) throw Object.assign(new Error('Nie można cofnąć zdarzenia dotyczącego dokumentacji objętej blokadą prawną'), { statusCode: 409 });
 }

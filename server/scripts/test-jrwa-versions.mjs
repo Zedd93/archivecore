@@ -32,6 +32,11 @@ test('new version copies rows and closes prior validity without editing old poli
       update: async ({ where, data }) => { calls.push(['closeVersion', where, data]); },
     },
     retentionPolicy: {
+      findMany: async ({ where }) => {
+        assert.equal(where.tenantId, tenantId);
+        assert.deepEqual(where.jrwaCode.in, ['1234']);
+        return [{ jrwaCode: '1234', seriesLegalHoldReason: 'Postepowanie sadowe', seriesLegalHoldAt: new Date('2025-03-01T00:00:00Z') }];
+      },
       createMany: async ({ data }) => { calls.push(['createPolicies', data]); return { count: data.length }; },
       update: async () => { throw new Error('Old policy must never be updated'); },
     },
@@ -45,6 +50,78 @@ test('new version copies rows and closes prior validity without editing old poli
     assert.equal(calls[0][1].tenantId, tenantId);
     assert.equal(calls[1][2].validTo.toISOString().slice(0, 10), '2025-12-31');
     assert.equal(calls[2][1][0].jrwaVersionId, 'new-version');
+    assert.equal(calls[2][1][0].seriesLegalHold, true);
+    assert.equal(calls[2][1][0].seriesLegalHoldReason, 'Postepowanie sadowe');
+  } finally {
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('placing a JRWA series hold updates every version, withdraws pending boxes and audits the change', async () => {
+  const service = new RetentionService();
+  const originalTransaction = prisma.$transaction;
+  const calls = [];
+  prisma.$transaction = async (fn) => fn({
+    retentionPolicy: {
+      findUnique: async () => ({ tenantId, jrwaCode: '1234' }),
+      findFirst: async () => null,
+      updateMany: async ({ where, data }) => { calls.push(['policies', where, data]); return { count: 2 }; },
+    },
+    box: {
+      updateMany: async ({ where, data }) => { calls.push(['boxes', where, data]); return { count: 3 }; },
+    },
+    auditLog: { create: async ({ data }) => { calls.push(['audit', data]); return data; } },
+  });
+  try {
+    const result = await service.setJrwaSeriesLegalHold('policy-id', tenantId, actor, true, 'Postepowanie sadowe');
+    assert.equal(result.withdrawnBoxes, 3);
+    assert.deepEqual(calls[0][1], { tenantId, jrwaCode: '1234' });
+    assert.equal(calls[0][2].seriesLegalHold, true);
+    assert.equal(calls[1][1].tenantId, tenantId);
+    assert.deepEqual(calls[1][1].status.in, ['pending_disposal', 'approved_disposal']);
+    assert.equal(calls[1][1].OR.length, 3);
+    assert.deepEqual(calls[1][2], { status: 'active' });
+    assert.equal(calls[2][1].action, 'legal_hold.placed');
+    assert.equal(calls[2][1].newValues.jrwaCode, '1234');
+  } finally {
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('releasing a JRWA series hold does not restart disposal', async () => {
+  const service = new RetentionService();
+  const originalTransaction = prisma.$transaction;
+  let boxUpdate = false;
+  prisma.$transaction = async (fn) => fn({
+    retentionPolicy: {
+      findUnique: async () => ({ tenantId, jrwaCode: '1234' }),
+      findFirst: async () => ({ seriesLegalHoldReason: 'Postepowanie sadowe' }),
+      updateMany: async ({ data }) => { assert.equal(data.seriesLegalHold, false); return { count: 2 }; },
+    },
+    box: { updateMany: async () => { boxUpdate = true; throw new Error('Must not restart disposal'); } },
+    auditLog: { create: async () => ({}) },
+  });
+  try {
+    const result = await service.setJrwaSeriesLegalHold('policy-id', tenantId, actor, false, 'Sprawa zakonczona');
+    assert.equal(result.withdrawnBoxes, 0);
+    assert.equal(boxUpdate, false);
+  } finally {
+    prisma.$transaction = originalTransaction;
+  }
+});
+
+test('JRWA series hold cannot cross tenant boundaries', async () => {
+  const service = new RetentionService();
+  const originalTransaction = prisma.$transaction;
+  prisma.$transaction = async (fn) => fn({
+    retentionPolicy: {
+      findUnique: async () => ({ tenantId, jrwaCode: '1234' }),
+      findFirst: async () => { throw new Error('Must not read another tenant series'); },
+    },
+  });
+  try {
+    const tenantActor = { userId: 'user', tenantId: 'other', roles: [], permissions: ['retention.manage'] };
+    await assert.rejects(service.setJrwaSeriesLegalHold('policy-id', 'other', tenantActor, true, 'Postepowanie sadowe'), { statusCode: 403 });
   } finally {
     prisma.$transaction = originalTransaction;
   }
