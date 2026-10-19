@@ -1,6 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
 const { prisma } = require('../dist/config/database.js');
@@ -10,7 +11,8 @@ const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
 const { parseDisposalConfirmation, buildDisposalConfirmationPdf } = require('../dist/modules/retention/disposal-confirmation.js');
 const { boxLegalHoldSchema, changeBoxStatusSchema, bulkBoxStatusSchema } = require('../../shared/src/validators/box.schema.ts');
-const { approveDisposalSchema, rejectDisposalSchema, completeDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema } = require('../../shared/src/validators/retention.schema.ts');
+const { approveDisposalSchema, secondApproveDisposalSchema, rejectDisposalSchema, completeDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema } = require('../../shared/src/validators/retention.schema.ts');
+const { DISPOSAL_FOUR_EYES_THRESHOLD } = require('../../shared/dist/index.js');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
@@ -44,6 +46,8 @@ test('holding a box cancels pending disposal in the same transaction', async () 
     assert.equal(updates[1].data.status, 'active');
     assert.equal(updates[1].data.apDecision, null);
     assert.equal(updates[1].data.disposalReviewedAt, null);
+    assert.equal(updates[1].data.disposalFourEyesRequired, false);
+    assert.equal(updates[1].data.disposalFirstApprovedById, null);
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -273,6 +277,8 @@ test('starting disposal submits only due, eligible boxes and notifies reviewers'
         assert.ok(where.retentionDate.lte instanceof Date);
         assert.equal(where.retentionPolicy.is.isPermanent, false);
         assert.equal(data.status, 'pending_disposal');
+        assert.equal(data.disposalFourEyesRequired, false);
+        assert.ok(data.disposalProposalBatchId);
         assert.equal(data.notes, undefined);
         return { count: 1 };
       } },
@@ -292,6 +298,33 @@ test('starting disposal submits only due, eligible boxes and notifies reviewers'
     assert.equal(audits.length, 1);
     assert.equal(audits[0].userId, proposerId);
     assert.equal(audits[0].action, 'disposal.proposed');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('the proposal size is saved so splitting later approvals cannot avoid four eyes', async () => {
+  assert.equal(DISPOSAL_FOUR_EYES_THRESHOLD, 10);
+  const service = new RetentionService();
+  const writes = [];
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: { updateMany: async ({ where, data }) => {
+        writes.push(data);
+        return { count: where.id.in.length };
+      } },
+      auditLog: { createMany: async () => {} },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async () => {}),
+  ];
+  try {
+    const nine = Array.from({ length: 9 }, () => randomUUID());
+    const ten = [...nine, randomUUID()];
+    assert.equal((await service.initiateDisposal(tenantId, nine, proposerId)).fourEyesRequired, false);
+    assert.equal((await service.initiateDisposal(tenantId, ten, proposerId)).fourEyesRequired, true);
+    assert.equal(writes[0].disposalFourEyesRequired, false);
+    assert.equal(writes[1].disposalFourEyesRequired, true);
+    assert.notEqual(writes[0].disposalProposalBatchId, writes[1].disposalProposalBatchId);
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -335,6 +368,7 @@ test('archives decision requires a real record or Super Admin justification', as
       assert.equal(where.tenantId, tenantId);
       assert.equal(where.status, 'approved_disposal');
       assert.equal(where.apDecision, null);
+      assert.deepEqual(where.OR, [{ disposalFourEyesRequired: false }, { disposalSecondApprovedAt: { not: null } }]);
       assert.equal(data.apDecision, 'consent_received');
       assert.equal(data.apDecisionReference, 'AP-1');
       assert.equal(data.apDecisionDate.toISOString().slice(0, 10), '2026-10-10');
@@ -377,8 +411,10 @@ test('client approval records a decision without changing occupancy', async () =
           assert.equal(where.status, 'pending_disposal');
           assert.deepEqual(where.disposalReviewedAt, { not: null });
           assert.equal(data.status, 'approved_disposal');
+          assert.equal(data.disposalFirstApprovedById, approver.userId);
           return { count: 2 };
         },
+        count: async () => 0,
       },
       auditLog: {
         findMany: async () => [{ entityId: boxId, userId: proposerId }, { entityId: secondBoxId, userId: proposerId }],
@@ -394,6 +430,87 @@ test('client approval records a decision without changing occupancy', async () =
     assert.deepEqual(locations, []);
     assert.equal(audits.length, 2);
     assert.equal(audits[0].action, 'disposal.client_approved');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('first approval of a large proposal notifies a second client approver, not disposal operators', async () => {
+  const service = new RetentionService();
+  const notifications = [];
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: {
+        updateMany: async () => ({ count: 1 }),
+        count: async ({ where }) => {
+          assert.equal(where.disposalFourEyesRequired, true);
+          return 1;
+        },
+      },
+      auditLog: {
+        findMany: async () => [{ entityId: boxId, userId: proposerId }],
+        createMany: async () => {},
+      },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async (input) => { notifications.push(input); }),
+  ];
+  try {
+    assert.equal((await service.approveDisposal(tenantId, [boxId], approver)).count, 1);
+    assert.equal(notifications.length, 1);
+    assert.deepEqual(notifications[0].requiredPermissions, ['disposal.approve']);
+    assert.deepEqual(notifications[0].excludeUserIds, [approver.userId]);
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('second client approval rejects both prior actors and records a distinct approver', async () => {
+  const service = new RetentionService();
+  const audits = [];
+  const secondApprover = { ...approver, userId: randomUUID() };
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: {
+        findMany: async ({ where }) => {
+          assert.equal(where.tenantId, tenantId);
+          assert.equal(where.disposalFourEyesRequired, true);
+          assert.equal(where.disposalSecondApprovedAt, null);
+          return [{ id: boxId, disposalFirstApprovedById: approver.userId }];
+        },
+        updateMany: async ({ where, data }) => {
+          assert.deepEqual(where.disposalFirstApprovedById, { not: secondApprover.userId });
+          assert.equal(data.disposalSecondApprovedById, secondApprover.userId);
+          return { count: 1 };
+        },
+      },
+      auditLog: {
+        findMany: async () => [{ entityId: boxId, userId: proposerId }],
+        createMany: async ({ data }) => { audits.push(...data); },
+      },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async () => {}),
+  ];
+  try {
+    await assert.rejects(service.secondApproveDisposal(tenantId, [boxId], approver), { statusCode: 409 });
+    await assert.rejects(service.secondApproveDisposal(tenantId, [boxId], { ...approver, userId: proposerId }), { statusCode: 409 });
+    assert.equal((await service.secondApproveDisposal(tenantId, [boxId], secondApprover)).count, 1);
+    assert.equal(audits[0].action, 'disposal.client_second_approved');
+    assert.equal(audits[0].userId, secondApprover.userId);
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('AP decision cannot be recorded for a large proposal before the second approval', async () => {
+  const service = new RetentionService();
+  const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
+    box: { updateMany: async ({ where }) => {
+      assert.deepEqual(where.OR, [{ disposalFourEyesRequired: false }, { disposalSecondApprovedAt: { not: null } }]);
+      return { count: 0 };
+    } },
+  }))];
+  try {
+    await assert.rejects(service.recordApDecision(tenantId, [boxId], { ...approver, roles: ['SA'] }, 'consent_received', 'AP-1', '2026-10-10'), { statusCode: 409 });
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -433,6 +550,7 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
         findMany: async ({ where }) => {
           assert.equal(where.status, 'approved_disposal');
           assert.deepEqual(where.apDecision, { not: null });
+          assert.deepEqual(where.OR, [{ disposalFourEyesRequired: false }, { disposalSecondApprovedAt: { not: null } }]);
           return [
             { id: boxId, locationId, boxNumber: 'K-1', title: 'Teczki Łódź', apDecision: 'consent_received', apDecisionReference: 'AP-1', apDecisionDate: new Date('2026-10-10'), apDecisionReason: null, location: { fullPath: 'Magazyn / Regał 1' } },
             { id: secondBoxId, locationId, boxNumber: 'K-2', title: 'Akta', apDecision: 'not_required', apDecisionReference: null, apDecisionDate: null, apDecisionReason: 'Dokumentacja prywatna', location: { fullPath: 'Magazyn / Regał 1' } },
@@ -543,6 +661,7 @@ test('disposal decisions require a reason, protocol and explicit confirmation', 
   assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'not_required', reason: 'Dokumentacja prywatna' }).success, true);
   assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'not_required', reason: 'x' }).success, false);
   assert.equal(approveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
+  assert.equal(secondApproveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Nie' }).success, false);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: false }).success, false);

@@ -212,6 +212,15 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
+  async secondApproveDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      return successResponse(res, await retentionService.secondApproveDisposal(
+        req.tenantId, req.body.boxIds, req.user!, req.body.notes,
+      ));
+    } catch (err) { next(err); }
+  }
+
   async rejectDisposal(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

@@ -551,6 +551,11 @@ model Box {
   disposalReviewedAt DateTime?
   disposalReviewedById String? @db.Uuid
   disposalReviewNotes String? @db.Text
+  disposalProposalBatchId String? @db.Uuid
+  disposalFourEyesRequired Boolean @default(false)
+  disposalFirstApprovedById String? @db.Uuid
+  disposalSecondApprovedById String? @db.Uuid
+  disposalSecondApprovedAt DateTime?
   apDecision ApDisposalDecision?
   apDecisionReference String? @db.VarChar(200)
   apDecisionDate DateTime? @db.Date
@@ -589,6 +594,7 @@ model Box {
   @@index([barcode])
   @@index([boxNumber])
   @@index([retentionDate])
+  @@index([disposalProposalBatchId])
   @@index([docType])
   @@map("boxes")
 }

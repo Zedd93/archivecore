@@ -53,6 +53,8 @@ export const approveDisposalSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
+export const secondApproveDisposalSchema = approveDisposalSchema;
+
 export const rejectDisposalSchema = z.object({
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
   reason: z.string().trim().min(5, 'Podaj powód odrzucenia').max(1000),

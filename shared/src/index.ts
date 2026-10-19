@@ -17,6 +17,7 @@ export * from './types/search';
 export * from './constants/roles';
 export * from './constants/permissions';
 export * from './constants/statuses';
+export * from './constants/retention';
 export * from './constants/sla';
 export * from './constants/pricing';
 
