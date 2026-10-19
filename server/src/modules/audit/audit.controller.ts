@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { auditService } from './audit.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { sanitizeAuditValues } from '../../middleware/audit';
 
 export class AuditController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -9,14 +10,23 @@ export class AuditController {
       const { skip, take, page, limit } = parsePagination(req.query as any);
       const tenantId = req.tenantId || null;
       const { data, total } = await auditService.list(tenantId, req.query, skip, take);
-      return paginatedResponse(res, data, total, page, limit);
+      return paginatedResponse(res, data.map((log) => ({
+        ...log,
+        oldValues: log.oldValues === null ? null : sanitizeAuditValues(log.oldValues),
+        newValues: log.newValues === null ? null : sanitizeAuditValues(log.newValues),
+      })), total, page, limit);
     } catch (err) { next(err); }
   }
 
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const log = await auditService.getById(req.params.id);
-      return successResponse(res, log);
+      if (req.tenantId && log.tenantId !== req.tenantId) return errorResponse(res, 'Log nie znaleziony', 404);
+      return successResponse(res, {
+        ...log,
+        oldValues: log.oldValues === null ? null : sanitizeAuditValues(log.oldValues),
+        newValues: log.newValues === null ? null : sanitizeAuditValues(log.newValues),
+      });
     } catch (err) { next(err); }
   }
 

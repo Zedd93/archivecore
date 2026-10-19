@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
 import StatusBadge from '@/components/ui/StatusBadge';
 import DocumentationLegalHoldControl from '@/components/retention/DocumentationLegalHoldControl';
+import SignaturePad from '@/components/ui/SignaturePad';
 import toast from 'react-hot-toast';
 import { Plus, Clock, AlertTriangle, Loader2, Upload, FileText, CheckCircle2, Download, Image } from 'lucide-react';
 
@@ -47,6 +48,8 @@ export default function RetentionPage() {
   const [protocolReference, setProtocolReference] = useState('');
   const [methodDescription, setMethodDescription] = useState('');
   const [weightKg, setWeightKg] = useState('');
+  const [standardReference, setStandardReference] = useState('');
+  const [signatureData, setSignatureData] = useState<string | null>(null);
   const [executionNote, setExecutionNote] = useState('');
   const [completionConfirmed, setCompletionConfirmed] = useState(false);
   const [decisionSubmitting, setDecisionSubmitting] = useState(false);
@@ -260,15 +263,15 @@ export default function RetentionPage() {
         : '—' },
   ];
 
-  const downloadConfirmation = async (id: string) => {
+  const downloadConfirmation = async (id: string, kind: 'protocol' | 'certificate') => {
     if (downloadingConfirmation) return;
     setDownloadingConfirmation(id);
     try {
-      const { data } = await api.get(`/retention/disposal/completed/${encodeURIComponent(id)}/pdf`, { responseType: 'blob' });
+      const { data } = await api.get(`/retention/disposal/completed/${encodeURIComponent(id)}/${kind}.pdf`, { responseType: 'blob' });
       const url = URL.createObjectURL(data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `archivecore-brakowanie-${id}.pdf`;
+      link.download = `archivecore-${kind}-${id}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -327,7 +330,7 @@ export default function RetentionPage() {
     { key: 'protocolReference', header: t('admin.retention.disposal.protocolReference') },
     { key: 'boxCount', header: t('boxes.title') },
     { key: 'completedBy', header: t('admin.retention.disposal.completedBy') },
-    { key: 'download', header: t('admin.retention.disposal.confirmation'), render: (item) => <div className="flex flex-wrap gap-2"><button type="button" className="btn-secondary text-xs" disabled={downloadingConfirmation === item.id} onClick={() => downloadConfirmation(item.id)}><Download size={14} />{t('admin.retention.disposal.download')}</button><button type="button" className="btn-secondary text-xs" onClick={() => setEvidenceBatchId(item.id)}><Image size={14} />{t('admin.retention.disposal.evidence')}</button></div> },
+    { key: 'download', header: t('admin.retention.disposal.confirmation'), render: (item) => <div className="flex flex-wrap gap-2"><button type="button" className="btn-secondary text-xs" disabled={downloadingConfirmation === item.id} onClick={() => downloadConfirmation(item.id, 'protocol')}><Download size={14} />{t('admin.retention.disposal.downloadProtocol')}</button><button type="button" className="btn-secondary text-xs" disabled={downloadingConfirmation === item.id} onClick={() => downloadConfirmation(item.id, 'certificate')}><Download size={14} />{t('admin.retention.disposal.downloadCertificate')}</button><button type="button" className="btn-secondary text-xs" onClick={() => setEvidenceBatchId(item.id)}><Image size={14} />{t('admin.retention.disposal.evidence')}</button></div> },
   ];
 
   const handleCreatePolicy = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -446,11 +449,11 @@ export default function RetentionPage() {
     if (disposalAction === 'ap-decision' && (apDecision === 'consent_received'
       ? apReference.trim().length < 3 || !apDate
       : decisionText.trim().length < 10)) return;
-    if (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed)) return;
+    if (disposalAction === 'complete' && (protocolReference.trim().length < 3 || methodDescription.trim().length < 3 || standardReference.trim().length < 3 || !signatureData || !completionConfirmed)) return;
     const parsedWeight = weightKg.trim() ? Number(weightKg) : undefined;
     if (disposalAction === 'complete' && (
-      (methodDescription.trim().length > 0 && methodDescription.trim().length < 3) ||
-      (parsedWeight !== undefined && (!Number.isFinite(parsedWeight) || parsedWeight <= 0 || parsedWeight > 100000))
+      parsedWeight === undefined || !Number.isFinite(parsedWeight) || parsedWeight <= 0 || parsedWeight > 100000 ||
+      signatureData!.length > 170_000
     )) {
       toast.error(t('admin.retention.disposal.invalidExecutionDetails'));
       return;
@@ -468,8 +471,10 @@ export default function RetentionPage() {
           : { decision: apDecision, reason: decisionText.trim() } : {}),
         ...(disposalAction === 'complete' ? {
           protocolReference: protocolReference.trim(),
-          ...(methodDescription.trim() ? { methodDescription: methodDescription.trim() } : {}),
-          ...(parsedWeight !== undefined ? { weightKg: parsedWeight } : {}),
+          methodDescription: methodDescription.trim(),
+          weightKg: parsedWeight,
+          standardReference: standardReference.trim(),
+          signatureData,
           ...(executionNote.trim() ? { executionNote: executionNote.trim() } : {}),
           confirmed: true,
         } : {}),
@@ -483,6 +488,8 @@ export default function RetentionPage() {
       setProtocolReference('');
       setMethodDescription('');
       setWeightKg('');
+      setStandardReference('');
+      setSignatureData(null);
       setExecutionNote('');
       setCompletionConfirmed(false);
       setDisposalAction(null);
@@ -504,6 +511,11 @@ export default function RetentionPage() {
     } finally {
       setDecisionSubmitting(false);
     }
+  };
+
+  const closeDisposalModal = () => {
+    setDisposalAction(null);
+    setSignatureData(null);
   };
 
   return (
@@ -660,7 +672,7 @@ export default function RetentionPage() {
         </div>
       </Modal>
 
-      {disposalAction && <Modal isOpen onClose={() => setDisposalAction(null)} title={t(`admin.retention.disposal.${disposalAction}Title`)} size="md">
+      {disposalAction && <Modal isOpen onClose={closeDisposalModal} title={t(`admin.retention.disposal.${disposalAction}Title`)} size="md">
         <div className="space-y-4">
           <p className="text-sm text-gray-700">{t(`admin.retention.disposal.${disposalAction}Hint`, { count: ['complete', 'ap-decision', 'second-approve', 'withdraw'].includes(disposalAction) ? selectedApprovedIds.size : selectedPendingIds.size })}</p>
           {disposalAction === 'complete' ? <>
@@ -669,13 +681,18 @@ export default function RetentionPage() {
               <input id="disposal-protocol" className="input-field" value={protocolReference} onChange={(e) => setProtocolReference(e.target.value)} maxLength={200} />
             </div>
             <div>
-              <label htmlFor="disposal-method" className="label-text">{t('admin.retention.disposal.methodDescription')}</label>
+              <label htmlFor="disposal-method" className="label-text">{t('admin.retention.disposal.methodDescription')} *</label>
               <input id="disposal-method" className="input-field" value={methodDescription} onChange={(e) => setMethodDescription(e.target.value)} maxLength={200} />
             </div>
             <div>
-              <label htmlFor="disposal-weight" className="label-text">{t('admin.retention.disposal.weightKg')}</label>
+              <label htmlFor="disposal-weight" className="label-text">{t('admin.retention.disposal.weightKg')} *</label>
               <input id="disposal-weight" type="number" min="0.01" max="100000" step="any" className="input-field" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} />
             </div>
+            <div>
+              <label htmlFor="disposal-standard" className="label-text">{t('admin.retention.disposal.standardReference')} *</label>
+              <input id="disposal-standard" className="input-field" value={standardReference} onChange={(e) => setStandardReference(e.target.value)} maxLength={200} />
+            </div>
+            <SignaturePad onChange={setSignatureData} disabled={decisionSubmitting} label={t('admin.retention.disposal.signature')} canvasLabel={t('admin.retention.disposal.signatureCanvas')} hint={t('admin.retention.disposal.signatureHint')} />
             <div>
               <label htmlFor="disposal-execution-note" className="label-text">{t('admin.retention.disposal.executionNote')}</label>
               <textarea id="disposal-execution-note" className="input-field" rows={2} maxLength={1000} value={executionNote} onChange={(e) => setExecutionNote(e.target.value)} />
@@ -704,8 +721,8 @@ export default function RetentionPage() {
             <textarea id="disposal-decision-text" className="input-field" value={decisionText} onChange={(e) => setDecisionText(e.target.value)} rows={3} maxLength={1000} />
           </div>}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-            <button type="button" className="btn-secondary" onClick={() => setDisposalAction(null)}>{t('common.cancel')}</button>
-            <button type="button" className="btn-primary" onClick={handleDisposalDecision} disabled={decisionSubmitting || (['reject', 'review', 'withdraw'].includes(disposalAction) && decisionText.trim().length < 5) || (disposalAction === 'ap-decision' && (apDecision === 'consent_received' ? apReference.trim().length < 3 || !apDate : decisionText.trim().length < 10)) || (disposalAction === 'complete' && (protocolReference.trim().length < 3 || !completionConfirmed))}>
+            <button type="button" className="btn-secondary" onClick={closeDisposalModal}>{t('common.cancel')}</button>
+            <button type="button" className="btn-primary" onClick={handleDisposalDecision} disabled={decisionSubmitting || (['reject', 'review', 'withdraw'].includes(disposalAction) && decisionText.trim().length < 5) || (disposalAction === 'ap-decision' && (apDecision === 'consent_received' ? apReference.trim().length < 3 || !apDate : decisionText.trim().length < 10)) || (disposalAction === 'complete' && (protocolReference.trim().length < 3 || methodDescription.trim().length < 3 || standardReference.trim().length < 3 || !weightKg.trim() || !signatureData || !completionConfirmed))}>
               {decisionSubmitting ? t('common.processing') : t(`admin.retention.disposal.${disposalAction}Confirm`)}
             </button>
           </div>

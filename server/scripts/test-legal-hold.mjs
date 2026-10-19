@@ -2,6 +2,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { prisma } = require('../dist/config/database.js');
@@ -20,6 +21,8 @@ const secondBoxId = '14a504c7-4864-4027-a02c-685201fb38f8';
 const locationId = '08675a3a-8a69-477a-82f1-b52d74b97bde';
 const proposerId = '0ab09ae1-75cb-4e65-9342-8b613196271f';
 const approver = { userId: 'c79989bc-eaeb-4a24-824b-5aef5453b90d', tenantId, roles: ['TL'], permissions: ['disposal.approve'] };
+const signatureData = `data:image/png;base64,${readFileSync(new URL('../../client/public/icons/icon-192.png', import.meta.url)).toString('base64')}`;
+const executionDetails = { methodDescription: 'Niszczenie mechaniczne', weightKg: 12.5, standardReference: 'DIN 66399 P-5', signatureData };
 
 test('legal hold requires a meaningful reason when enabled', () => {
   assert.equal(boxLegalHoldSchema.safeParse({ hold: true, reason: 'Spór sądowy' }).success, true);
@@ -598,7 +601,7 @@ test('physical disposal is refused before the seven-day window closes', async ()
     folder: { updateMany: async () => { throw new Error('Folders must not change'); } },
   }))];
   try {
-    await assert.rejects(service.completeDisposal(tenantId, [boxId], proposerId, 'PROT-1'),
+    await assert.rejects(service.completeDisposal(tenantId, [boxId], proposerId, 'PROT-1', executionDetails),
       { statusCode: 409, message: /7-dniowy okres/ });
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
@@ -628,7 +631,7 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
       },
       folder: { updateMany: async (args) => { folders.push(args); } },
       location: { update: async (args) => { locations.push(args); } },
-      tenant: { findUnique: async () => ({ name: 'Spółdzielnia Łódź' }) },
+      tenant: { findUnique: async () => ({ name: 'Spółdzielnia Łódź', nip: '1234567890', address: 'Łódź' }) },
       user: { findUnique: async () => ({ firstName: 'Anna', lastName: 'Nowak' }) },
       auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
     })),
@@ -636,7 +639,7 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
   ];
   try {
     const result = await service.completeDisposal(tenantId, [boxId, secondBoxId], proposerId, 'PROT-2026-1', {
-      methodDescription: 'Niszczenie mechaniczne', weightKg: 12.5, executionNote: 'Przekazano do zniszczenia',
+      ...executionDetails, executionNote: 'Przekazano do zniszczenia',
     });
     assert.equal(result.count, 2);
     assert.deepEqual(locations, [{ where: { id: locationId }, data: { currentCount: 0 } }]);
@@ -655,6 +658,9 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
     assert.equal(audits[2].newValues.completedByName, 'Anna Nowak');
     assert.equal(audits[2].newValues.methodDescription, 'Niszczenie mechaniczne');
     assert.equal(audits[2].newValues.weightKg, 12.5);
+    assert.equal(audits[2].newValues.standardReference, 'DIN 66399 P-5');
+    assert.equal(audits[2].newValues.signatureData, signatureData);
+    assert.equal(audits[2].newValues.tenantNip, '1234567890');
     assert.equal(audits[2].newValues.executionNote, 'Przekazano do zniszczenia');
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
@@ -717,6 +723,8 @@ test('older disposal confirmations remain readable without execution details', (
   assert.equal(confirmation.completedBy, 'Jan Kowalski');
   assert.equal(confirmation.methodDescription, null);
   assert.equal(confirmation.weightKg, null);
+  assert.equal(confirmation.standardReference, null);
+  assert.equal(confirmation.signatureData, null);
   assert.equal(confirmation.executionNote, null);
 });
 
@@ -734,10 +742,11 @@ test('disposal decisions require a reason, protocol and explicit confirmation', 
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Nie' }).success, false);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: false }).success, false);
-  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true }).success, true);
-  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, methodDescription: 'Niszczenie', weightKg: 12.5 }).success, true);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true }).success, false);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, ...executionDetails }).success, true);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, weightKg: 0 }).success, false);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, methodDescription: 'x' }).success, false);
+  assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: true, ...executionDetails, signatureData: 'data:image/png;base64,broken!' }).success, false);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: Array(501).fill(boxId), protocolReference: 'P-1', confirmed: true }).success, false);
 });
 

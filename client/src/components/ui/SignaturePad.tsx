@@ -4,9 +4,12 @@ import { useTranslation } from 'react-i18next';
 interface Props {
   onChange: (image: string | null) => void;
   disabled?: boolean;
+  label?: string;
+  hint?: string;
+  canvasLabel?: string;
 }
 
-export default function SignaturePad({ onChange, disabled = false }: Props) {
+export default function SignaturePad({ onChange, disabled = false, label, hint, canvasLabel }: Props) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
@@ -74,12 +77,12 @@ export default function SignaturePad({ onChange, disabled = false }: Props) {
   };
 
   return <div className="space-y-2">
-    <p className="label-text">{t('orders.detail.signature')}</p>
-    <canvas ref={canvasRef} width={600} height={180} role="img" aria-label={t('orders.detail.signatureCanvas')}
+    <p className="label-text">{label || t('orders.detail.signature')}</p>
+    <canvas ref={canvasRef} width={600} height={180} role="img" aria-label={canvasLabel || t('orders.detail.signatureCanvas')}
       className="w-full h-36 rounded-lg border border-gray-300 bg-white touch-none cursor-crosshair"
       onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} />
     <div className="flex items-center justify-between gap-3">
-      <p className="text-xs text-gray-500">{t('orders.detail.signatureHint')}</p>
+      <p className="text-xs text-gray-500">{hint || t('orders.detail.signatureHint')}</p>
       <button type="button" className="btn-secondary text-xs shrink-0" disabled={!hasSignature || disabled} onClick={clear}>{t('orders.detail.clearSignature')}</button>
     </div>
   </div>;

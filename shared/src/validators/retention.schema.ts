@@ -68,8 +68,10 @@ export const withdrawDisposalSchema = z.object({
 export const completeDisposalSchema = z.object({
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').max(500, 'Jednorazowo można zakończyć brakowanie maksymalnie 500 kartonów'),
   protocolReference: z.string().trim().min(3, 'Podaj numer protokołu').max(200),
-  methodDescription: z.string().trim().min(3, 'Opisz metodę w co najmniej 3 znakach').max(200).optional(),
-  weightKg: z.number().finite().positive().max(100000).optional(),
+  methodDescription: z.string().trim().min(3, 'Opisz metodę w co najmniej 3 znakach').max(200),
+  weightKg: z.number().finite().positive().max(100000),
+  standardReference: z.string().trim().min(3, 'Podaj normę lub klasę niszczenia').max(200),
+  signatureData: z.string().max(170000).regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, 'Podpis musi być obrazem PNG'),
   executionNote: z.string().trim().max(1000).optional(),
   confirmed: z.literal(true),
 });

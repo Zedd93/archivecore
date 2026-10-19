@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -7,6 +7,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { DisposalEvidenceService } = require('../dist/modules/retention/disposal-evidence.service.js');
 const { buildDisposalConfirmationPdf } = require('../dist/modules/retention/disposal-confirmation.js');
+const { auditController } = require('../dist/modules/audit/audit.controller.js');
+const { auditService } = require('../dist/modules/audit/audit.service.js');
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const batchId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
 const userId = '0ab09ae1-75cb-4e65-9342-8b613196271f';
@@ -97,4 +99,48 @@ test('confirmation PDF includes photo as a separate page', async () => {
   assert.match(withPhoto.subarray(0, 8).toString(), /^%PDF-/);
   assert.ok(withPhoto.length > without.length);
   assert.equal((withPhoto.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length, 2);
+});
+
+test('certificate needs a recorded signature, execution details and at least one verified photo', async () => {
+  const { service } = fixture();
+  const record = {
+    id: batchId, tenantName: 'Klient', tenantNip: '1234567890', tenantAddress: 'Łódź', completedBy: 'Operator',
+    completedAt: new Date('2026-10-12T11:00:00Z'), protocolReference: 'BR-1',
+    methodDescription: 'Cięcie i prasowanie', weightKg: 32.5, standardReference: 'DIN 66399 P-5',
+    signatureData: `data:image/png;base64,${png.toString('base64')}`, executionNote: null,
+    boxes: [{ id: 'box-id', boxNumber: 'K-1', title: 'Akta', location: 'Magazyn' }],
+  };
+  assert.throws(() => buildDisposalConfirmationPdf(record, [], 'certificate'), { statusCode: 409 });
+  await service.upload(tenantId, batchId, userId, file);
+  const evidence = await service.forPdf(tenantId, batchId);
+  const certificate = await buildDisposalConfirmationPdf(record, evidence, 'certificate');
+  const protocol = await buildDisposalConfirmationPdf(record, evidence, 'protocol');
+  assert.equal(certificate.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(protocol.subarray(0, 5).toString(), '%PDF-');
+  assert.equal((certificate.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length, 2);
+  assert.throws(() => buildDisposalConfirmationPdf({ ...record, signatureData: null }, evidence, 'certificate'), { statusCode: 409 });
+  assert.throws(() => buildDisposalConfirmationPdf({ ...record, signatureData: 'data:image/png;base64,bad' }, evidence, 'protocol'), { statusCode: 400 });
+});
+
+test('audit responses redact signature images and keep detail tenant-scoped', async () => {
+  const log = { id: 'log-id', tenantId, action: 'disposal.batch_completed', entityType: 'disposal_batch', entityId: batchId,
+    oldValues: null, newValues: { protocolReference: 'BR-1', signatureData: 'data:image/png;base64,secret' } };
+  const response = () => ({ status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
+  const mocks = [
+    mock.method(auditService, 'list', async () => ({ data: [log], total: 1 })),
+    mock.method(auditService, 'getById', async () => log),
+  ];
+  try {
+    const listResponse = response();
+    await auditController.list({ tenantId, query: {} }, listResponse, (error) => { throw error; });
+    assert.equal(listResponse.body.data[0].newValues.signatureData, '[redacted]');
+    const forbiddenResponse = response();
+    await auditController.getById({ tenantId: 'another-tenant', params: { id: log.id } }, forbiddenResponse, (error) => { throw error; });
+    assert.equal(forbiddenResponse.statusCode, 404);
+    const detailResponse = response();
+    await auditController.getById({ tenantId, params: { id: log.id } }, detailResponse, (error) => { throw error; });
+    assert.equal(detailResponse.body.data.newValues.signatureData, '[redacted]');
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
 });

@@ -6,6 +6,7 @@ import { parseJrwaDocx } from './jrwa-import.parser';
 import { randomUUID } from 'node:crypto';
 import { parseJrwaValidFrom, previousJrwaDay } from './jrwa-version';
 import { clearedDisposalDecisions } from './disposal-state';
+import { validateDisposalSignature } from './disposal-signature';
 
 export class RetentionService {
   private async recordDisposalAudit(
@@ -803,8 +804,9 @@ export class RetentionService {
     boxIds: string[],
     actorId: string,
     protocolReference: string,
-    details: { methodDescription?: string; weightKg?: number; executionNote?: string } = {},
+    details: { methodDescription: string; weightKg: number; standardReference: string; signatureData: string; executionNote?: string },
   ) {
+    validateDisposalSignature(details.signatureData);
     const uniqueIds = [...new Set(boxIds)];
     const batchId = randomUUID();
     const completedAt = new Date();
@@ -828,7 +830,7 @@ export class RetentionService {
       if (boxes.length !== uniqueIds.length) {
         throw Object.assign(new Error('Brakowanie zablokowane: sprawdź decyzję AP, blokady i 7-dniowy okres na wycofanie zgody.'), { statusCode: 409 });
       }
-      const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+      const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { name: true, nip: true, address: true } });
       const operator = await tx.user.findUnique({ where: { id: actorId }, select: { firstName: true, lastName: true } });
       if (!tenant || !operator) throw Object.assign(new Error('Nie znaleziono klienta lub operatora brakowania'), { statusCode: 409 });
       const result = await tx.box.updateMany({ where, data: { status: 'disposed', disposalDate: completedAt, locationId: null } });
@@ -864,9 +866,13 @@ export class RetentionService {
             protocolReference,
             completedAt: completedAt.toISOString(),
             tenantName: tenant.name,
+            tenantNip: tenant.nip,
+            tenantAddress: tenant.address,
             completedByName: `${operator.firstName} ${operator.lastName}`,
-            ...(details.methodDescription ? { methodDescription: details.methodDescription } : {}),
-            ...(details.weightKg !== undefined ? { weightKg: details.weightKg } : {}),
+            methodDescription: details.methodDescription,
+            weightKg: details.weightKg,
+            standardReference: details.standardReference,
+            signatureData: details.signatureData,
             ...(details.executionNote ? { executionNote: details.executionNote } : {}),
             boxes: boxes.map((box) => ({
               id: box.id,

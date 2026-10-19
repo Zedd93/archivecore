@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { retentionService } from './retention.service';
 import { successResponse, errorResponse } from '../../utils/response';
-import { buildDisposalConfirmationPdf, parseDisposalConfirmation } from './disposal-confirmation';
+import { buildDisposalConfirmationPdf, DisposalPdfKind, parseDisposalConfirmation } from './disposal-confirmation';
 import { z } from 'zod';
 import { disposalEvidenceService } from './disposal-evidence.service';
 
@@ -143,15 +143,15 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
-  async downloadDisposalConfirmation(req: Request, res: Response, next: NextFunction) {
+  async downloadDisposalConfirmation(req: Request, res: Response, next: NextFunction, kind: DisposalPdfKind = 'confirmation') {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!z.string().uuid().safeParse(req.params.id).success) return errorResponse(res, 'Nieprawidłowy identyfikator potwierdzenia', 400);
       const record = await retentionService.getCompletedDisposalRecord(req.tenantId, req.params.id);
       const evidence = await disposalEvidenceService.forPdf(req.tenantId, req.params.id);
-      const pdf = await buildDisposalConfirmationPdf(parseDisposalConfirmation(record), evidence);
+      const pdf = await buildDisposalConfirmationPdf(parseDisposalConfirmation(record), evidence, kind);
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="archivecore-brakowanie-${req.params.id}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="archivecore-${kind}-${req.params.id}.pdf"`);
       res.setHeader('Cache-Control', 'private, no-store');
       return res.send(pdf);
     } catch (err) { next(err); }
@@ -252,6 +252,8 @@ export class RetentionController {
       const result = await retentionService.completeDisposal(req.tenantId, req.body.boxIds, req.user!.userId, req.body.protocolReference, {
         methodDescription: req.body.methodDescription,
         weightKg: req.body.weightKg,
+        standardReference: req.body.standardReference,
+        signatureData: req.body.signatureData,
         executionNote: req.body.executionNote,
       });
       return successResponse(res, result);
