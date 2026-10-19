@@ -11,6 +11,7 @@ import { slaReportOrderUrl, SlaReportKind } from '@/utils/slaReportDrilldown';
 import { slaTargetStatus } from '@/utils/slaTarget';
 import { readSlaReportView } from '@/utils/slaReportView';
 import toast from 'react-hot-toast';
+import AccessionLedgerSection from '@/components/reports/AccessionLedgerSection';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Clock, Download, Loader2, PieChart, TrendingUp, Warehouse } from 'lucide-react';
 
 interface StorageHealth {
@@ -269,6 +270,8 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-bold text-gray-900">{t('reports.title')}</h1>
         <p className="text-sm text-gray-500">{t('reports.subtitle')}</p>
       </div>
+
+      <AccessionLedgerSection />
 
       <section className="card space-y-4">
         <div>

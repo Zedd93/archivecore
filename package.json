@@ -39,6 +39,7 @@
     "test:box-movement": "node --import tsx --test server/scripts/test-box-movement.mjs",
     "test:warehouse-home": "node --import tsx --test server/scripts/test-warehouse-home.mjs",
     "test:monthly-report": "node --import tsx --test server/scripts/test-monthly-report.cjs",
+    "test:accession-ledger": "node --test server/scripts/test-accession-ledger.mjs",
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
     "test:table-import-mapping": "node --import tsx --test server/scripts/test-table-import-mapping.cjs",
     "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",

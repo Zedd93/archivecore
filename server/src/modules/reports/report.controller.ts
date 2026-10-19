@@ -6,6 +6,7 @@ import { buildMonthlyReportPdf, getMonthlyReport, parseReportMonth } from './mon
 import { buildSlaBreakdownExport, buildSlaTenantTrendExport } from './sla-breakdown-export';
 import { prisma } from '../../config/database';
 import { OrderType } from '@prisma/client';
+import { buildAccessionLedgerCsv, getAccessionLedger, getAccessionLedgerExport, parseLedgerOptions } from './accession-ledger.service';
 
 type SlaReportOptions =
   | { ok: true; scope: 'all' | 'tenant'; tenantId: string | undefined; days: number; orderType: OrderType | undefined }
@@ -26,6 +27,34 @@ function parseSlaReportOptions(req: Request): SlaReportOptions {
 }
 
 export class ReportController {
+  async getAccessionLedger(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const options = parseLedgerOptions(req.query);
+      return successResponse(res, await getAccessionLedger(req.tenantId, options));
+    } catch (err) { next(err); }
+  }
+
+  async exportAccessionLedger(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const options = parseLedgerOptions(req.query);
+      const rows = await getAccessionLedgerExport(req.tenantId, options);
+      const buffer = buildAccessionLedgerCsv(rows);
+      await prisma.auditLog.create({ data: {
+        tenantId: req.tenantId, userId: req.user!.userId,
+        action: 'report.accession_ledger.export', entityType: 'report',
+        newValues: { year: options.year, kind: options.kind, rows: rows.length },
+        ipAddress: req.ip, userAgent: req.headers['user-agent']?.substring(0, 500),
+      } });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="ksiega-nabytkow-ubytkow-${options.year}.csv"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(buffer);
+    } catch (err) { next(err); }
+  }
+
   async getMonthlyPdf(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
