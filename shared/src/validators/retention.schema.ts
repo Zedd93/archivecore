@@ -60,6 +60,11 @@ export const rejectDisposalSchema = z.object({
   reason: z.string().trim().min(5, 'Podaj powód odrzucenia').max(1000),
 });
 
+export const withdrawDisposalSchema = z.object({
+  boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu'),
+  reason: z.string().trim().min(5, 'Podaj powód wycofania zgody').max(1000),
+});
+
 export const completeDisposalSchema = z.object({
   boxIds: z.array(z.string().uuid()).min(1, 'Wymagane co najmniej jedno ID kartonu').max(500, 'Jednorazowo można zakończyć brakowanie maksymalnie 500 kartonów'),
   protocolReference: z.string().trim().min(3, 'Podaj numer protokołu').max(200),

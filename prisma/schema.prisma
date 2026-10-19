@@ -556,6 +556,7 @@ model Box {
   disposalFirstApprovedById String? @db.Uuid
   disposalSecondApprovedById String? @db.Uuid
   disposalSecondApprovedAt DateTime?
+  disposalCoolingOffUntil DateTime?
   apDecision ApDisposalDecision?
   apDecisionReference String? @db.VarChar(200)
   apDecisionDate DateTime? @db.Date

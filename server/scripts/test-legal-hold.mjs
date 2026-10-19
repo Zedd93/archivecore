@@ -11,8 +11,8 @@ const { OrderService } = require('../dist/modules/orders/order.service.js');
 const { notificationService } = require('../dist/modules/notifications/notification.service.js');
 const { parseDisposalConfirmation, buildDisposalConfirmationPdf } = require('../dist/modules/retention/disposal-confirmation.js');
 const { boxLegalHoldSchema, changeBoxStatusSchema, bulkBoxStatusSchema } = require('../../shared/src/validators/box.schema.ts');
-const { approveDisposalSchema, secondApproveDisposalSchema, rejectDisposalSchema, completeDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema } = require('../../shared/src/validators/retention.schema.ts');
-const { DISPOSAL_FOUR_EYES_THRESHOLD } = require('../../shared/dist/index.js');
+const { approveDisposalSchema, secondApproveDisposalSchema, rejectDisposalSchema, withdrawDisposalSchema, completeDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema } = require('../../shared/src/validators/retention.schema.ts');
+const { DISPOSAL_COOLING_OFF_DAYS, DISPOSAL_FOUR_EYES_THRESHOLD } = require('../../shared/dist/index.js');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const boxId = 'a07ca020-f00e-485c-9d01-f9ed697e2f40';
@@ -48,6 +48,7 @@ test('holding a box cancels pending disposal in the same transaction', async () 
     assert.equal(updates[1].data.disposalReviewedAt, null);
     assert.equal(updates[1].data.disposalFourEyesRequired, false);
     assert.equal(updates[1].data.disposalFirstApprovedById, null);
+    assert.equal(updates[1].data.disposalCoolingOffUntil, null);
   } finally {
     mocks.reverse().forEach((entry) => entry.mock.restore());
   }
@@ -412,6 +413,8 @@ test('client approval records a decision without changing occupancy', async () =
           assert.deepEqual(where.disposalReviewedAt, { not: null });
           assert.equal(data.status, 'approved_disposal');
           assert.equal(data.disposalFirstApprovedById, approver.userId);
+          assert.ok(data.disposalCoolingOffUntil instanceof Date);
+          assert.ok(Math.abs(data.disposalCoolingOffUntil.getTime() - (Date.now() + DISPOSAL_COOLING_OFF_DAYS * 86400000)) < 5000);
           return { count: 2 };
         },
         count: async () => 0,
@@ -480,6 +483,7 @@ test('second client approval rejects both prior actors and records a distinct ap
         updateMany: async ({ where, data }) => {
           assert.deepEqual(where.disposalFirstApprovedById, { not: secondApprover.userId });
           assert.equal(data.disposalSecondApprovedById, secondApprover.userId);
+          assert.equal(data.disposalCoolingOffUntil.getTime() - data.disposalSecondApprovedAt.getTime(), DISPOSAL_COOLING_OFF_DAYS * 86400000);
           return { count: 1 };
         },
       },
@@ -539,6 +543,68 @@ test('rejected proposal restores active status and records reason', async () => 
   }
 });
 
+test('client can withdraw an approved disposal until physical destruction', async () => {
+  const service = new RetentionService();
+  const audits = [];
+  const notifications = [];
+  const mocks = [
+    mock.method(prisma, '$transaction', async (callback) => callback({
+      box: { updateMany: async ({ where, data }) => {
+        assert.equal(where.tenantId, tenantId);
+        assert.equal(where.status, 'approved_disposal');
+        assert.equal(data.status, 'active');
+        assert.equal(data.disposalCoolingOffUntil, null);
+        assert.equal(data.apDecision, null);
+        return { count: 1 };
+      } },
+      auditLog: { createMany: async ({ data }) => { audits.push(...data); } },
+    })),
+    mock.method(notificationService, 'notifyTenantUsers', async (input) => { notifications.push(input); }),
+  ];
+  try {
+    await assert.rejects(service.withdrawDisposal(tenantId, [boxId], { ...approver, tenantId: secondBoxId }, 'Nie niszczyć'), { statusCode: 403 });
+    assert.equal((await service.withdrawDisposal(tenantId, [boxId], approver, 'Nie niszczyć')).count, 1);
+    assert.equal(audits[0].action, 'disposal.client_withdrawn');
+    assert.equal(audits[0].newValues.reason, 'Nie niszczyć');
+    assert.equal(notifications.length, 1);
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('withdrawal fails atomically when a selected box is no longer approved', async () => {
+  const service = new RetentionService();
+  const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
+    box: { updateMany: async ({ where }) => {
+      assert.equal(where.status, 'approved_disposal');
+      return { count: 0 };
+    } },
+    auditLog: { createMany: async () => { throw new Error('Audit should not be written'); } },
+  }))];
+  try {
+    await assert.rejects(service.withdrawDisposal(tenantId, [boxId], approver, 'Nie niszczyć'), { statusCode: 409 });
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
+test('physical disposal is refused before the seven-day window closes', async () => {
+  const service = new RetentionService();
+  const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
+    box: { findMany: async ({ where }) => {
+      assert.ok(where.AND[1].disposalCoolingOffUntil.lte instanceof Date);
+      return [];
+    } },
+    folder: { updateMany: async () => { throw new Error('Folders must not change'); } },
+  }))];
+  try {
+    await assert.rejects(service.completeDisposal(tenantId, [boxId], proposerId, 'PROT-1'),
+      { statusCode: 409, message: /7-dniowy okres/ });
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
 test('only completed disposal changes folders and warehouse occupancy', async () => {
   const service = new RetentionService();
   const locations = [];
@@ -550,7 +616,8 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
         findMany: async ({ where }) => {
           assert.equal(where.status, 'approved_disposal');
           assert.deepEqual(where.apDecision, { not: null });
-          assert.deepEqual(where.OR, [{ disposalFourEyesRequired: false }, { disposalSecondApprovedAt: { not: null } }]);
+          assert.deepEqual(where.AND[0].OR, [{ disposalFourEyesRequired: false }, { disposalSecondApprovedAt: { not: null } }]);
+          assert.ok(where.AND[1].disposalCoolingOffUntil.lte instanceof Date);
           return [
             { id: boxId, locationId, boxNumber: 'K-1', title: 'Teczki Łódź', apDecision: 'consent_received', apDecisionReference: 'AP-1', apDecisionDate: new Date('2026-10-10'), apDecisionReason: null, location: { fullPath: 'Magazyn / Regał 1' } },
             { id: secondBoxId, locationId, boxNumber: 'K-2', title: 'Akta', apDecision: 'not_required', apDecisionReference: null, apDecisionDate: null, apDecisionReason: 'Dokumentacja prywatna', location: { fullPath: 'Magazyn / Regał 1' } },
@@ -662,6 +729,8 @@ test('disposal decisions require a reason, protocol and explicit confirmation', 
   assert.equal(apDisposalDecisionSchema.safeParse({ boxIds: [boxId], decision: 'not_required', reason: 'x' }).success, false);
   assert.equal(approveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
   assert.equal(secondApproveDisposalSchema.safeParse({ boxIds: [boxId] }).success, true);
+  assert.equal(withdrawDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zmiana decyzji' }).success, true);
+  assert.equal(withdrawDisposalSchema.safeParse({ boxIds: [boxId], reason: 'x' }).success, false);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Nie' }).success, false);
   assert.equal(rejectDisposalSchema.safeParse({ boxIds: [boxId], reason: 'Zła kategoria' }).success, true);
   assert.equal(completeDisposalSchema.safeParse({ boxIds: [boxId], protocolReference: 'P-1', confirmed: false }).success, false);

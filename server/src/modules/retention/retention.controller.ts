@@ -229,6 +229,13 @@ export class RetentionController {
     } catch (err) { next(err); }
   }
 
+  async withdrawDisposal(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      return successResponse(res, await retentionService.withdrawDisposal(req.tenantId, req.body.boxIds, req.user!, req.body.reason));
+    } catch (err) { next(err); }
+  }
+
   async recordApDecision(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

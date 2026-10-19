@@ -7,6 +7,7 @@ export const clearedDisposalDecisions = {
   disposalFirstApprovedById: null,
   disposalSecondApprovedById: null,
   disposalSecondApprovedAt: null,
+  disposalCoolingOffUntil: null,
   apDecision: null,
   apDecisionReference: null,
   apDecisionDate: null,

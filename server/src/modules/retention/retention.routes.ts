@@ -5,7 +5,7 @@ import { tenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { auditLog } from '../../middleware/audit';
 import { fileUpload } from '../../middleware/upload';
-import { Permissions, createRetentionPolicySchema, updateRetentionPolicySchema, initiateDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema, approveDisposalSchema, secondApproveDisposalSchema, rejectDisposalSchema, completeDisposalSchema, documentationLegalHoldSchema } from '@archivecore/shared';
+import { Permissions, createRetentionPolicySchema, updateRetentionPolicySchema, initiateDisposalSchema, reviewDisposalSchema, apDisposalDecisionSchema, approveDisposalSchema, secondApproveDisposalSchema, rejectDisposalSchema, withdrawDisposalSchema, completeDisposalSchema, documentationLegalHoldSchema } from '@archivecore/shared';
 import { validate } from '../../middleware/validate';
 import multer from 'multer';
 
@@ -43,6 +43,7 @@ router.post('/disposal/review', ...auth, requirePermission(Permissions.DISPOSAL_
 router.post('/disposal/approve', ...auth, requirePermission(Permissions.DISPOSAL_APPROVE), validate(approveDisposalSchema), auditLog('disposal', 'disposal.approve'), (req, res, next) => retentionController.approveDisposal(req, res, next));
 router.post('/disposal/second-approve', ...auth, requirePermission(Permissions.DISPOSAL_APPROVE), validate(secondApproveDisposalSchema), auditLog('disposal', 'disposal.second_approve'), (req, res, next) => retentionController.secondApproveDisposal(req, res, next));
 router.post('/disposal/reject', ...auth, requirePermission(Permissions.DISPOSAL_APPROVE), validate(rejectDisposalSchema), auditLog('disposal', 'disposal.reject'), (req, res, next) => retentionController.rejectDisposal(req, res, next));
+router.post('/disposal/withdraw', ...auth, requirePermission(Permissions.DISPOSAL_APPROVE), validate(withdrawDisposalSchema), auditLog('disposal', 'disposal.withdraw'), (req, res, next) => retentionController.withdrawDisposal(req, res, next));
 router.post('/disposal/ap-decision', ...auth, requirePermission(Permissions.DISPOSAL_COMPLETE), validate(apDisposalDecisionSchema), auditLog('disposal', 'disposal.ap_decision'), (req, res, next) => retentionController.recordApDecision(req, res, next));
 router.post('/disposal/complete', ...auth, requirePermission(Permissions.DISPOSAL_COMPLETE), validate(completeDisposalSchema), auditLog('disposal', 'disposal.complete'), (req, res, next) => retentionController.completeDisposal(req, res, next));
 
