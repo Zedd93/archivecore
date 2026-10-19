@@ -46,6 +46,9 @@ jobs:
       - name: Verify annual archive report
         run: npm run test:annual-report
 
+      - name: Verify document and attachment access audit
+        run: npm run test:content-access-audit
+
       - name: Verify transfer list column mapping
         run: npm run test:transfer-list-mapping
 

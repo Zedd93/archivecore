@@ -100,7 +100,7 @@ export class OrderScanService {
     if (!item.scanFile) fail('Skan nie został znaleziony', 404);
     const buffer = await this.objectStorage.downloadFile(item.scanFile.storageKey);
     if (sha256(buffer) !== item.scanFile.checksumSha256) throw new Error('Suma kontrolna skanu nie zgadza się z zapisem');
-    return { buffer, fileName: item.scanFile.fileName };
+    return { id: item.scanFile.id, buffer, fileName: item.scanFile.fileName };
   }
 }
 

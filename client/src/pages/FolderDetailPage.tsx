@@ -74,8 +74,15 @@ export default function FolderDetailPage() {
     }
     tab.opener = null;
     try {
-      const { data } = await api.get(`/attachments/${attachmentId}/download`);
-      tab.location.replace(data.data.url);
+      const { data } = await api.get(`/attachments/${attachmentId}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      tab.location.replace(url);
+      const cleanup = window.setInterval(() => {
+        if (tab.closed) {
+          URL.revokeObjectURL(url);
+          window.clearInterval(cleanup);
+        }
+      }, 30000);
     } catch (err) {
       tab.close();
       toast.error(getApiErrorMessage(err, t('common.genericError')));

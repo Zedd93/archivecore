@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from '../../utils/response';
 import { buildDisposalConfirmationPdf, DisposalPdfKind, parseDisposalConfirmation } from './disposal-confirmation';
 import { z } from 'zod';
 import { disposalEvidenceService } from './disposal-evidence.service';
+import { recordContentAccess } from '../../middleware/audit';
 
 export class RetentionController {
   async listPolicies(req: Request, res: Response, next: NextFunction) {
@@ -150,6 +151,7 @@ export class RetentionController {
       const record = await retentionService.getCompletedDisposalRecord(req.tenantId, req.params.id);
       const evidence = await disposalEvidenceService.forPdf(req.tenantId, req.params.id);
       const pdf = await buildDisposalConfirmationPdf(parseDisposalConfirmation(record), evidence, kind);
+      await recordContentAccess(req, 'disposal_document.download', 'disposal_batch', req.params.id, { kind });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="archivecore-${kind}-${req.params.id}.pdf"`);
       res.setHeader('Cache-Control', 'private, no-store');
@@ -181,6 +183,7 @@ export class RetentionController {
         return errorResponse(res, 'Nieprawidłowy identyfikator zdjęcia', 400);
       }
       const file = await disposalEvidenceService.download(req.tenantId, req.params.id, req.params.evidenceId);
+      await recordContentAccess(req, 'disposal_evidence.download', 'disposal_evidence', req.params.evidenceId, { batchId: req.params.id });
       res.setHeader('Content-Type', file.mimeType);
       res.setHeader('Content-Disposition', `attachment; filename="disposal-evidence-${req.params.evidenceId}.${file.mimeType === 'image/png' ? 'png' : 'jpg'}"`);
       res.setHeader('Cache-Control', 'private, no-store');

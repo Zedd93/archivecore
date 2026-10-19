@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { uploadFile, getPresignedUrl, deleteFile } from '../../config/minio';
+import { uploadFile, downloadFile, deleteFile } from '../../config/minio';
 import crypto from 'crypto';
 import path from 'path';
 import { Prisma } from '@prisma/client';
@@ -71,9 +71,10 @@ export class AttachmentService {
     return attachment;
   }
 
-  async getDownloadUrl(id: string, tenantId: string, department?: string): Promise<string> {
+  async download(id: string, tenantId: string, department?: string) {
     const attachment = await this.getById(id, tenantId, department);
-    return getPresignedUrl(attachment.filePath, 900); // 15 min
+    const buffer = await downloadFile(attachment.filePath);
+    return { attachment, buffer };
   }
 
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {

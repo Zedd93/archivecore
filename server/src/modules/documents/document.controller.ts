@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { documentService } from './document.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { recordContentAccess } from '../../middleware/audit';
 
 export class DocumentController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -17,6 +18,8 @@ export class DocumentController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const doc = await documentService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      await recordContentAccess(req, 'document.read', 'document', doc.id);
+      res.setHeader('Cache-Control', 'private, no-store');
       return successResponse(res, doc);
     } catch (err) { next(err); }
   }

@@ -9,6 +9,7 @@ import { orderHandoverPhotoService } from './order-handover-photo.service';
 import { z } from 'zod';
 import { OrderPriority, OrderType } from '@prisma/client';
 import { loanReturnRequestService } from './loan-return-request.service';
+import { recordContentAccess } from '../../middleware/audit';
 
 export class OrderController {
   async listRecipientUsers(req: Request, res: Response, next: NextFunction) {
@@ -144,6 +145,7 @@ export class OrderController {
         return errorResponse(res, 'Nieprawidłowy identyfikator pozycji', 400);
       }
       const scan = await orderScanService.download(req.params.id, req.params.itemId, req.tenantId, req.accessDepartment || undefined);
+      await recordContentAccess(req, 'order_scan.download', 'order_scan_file', scan.id, { orderId: req.params.id, itemId: req.params.itemId });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="archivecore-skan-${req.params.itemId}.pdf"`);
       res.setHeader('Cache-Control', 'private, no-store');
@@ -181,6 +183,7 @@ export class OrderController {
       }
       await orderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
       const photo = await orderHandoverPhotoService.download(req.tenantId, req.params.id, req.params.photoId);
+      await recordContentAccess(req, 'order_handover_photo.download', 'order_handover_photo', req.params.photoId, { orderId: req.params.id });
       res.setHeader('Content-Type', photo.mimeType);
       res.setHeader('Content-Disposition', `attachment; filename="archivecore-przekazanie-${req.params.photoId}.${photo.mimeType === 'image/png' ? 'png' : 'jpg'}"`);
       res.setHeader('Cache-Control', 'private, no-store');

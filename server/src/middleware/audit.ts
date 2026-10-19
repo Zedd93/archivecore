@@ -127,6 +127,29 @@ function getClientIp(req: Request): string | undefined {
   return undefined;
 }
 
+export async function recordContentAccess(
+  req: Request,
+  action: string,
+  entityType: string,
+  entityId: string,
+  details?: Record<string, string | boolean>,
+  db = prisma,
+) {
+  if (!req.tenantId || !req.user) throw new Error('Brak kontekstu audytu dostępu');
+  await db.auditLog.create({
+    data: {
+      tenantId: req.tenantId,
+      userId: req.user.userId,
+      action,
+      entityType,
+      entityId,
+      newValues: details,
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent']?.substring(0, 500),
+    },
+  });
+}
+
 export function auditLog(entityType: string, action: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const initialEntityId = getEntityId(req);

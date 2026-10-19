@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { hrService } from './hr.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { recordContentAccess } from '../../middleware/audit';
 
 export class HRController {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -19,6 +20,8 @@ export class HRController {
       // Check if user has PESEL viewing permission
       const canViewPesel = req.user?.permissions?.includes('hr.view_pesel') ?? false;
       const folder = await hrService.getById(req.params.id, req.tenantId, canViewPesel);
+      await recordContentAccess(req, 'hr.read', 'hr_folder', folder.id, { peselIncluded: canViewPesel });
+      res.setHeader('Cache-Control', 'private, no-store');
       return successResponse(res, folder);
     } catch (err) { next(err); }
   }

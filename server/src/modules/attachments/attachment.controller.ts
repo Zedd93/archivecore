@@ -3,6 +3,7 @@ import { attachmentService } from './attachment.service';
 import { scanBatchService } from './scan-batch.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { recordContentAccess } from '../../middleware/audit';
 
 export class AttachmentController {
   async previewScanBatch(req: Request, res: Response, next: NextFunction) {
@@ -54,11 +55,21 @@ export class AttachmentController {
     } catch (err) { next(err); }
   }
 
-  async getDownloadUrl(req: Request, res: Response, next: NextFunction) {
+  async download(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const url = await attachmentService.getDownloadUrl(req.params.id, req.tenantId, req.accessDepartment || undefined);
-      return successResponse(res, { url });
+      const { attachment, buffer } = await attachmentService.download(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      await recordContentAccess(req, 'attachment.download', 'attachment', attachment.id, {
+        ...(attachment.documentId ? { documentId: attachment.documentId } : {}),
+        ...(attachment.folderId ? { folderId: attachment.folderId } : {}),
+        ...(attachment.boxId ? { boxId: attachment.boxId } : {}),
+      });
+      res.setHeader('Content-Type', attachment.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(attachment.fileName)}`);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(buffer);
     } catch (err) { next(err); }
   }
 

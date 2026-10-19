@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { folderService } from './folder.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
 import { parsePagination } from '../../utils/pagination';
+import { recordContentAccess } from '../../middleware/audit';
 
 export class FolderController {
   async listAll(req: Request, res: Response, next: NextFunction) {
@@ -26,6 +27,8 @@ export class FolderController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const folder = await folderService.getById(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      await recordContentAccess(req, 'folder.read', 'folder', folder.id);
+      res.setHeader('Cache-Control', 'private, no-store');
       return successResponse(res, folder);
     } catch (err) { next(err); }
   }
