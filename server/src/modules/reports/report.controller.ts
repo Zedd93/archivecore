@@ -7,6 +7,7 @@ import { buildSlaBreakdownExport, buildSlaTenantTrendExport } from './sla-breakd
 import { prisma } from '../../config/database';
 import { OrderType } from '@prisma/client';
 import { buildAccessionLedgerCsv, getAccessionLedger, getAccessionLedgerExport, parseLedgerOptions } from './accession-ledger.service';
+import { buildAnnualReportPdf, getAnnualReport, parseReportYear } from './annual-report.service';
 
 type SlaReportOptions =
   | { ok: true; scope: 'all' | 'tenant'; tenantId: string | undefined; days: number; orderType: OrderType | undefined }
@@ -27,6 +28,36 @@ function parseSlaReportOptions(req: Request): SlaReportOptions {
 }
 
 export class ReportController {
+  async getAnnual(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const year = parseReportYear(req.query.year);
+      if (year === null) return errorResponse(res, 'Nieprawidłowy rok sprawozdania', 400);
+      return successResponse(res, await getAnnualReport(req.tenantId, year));
+    } catch (err) { next(err); }
+  }
+
+  async getAnnualPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const year = parseReportYear(req.query.year);
+      if (year === null) return errorResponse(res, 'Nieprawidłowy rok sprawozdania', 400);
+      const report = await getAnnualReport(req.tenantId, year);
+      const pdf = await buildAnnualReportPdf(report);
+      await prisma.auditLog.create({ data: {
+        tenantId: req.tenantId, userId: req.user!.userId,
+        action: 'report.annual.export', entityType: 'report',
+        newValues: { year }, ipAddress: req.ip,
+        userAgent: req.headers['user-agent']?.substring(0, 500),
+      } });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="archivecore-sprawozdanie-roczne-${year}.pdf"`);
+      res.setHeader('Content-Length', pdf.length);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(pdf);
+    } catch (err) { next(err); }
+  }
+
   async getAccessionLedger(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

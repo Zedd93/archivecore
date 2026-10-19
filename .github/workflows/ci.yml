@@ -43,6 +43,9 @@ jobs:
       - name: Verify accessions and disposals register
         run: npm run test:accession-ledger
 
+      - name: Verify annual archive report
+        run: npm run test:annual-report
+
       - name: Verify transfer list column mapping
         run: npm run test:transfer-list-mapping
 

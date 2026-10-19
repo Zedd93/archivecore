@@ -14,6 +14,7 @@ test('ledger accepts bounded year, kind and pagination filters', () => {
   for (const query of [{ year: '1999' }, { year: '2027' }, { page: '0' }, { pageSize: '500' }, { kind: 'move' }]) {
     assert.throws(() => parseLedgerOptions(query, now), { statusCode: 400 });
   }
+  assert.equal(parseLedgerOptions({}, new Date('2025-12-31T23:30:00Z')).year, 2026);
 });
 
 test('ledger queries real receipts and completed disposal snapshots within the selected tenant and year', async () => {

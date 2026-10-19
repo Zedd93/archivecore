@@ -3,12 +3,16 @@ import { prisma } from '../../config/database';
 
 export type LedgerKind = 'acquisition' | 'disposal';
 
+export function currentWarsawYear(now = new Date()): number {
+  return Number(new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'Europe/Warsaw' }).format(now));
+}
+
 export function parseLedgerOptions(query: Record<string, unknown>, now = new Date()) {
-  const year = query.year === undefined ? now.getFullYear() : Number(query.year);
+  const year = query.year === undefined ? currentWarsawYear(now) : Number(query.year);
   const page = query.page === undefined ? 1 : Number(query.page);
   const pageSize = query.pageSize === undefined ? 25 : Number(query.pageSize);
   const kind = query.kind === undefined || query.kind === '' ? null : query.kind;
-  if (!Number.isInteger(year) || year < 2000 || year > now.getFullYear()
+  if (!Number.isInteger(year) || year < 2000 || year > currentWarsawYear(now)
     || !Number.isInteger(page) || page < 1 || page > 10000
     || ![25, 50, 100].includes(pageSize)
     || (kind !== null && kind !== 'acquisition' && kind !== 'disposal')) {
@@ -32,8 +36,7 @@ interface LedgerRow {
 
 function ledgerSource(tenantId: string, year: number) {
   // Annual boundaries are local to the Polish archive, including the CET year change.
-  const start = new Date(`${year}-01-01T00:00:00+01:00`);
-  const end = new Date(`${year + 1}-01-01T00:00:00+01:00`);
+  const { start, end } = reportYearRange(year);
   return Prisma.sql`
     WITH entries AS (
       SELECT 'acquisition'::text AS kind, c.id::text AS "eventId", c."eventAt" AS "eventAt",
@@ -76,6 +79,13 @@ function ledgerSource(tenantId: string, year: number) {
     )`;
 }
 
+export function reportYearRange(year: number) {
+  return {
+    start: new Date(`${year}-01-01T00:00:00+01:00`),
+    end: new Date(`${year + 1}-01-01T00:00:00+01:00`),
+  };
+}
+
 export async function getAccessionLedger(tenantId: string, options: LedgerOptions) {
   const source = ledgerSource(tenantId, options.year);
   const kindFilter = options.kind ? Prisma.sql`WHERE kind = ${options.kind}` : Prisma.empty;
@@ -111,6 +121,27 @@ export async function getAccessionLedgerExport(tenantId: string, options: Ledger
     throw Object.assign(new Error('Eksport przekracza 20 000 wpisów. Skontaktuj się z administratorem.'), { statusCode: 413 });
   }
   return rows;
+}
+
+export async function getAccessionLedgerAnnualSummary(tenantId: string, year: number, db: Pick<typeof prisma, '$queryRaw'> = prisma) {
+  const rows = await db.$queryRaw<Array<{ month: number; acquisitions: bigint; disposals: bigint }>>(
+    Prisma.sql`${ledgerSource(tenantId, year)}
+      SELECT EXTRACT(MONTH FROM "eventAt" AT TIME ZONE 'Europe/Warsaw')::int AS month,
+        COUNT(*) FILTER (WHERE kind = 'acquisition') AS acquisitions,
+        COUNT(*) FILTER (WHERE kind = 'disposal') AS disposals
+      FROM entries GROUP BY 1 ORDER BY 1`,
+  );
+  const byMonth = new Map(rows.map((row) => [Number(row.month), row]));
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const row = byMonth.get(month);
+    return { month, acquisitions: Number(row?.acquisitions ?? 0), disposals: Number(row?.disposals ?? 0) };
+  });
+  return {
+    months,
+    acquisitions: months.reduce((sum, row) => sum + row.acquisitions, 0),
+    disposals: months.reduce((sum, row) => sum + row.disposals, 0),
+  };
 }
 
 function csvCell(value: unknown): string {

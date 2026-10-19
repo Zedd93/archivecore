@@ -76,7 +76,7 @@ export async function getMonthlyReport(tenantId: string, month: string, includeB
 
 export type MonthlyReport = Awaited<ReturnType<typeof getMonthlyReport>>;
 
-function fontPath() {
+export function reportFontPath() {
   const candidates = [
     path.resolve(__dirname, '..', '..', 'assets', 'fonts', 'STIXTwoText.ttf'),
     path.resolve(process.cwd(), 'server', 'src', 'assets', 'fonts', 'STIXTwoText.ttf'),
@@ -94,7 +94,7 @@ export function buildMonthlyReportPdf(report: MonthlyReport): Promise<Buffer> {
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
-    doc.registerFont('report', fontPath()).font('report');
+    doc.registerFont('report', reportFontPath()).font('report');
 
     const line = (label: string, value: string | number) => {
       doc.fontSize(11).fillColor('#1f2937').text(`${label}: ${value}`, { paragraphGap: 5 });
