@@ -20,6 +20,7 @@ async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10, t
     issues: Object.fromEntries(Object.keys(ISSUE_LABELS).map((key) => [key, 0])),
     byTenant: {},
     missingEndDateByStatus: {},
+    missingEndDateBySource: { explicitNoDates: 0, unclassified: 0 },
     examples: [],
     details: [],
   };
@@ -41,7 +42,7 @@ async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10, t
           retentionTrigger: true, retentionYears: true, isPermanent: true, archivalCategory: true,
         } },
         transferListItem: { select: {
-          ordinalNumber: true, categoryCode: true, dateFrom: true, dateTo: true,
+          ordinalNumber: true, categoryCode: true, dateFrom: true, dateTo: true, dateRangeUnknown: true,
           transferList: { select: { listNumber: true, status: true } },
         } },
       },
@@ -77,6 +78,7 @@ async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10, t
         if (issue === 'missingEndDate') {
           const status = item?.transferList?.status ?? 'bez_spisu';
           report.missingEndDateByStatus[status] = (report.missingEndDateByStatus[status] ?? 0) + 1;
+          report.missingEndDateBySource[item?.dateRangeUnknown ? 'explicitNoDates' : 'unclassified']++;
         }
         if (report.examples.filter((example) => example.issue === issue).length < exampleLimit) {
           report.examples.push({ issue, tenant, boxNumber: row.box.boxNumber, folderId: row.id });
@@ -96,6 +98,7 @@ async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10, t
           folderDateTo: dateKey(row.dateTo),
           itemDateFrom: dateKey(item?.dateFrom),
           itemDateTo: dateKey(item?.dateTo),
+          sourceNoDates: item?.dateRangeUnknown ?? false,
         });
       }
     }
@@ -113,6 +116,8 @@ function printReport(report, { details = false } = {}) {
   if (report.issues.missingEndDate) {
     console.log('Brakujace daty wedlug statusu spisu:');
     console.table(report.missingEndDateByStatus);
+    console.log('Brakujace daty wedlug oznaczenia zrodla:');
+    console.table(report.missingEndDateBySource);
   }
   if (Object.keys(report.byTenant).length) {
     console.log('Wyniki wedlug tenantow:');

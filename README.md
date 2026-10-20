@@ -206,6 +206,29 @@ view includes list status and both stored date fields so a reviewer can decide
 whether to correct a draft list or consult the source records. It never fills
 missing dates automatically.
 
+### Reconcile Explicit "No Dates" in Older Transfer Lists
+
+On the native Windows server, after deployment and database migration, copy an
+original customer XLSX file to a protected local directory outside the Git
+checkout. Preview one list at a time from `C:\Apps\archivecore`:
+
+```powershell
+npm run db:reconcile-transfer-list-missing-dates -- --tenant SMPOLI --list SZO-2026-0001 --file "C:\Apps\reconciliation\nowy-swiat.xlsx" --expect 20
+```
+
+Only after checking the preview and taking a database backup, repeat the same
+command with `--apply --actor-email <active-super-admin-email>`. For the known
+SMPOLI source files, `SZO-2026-0002` (Jasna 8) expects 7 and
+`SZO-2026-0003` (Mikolaja Kopernika 121) expects 7. The tool verifies every
+position's signature, title, category, canonical folder and draft status. It
+refuses duplicate list numbers, legal holds, filled dates and stale records.
+All changes to a list run in one transaction and create per-item audit entries
+with the source file hash and row number. It marks only the source's explicit
+"brak dat" text; it never invents dates or makes a folder disposal-ready. Run
+`npm run db:audit-disposal-readiness -- --tenant SMPOLI --details` afterward:
+the 34 missing end dates should remain, but appear under explicit source
+"no dates" instead of unclassified missing dates.
+
 ## API
 
 All endpoints are under `/api/v1/`. Authentication via `Authorization: Bearer <token>` header.

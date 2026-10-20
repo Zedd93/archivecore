@@ -49,6 +49,7 @@ test('read-only audit paginates and reports only non-sensitive identifiers', asy
   });
   assert.deepEqual(report.byTenant.DOX, report.issues);
   assert.deepEqual(report.missingEndDateByStatus, { confirmed: 1 });
+  assert.deepEqual(report.missingEndDateBySource, { explicitNoDates: 0, unclassified: 1 });
   assert.ok(report.examples.every((example) => !('title' in example) && !('description' in example)));
 });
 
@@ -66,10 +67,10 @@ test('empty archive is clean and example count is bounded per issue', async () =
 
 test('tenant detail view exposes list status and both dates without titles or writes', async () => {
   const row = folder('folder-34', {
-    dateFrom: new Date('2019-01-01'), dateTo: null,
+    dateFrom: null, dateTo: null,
     tenant: { shortCode: 'SMPOLI' },
     transferListItem: {
-      ordinalNumber: 34, categoryCode: 'B10', dateFrom: new Date('2019-01-01'), dateTo: null,
+      ordinalNumber: 34, categoryCode: 'B10', dateFrom: null, dateTo: null, dateRangeUnknown: true,
       transferList: { listNumber: 'SZO-2026-0034', status: 'archived' },
     },
   });
@@ -82,11 +83,12 @@ test('tenant detail view exposes list status and both dates without titles or wr
   const report = await auditDisposalReadiness(db, { tenantCode: 'SMPOLI', details: true });
   assert.equal(report.issues.missingEndDate, 1);
   assert.deepEqual(report.missingEndDateByStatus, { archived: 1 });
+  assert.deepEqual(report.missingEndDateBySource, { explicitNoDates: 1, unclassified: 0 });
   assert.deepEqual(report.details, [{
     issue: 'missingEndDate', tenant: 'SMPOLI', boxNumber: 'K-1', folderId: 'folder-34',
     listNumber: 'SZO-2026-0034', listStatus: 'archived', position: 34, category: 'B10',
     policyTrigger: 'end_date', policyYears: 10,
-    folderDateFrom: '2019-01-01', folderDateTo: null,
-    itemDateFrom: '2019-01-01', itemDateTo: null,
+    folderDateFrom: null, folderDateTo: null,
+    itemDateFrom: null, itemDateTo: null, sourceNoDates: true,
   }]);
 });
