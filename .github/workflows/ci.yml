@@ -143,6 +143,8 @@ jobs:
         run: npm run test:hr-retention
       - name: Verify read-only personnel retention audit
         run: npm run test:hr-retention-audit
+      - name: Verify read-only disposal readiness audit
+        run: npm run test:disposal-readiness-audit
 
       - name: Verify versioned JRWA imports
         run: npm run test:jrwa-versions

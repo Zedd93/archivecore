@@ -190,6 +190,17 @@ responsible archivist before changing production data.
 The calculation follows the [Ministry's personnel documentation guidance](https://www.gov.pl/web/rodzina/akta-osobowe)
 and the [ZUS RIA guidance](https://bip.zus.pl/web/guest/firmy/przedsiebiorco-przeczytaj-wazne/e-akta/e-akta-pytania-i-odpowiedzi).
 
+### Disposal Readiness Audit (Native Server)
+
+After deployment, run `npm run db:audit-disposal-readiness` from
+`C:\Apps\archivecore`. This read-only check scans folders in non-disposed boxes
+and reports missing transfer-list links, retention periods, end dates, or
+unrecognized retention triggers and categories. It prints counts by tenant and
+up to ten folder IDs per issue, without document titles or personal data. A
+nonzero exit code means the listed records need manual review; it does not
+change or delete anything. A folder without a transfer-list item can be a
+legitimate manual record, but it currently blocks automatic box disposal.
+
 ## API
 
 All endpoints are under `/api/v1/`. Authentication via `Authorization: Bearer <token>` header.
