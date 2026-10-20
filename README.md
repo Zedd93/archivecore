@@ -200,6 +200,11 @@ up to ten folder IDs per issue, without document titles or personal data. A
 nonzero exit code means the listed records need manual review; it does not
 change or delete anything. A folder without a transfer-list item can be a
 legitimate manual record, but it currently blocks automatic box disposal.
+For full, non-sensitive details of one tenant's findings, use
+`npm run db:audit-disposal-readiness -- --tenant SMPOLI --details`. The detail
+view includes list status and both stored date fields so a reviewer can decide
+whether to correct a draft list or consult the source records. It never fills
+missing dates automatically.
 
 ## API
 

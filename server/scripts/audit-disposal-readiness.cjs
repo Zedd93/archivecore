@@ -9,27 +9,41 @@ const ISSUE_LABELS = {
   unknownCategory: 'Pozycje spisu z niejednoznaczna kategoria',
 };
 
-async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10 } = {}) {
+function dateKey(date) {
+  return date ? new Date(date).toISOString().slice(0, 10) : null;
+}
+
+async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10, tenantCode, details = false } = {}) {
   const report = {
     checked: 0,
     protected: 0,
     issues: Object.fromEntries(Object.keys(ISSUE_LABELS).map((key) => [key, 0])),
     byTenant: {},
+    missingEndDateByStatus: {},
     examples: [],
+    details: [],
   };
   let cursor;
   for (;;) {
     const rows = await db.folder.findMany({
-      where: { status: { not: 'disposed' }, box: { is: { deletedAt: null, status: { not: 'disposed' } } } },
+      where: {
+        status: { not: 'disposed' },
+        box: { is: { deletedAt: null, status: { not: 'disposed' } } },
+        ...(tenantCode ? { tenant: { is: { shortCode: tenantCode } } } : {}),
+      },
       select: {
         id: true,
+        dateFrom: true,
         dateTo: true,
         tenant: { select: { shortCode: true } },
         box: { select: { id: true, boxNumber: true } },
         retentionPolicy: { select: {
           retentionTrigger: true, retentionYears: true, isPermanent: true, archivalCategory: true,
         } },
-        transferListItem: { select: { categoryCode: true, dateTo: true } },
+        transferListItem: { select: {
+          ordinalNumber: true, categoryCode: true, dateFrom: true, dateTo: true,
+          transferList: { select: { listNumber: true, status: true } },
+        } },
       },
       orderBy: { id: 'asc' },
       take: pageSize,
@@ -60,9 +74,29 @@ async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10 } 
       for (const issue of issues) {
         report.issues[issue]++;
         tenantIssues[issue]++;
+        if (issue === 'missingEndDate') {
+          const status = item?.transferList?.status ?? 'bez_spisu';
+          report.missingEndDateByStatus[status] = (report.missingEndDateByStatus[status] ?? 0) + 1;
+        }
         if (report.examples.filter((example) => example.issue === issue).length < exampleLimit) {
           report.examples.push({ issue, tenant, boxNumber: row.box.boxNumber, folderId: row.id });
         }
+        if (details) report.details.push({
+          issue,
+          tenant,
+          boxNumber: row.box.boxNumber,
+          folderId: row.id,
+          listNumber: item?.transferList?.listNumber ?? null,
+          listStatus: item?.transferList?.status ?? null,
+          position: item?.ordinalNumber ?? null,
+          category: category || null,
+          policyTrigger: policy?.retentionTrigger ?? null,
+          policyYears: policy?.retentionYears ?? null,
+          folderDateFrom: dateKey(row.dateFrom),
+          folderDateTo: dateKey(row.dateTo),
+          itemDateFrom: dateKey(item?.dateFrom),
+          itemDateTo: dateKey(item?.dateTo),
+        });
       }
     }
     if (rows.length < pageSize) break;
@@ -71,16 +105,23 @@ async function auditDisposalReadiness(db, { pageSize = 500, exampleLimit = 10 } 
   return report;
 }
 
-function printReport(report) {
+function printReport(report, { details = false } = {}) {
   console.log('Audyt gotowosci teczek do brakowania (tylko odczyt):');
   console.log(`Sprawdzone teczki w aktywnych kartonach: ${report.checked}`);
   console.log(`Chronione kategoria A/BE lub trwala retencja: ${report.protected}`);
   for (const [key, label] of Object.entries(ISSUE_LABELS)) console.log(`${label}: ${report.issues[key]}`);
+  if (report.issues.missingEndDate) {
+    console.log('Brakujace daty wedlug statusu spisu:');
+    console.table(report.missingEndDateByStatus);
+  }
   if (Object.keys(report.byTenant).length) {
     console.log('Wyniki wedlug tenantow:');
     console.table(Object.entries(report.byTenant).map(([tenant, issues]) => ({ tenant, ...issues })));
   }
-  if (report.examples.length) {
+  if (details && report.details.length) {
+    console.log('Szczegoly rekordow do weryfikacji (bez tytulow i danych osobowych):');
+    console.table(report.details);
+  } else if (report.examples.length) {
     console.log('Przykladowe identyfikatory do weryfikacji:');
     console.table(report.examples);
   }
@@ -88,12 +129,18 @@ function printReport(report) {
 }
 
 async function main() {
+  const details = process.argv.includes('--details');
+  const tenantFlagIndex = process.argv.indexOf('--tenant');
+  const tenantCode = tenantFlagIndex >= 0 ? process.argv[tenantFlagIndex + 1] : undefined;
+  if (tenantFlagIndex >= 0 && !/^[A-Z0-9]{3,20}$/.test(tenantCode ?? '')) {
+    throw Object.assign(new Error('Podaj kod tenanta po --tenant'), { code: 'INVALID_TENANT' });
+  }
   require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
   const { PrismaClient } = require('@prisma/client');
   const db = new PrismaClient();
   try {
-    const report = await auditDisposalReadiness(db);
-    printReport(report);
+    const report = await auditDisposalReadiness(db, { tenantCode, details });
+    printReport(report, { details });
     if (Object.values(report.issues).some((count) => count > 0)) process.exitCode = 1;
   } finally {
     await db.$disconnect();
