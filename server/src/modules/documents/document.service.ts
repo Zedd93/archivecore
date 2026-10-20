@@ -250,6 +250,8 @@ export class DocumentService {
         where: { id, tenantId },
         select: {
           legalHold: true,
+          folderId: true,
+          boxId: true,
           box: { select: { legalHold: true, retentionPolicy: { select: { seriesLegalHold: true } } } },
           folder: { select: {
             legalHold: true,
@@ -268,6 +270,9 @@ export class DocumentService {
         || document.box?.legalHold
         || document.box?.retentionPolicy?.seriesLegalHold) {
         throw Object.assign(new Error('Nie można usunąć dokumentu objętego blokadą prawną'), { statusCode: 409 });
+      }
+      if (document.folderId || document.boxId) {
+        throw Object.assign(new Error('Dokument przypisany do teczki lub kartonu wymaga procedury brakowania'), { statusCode: 409 });
       }
       if (await tx.custodyEvent.count({ where: { documentId: id } })) {
         throw Object.assign(new Error('Dokument ma historię wydań lub zwrotów i nie może zostać usunięty'), { statusCode: 409 });

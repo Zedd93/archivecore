@@ -111,6 +111,10 @@ export class AttachmentService {
 
   async delete(id: string, tenantId: string) {
     const attachment = await this.getById(id, tenantId);
+    if (attachment.documentId || attachment.folderId || attachment.boxId
+      || await prisma.hRDocument.count({ where: { attachmentId: id, tenantId } })) {
+      throw Object.assign(new Error('Załącznik przypisany do dokumentacji wymaga procedury brakowania'), { statusCode: 409 });
+    }
 
     // Delete from MinIO
     await deleteFile(attachment.filePath);

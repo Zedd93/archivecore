@@ -310,11 +310,7 @@ export class HRService {
       if (doc.hrFolderPart.hrFolder.litigationHold) {
         throw Object.assign(new Error('Akta osobowe są objęte blokadą prawną'), { statusCode: 409 });
       }
-      await tx.hRDocument.delete({ where: { id: docId } });
-      await tx.hRFolderPart.update({
-        where: { id: doc.hrFolderPartId }, data: { documentCount: { decrement: 1 } },
-      });
-      return { deleted: true };
+      throw Object.assign(new Error('Dokument akt osobowych wymaga procedury brakowania'), { statusCode: 409 });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 

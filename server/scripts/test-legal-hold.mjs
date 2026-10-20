@@ -134,8 +134,12 @@ test('disposal candidates require a live policy and exclude permanent, review an
   assert.equal(where.retentionPolicy.is.AND[1].OR[1].NOT.OR[1].archivalCategory.startsWith, 'BE');
   assert.equal(where.folders.none.OR[0].legalHold, true);
   assert.equal(where.folders.none.OR[1].retentionPolicy.is.seriesLegalHold, true);
-  assert.equal(where.folders.none.OR[2].documents.some.legalHold, true);
-  assert.equal(where.folders.none.OR[3].transferListItem.is.transferList.legalHold, true);
+  assert.ok(where.folders.none.OR.some((rule) => rule.retentionPolicy?.is?.isPermanent === true));
+  assert.ok(where.folders.none.OR.some((rule) => rule.retentionPolicy?.is?.archivalCategory?.startsWith === 'A'));
+  assert.ok(where.folders.none.OR.some((rule) => rule.retentionPolicy?.is?.archivalCategory?.startsWith === 'BE'));
+  assert.ok(where.folders.none.OR.some((rule) => rule.transferListItem === null));
+  assert.ok(where.folders.none.OR.some((rule) => rule.documents?.some?.legalHold === true));
+  assert.ok(where.folders.none.OR.some((rule) => rule.transferListItem?.is?.transferList?.legalHold === true));
   assert.equal(where.documents.none.legalHold, true);
   assert.equal(where.transferListItems.none.OR[0].transferList.legalHold, true);
   assert.equal(where.transferListItems.none.OR[1].folder.legalHold, true);
@@ -144,6 +148,41 @@ test('disposal candidates require a live policy and exclude permanent, review an
   assert.equal(where.transferListItems.none.OR[4].categoryCode.startsWith, 'A');
   assert.equal(where.transferListItems.none.OR[5].categoryCode.startsWith, 'BE');
   assert.ok(where.transferListItems.none.OR[6].disposalOrTransferDate.gt instanceof Date);
+});
+
+test('folder retention blocks disposal when its own term has not expired', async () => {
+  const service = new RetentionService();
+  const now = new Date('2026-10-20T00:00:00Z');
+  const folder = {
+    id: randomUUID(), createdAt: new Date('2020-01-01'), dateTo: new Date('2020-12-31'),
+    retentionPolicy: { retentionTrigger: 'end_date', retentionYears: 10 },
+    transferListItem: { categoryCode: 'B10', dateTo: new Date('2020-12-31') },
+  };
+  const tx = { folder: { findMany: async ({ where }) => {
+    assert.equal(where.tenantId, tenantId);
+    assert.deepEqual(where.boxId.in, [boxId]);
+    return [folder];
+  } } };
+  await assert.rejects(service.assertFolderRetentionElapsed(tx, tenantId, [boxId], now),
+    { statusCode: 409, message: /jeszcze nie upłynął/ });
+  folder.retentionPolicy.retentionYears = 5;
+  await assert.rejects(service.assertFolderRetentionElapsed(tx, tenantId, [boxId], now),
+    { statusCode: 409, message: /jeszcze nie upłynął/ });
+  folder.transferListItem.categoryCode = 'B5';
+  await service.assertFolderRetentionElapsed(tx, tenantId, [boxId], now);
+  folder.retentionPolicy.retentionTrigger = 'event_date';
+  await assert.rejects(service.assertFolderRetentionElapsed(tx, tenantId, [boxId], now),
+    { statusCode: 409, message: /Nie można ustalić terminu/ });
+});
+
+test('an unclassified folder cannot be destroyed under the box policy alone', async () => {
+  const service = new RetentionService();
+  const tx = { folder: { findMany: async () => [{
+    id: randomUUID(), createdAt: new Date('2020-01-01'), dateTo: null,
+    retentionPolicy: null, transferListItem: { categoryCode: 'B10', dateTo: null },
+  }] } };
+  await assert.rejects(service.assertFolderRetentionElapsed(tx, tenantId, [boxId], new Date('2026-10-20')),
+    { statusCode: 409, message: /Nie można ustalić terminu/ });
 });
 
 test('review list separates due and upcoming dates and paginates each tenant', async () => {
@@ -608,6 +647,29 @@ test('physical disposal is refused before the seven-day window closes', async ()
   }
 });
 
+test('physical disposal leaves the box untouched when a folder has a later retention date', async () => {
+  const service = new RetentionService();
+  let updated = false;
+  const mocks = [mock.method(prisma, '$transaction', async (callback) => callback({
+    box: {
+      findMany: async () => [{ id: boxId }],
+      updateMany: async () => { updated = true; return { count: 1 }; },
+    },
+    folder: { findMany: async () => [{
+      id: randomUUID(), createdAt: new Date('2025-01-01'), dateTo: new Date('2025-12-31'),
+      retentionPolicy: { retentionTrigger: 'end_date', retentionYears: 10 },
+      transferListItem: { categoryCode: 'B10', dateTo: new Date('2025-12-31') },
+    }] },
+  }))];
+  try {
+    await assert.rejects(service.completeDisposal(tenantId, [boxId], proposerId, 'PROT-1', executionDetails),
+      { statusCode: 409, message: /jeszcze nie upłynął/ });
+    assert.equal(updated, false);
+  } finally {
+    mocks.reverse().forEach((entry) => entry.mock.restore());
+  }
+});
+
 test('only completed disposal changes folders and warehouse occupancy', async () => {
   const service = new RetentionService();
   const locations = [];
@@ -629,7 +691,7 @@ test('only completed disposal changes folders and warehouse occupancy', async ()
         updateMany: async ({ data }) => { assert.equal(data.status, 'disposed'); assert.equal(data.locationId, null); return { count: 2 }; },
         count: async ({ where }) => { assert.equal(where.locationId, locationId); return 0; },
       },
-      folder: { updateMany: async (args) => { folders.push(args); } },
+      folder: { findMany: async () => [], updateMany: async (args) => { folders.push(args); } },
       location: { update: async (args) => { locations.push(args); } },
       tenant: { findUnique: async () => ({ name: 'Spółdzielnia Łódź', nip: '1234567890', address: 'Łódź' }) },
       user: { findUnique: async () => ({ firstName: 'Anna', lastName: 'Nowak' }) },

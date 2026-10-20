@@ -53,6 +53,10 @@ export class RetentionService {
       folders: { none: { OR: [
         { legalHold: true },
         { retentionPolicy: { is: { seriesLegalHold: true } } },
+        { retentionPolicy: { is: { isPermanent: true } } },
+        { retentionPolicy: { is: { archivalCategory: restrictedCategory } } },
+        { retentionPolicy: { is: { archivalCategory: { startsWith: 'BE', mode: 'insensitive' } } } },
+        { transferListItem: null },
         { documents: { some: { legalHold: true } } },
         { transferListItem: { is: { transferList: { legalHold: true } } } },
       ] } },
@@ -86,6 +90,47 @@ export class RetentionService {
         ] },
       },
     };
+  }
+
+  private async assertFolderRetentionElapsed(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    boxIds: string[],
+    now: Date,
+  ) {
+    const folders = await tx.folder.findMany({
+      where: { tenantId, boxId: { in: boxIds } },
+      select: {
+        id: true, createdAt: true, dateTo: true,
+        retentionPolicy: { select: { retentionTrigger: true, retentionYears: true } },
+        transferListItem: { select: { categoryCode: true, dateTo: true } },
+      },
+    });
+    for (const folder of folders) {
+      const policy = folder.retentionPolicy;
+      const item = folder.transferListItem;
+      const categoryYears = item?.categoryCode.match(/^B(\d+)$/i);
+      if ((!policy && !item) || (item && !categoryYears)) {
+        throw Object.assign(new Error('Nie można ustalić terminu retencji jednej z teczek. Brakowanie zostało wstrzymane.'), { statusCode: 409 });
+      }
+      const terms: { years: number | null; baseDate: Date | null | undefined }[] = [];
+      if (policy) terms.push({
+        years: policy.retentionYears,
+        baseDate: policy.retentionTrigger === 'creation_date' ? folder.createdAt
+          : policy.retentionTrigger === 'end_date' ? folder.dateTo : null,
+      });
+      if (item && categoryYears) terms.push({ years: Number(categoryYears[1]), baseDate: item.dateTo ?? folder.dateTo });
+      for (const { years, baseDate } of terms) {
+        if (years === null || years < 0 || !Number.isSafeInteger(years) || !baseDate) {
+          throw Object.assign(new Error('Nie można ustalić terminu retencji jednej z teczek. Brakowanie zostało wstrzymane.'), { statusCode: 409 });
+        }
+        const dueAt = new Date(baseDate);
+        dueAt.setFullYear(dueAt.getFullYear() + years);
+        if (dueAt > now) {
+          throw Object.assign(new Error('Okres retencji jednej z teczek jeszcze nie upłynął. Brakowanie zostało wstrzymane.'), { statusCode: 409 });
+        }
+      }
+    }
   }
 
   private isSuperAdmin(actor?: IJwtPayload) {
@@ -830,6 +875,7 @@ export class RetentionService {
       if (boxes.length !== uniqueIds.length) {
         throw Object.assign(new Error('Brakowanie zablokowane: sprawdź decyzję AP, blokady i 7-dniowy okres na wycofanie zgody.'), { statusCode: 409 });
       }
+      await this.assertFolderRetentionElapsed(tx, tenantId, uniqueIds, completedAt);
       const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { name: true, nip: true, address: true } });
       const operator = await tx.user.findUnique({ where: { id: actorId }, select: { firstName: true, lastName: true } });
       if (!tenant || !operator) throw Object.assign(new Error('Nie znaleziono klienta lub operatora brakowania'), { statusCode: 409 });

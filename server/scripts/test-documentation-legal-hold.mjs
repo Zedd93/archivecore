@@ -4,6 +4,7 @@ import test from 'node:test';
 const { prisma } = await import('../src/config/database.ts');
 const { DocumentationLegalHoldService } = await import('../src/modules/retention/documentation-legal-hold.service.ts');
 const { DocumentService } = await import('../src/modules/documents/document.service.ts');
+const { AttachmentService } = await import('../src/modules/attachments/attachment.service.ts');
 const { BoxService } = await import('../src/modules/boxes/box.service.ts');
 const { HRService } = await import('../src/modules/hr/hr.service.ts');
 const { TransferListService } = await import('../src/modules/transfer-lists/transfer-list.service.ts');
@@ -125,6 +126,32 @@ test('a held document cannot be deleted', async () => {
   let deleted = false;
   prisma.$transaction = async (callback) => callback({ document: {
     findFirst: async ({ where }) => { assert.equal(where.tenantId, tenantId); return { legalHold: true, folder: null, box: null }; },
+    delete: async () => { deleted = true; },
+  } });
+  try {
+    await assert.rejects(new DocumentService().delete(folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally { prisma.$transaction = original; }
+});
+
+test('a document filed in a box cannot bypass disposal through direct deletion', async () => {
+  const original = prisma.$transaction;
+  let deleted = false;
+  prisma.$transaction = async (callback) => callback({ document: {
+    findFirst: async () => ({ legalHold: false, folderId: null, boxId, folder: null, box: { legalHold: false, retentionPolicy: null } }),
+    delete: async () => { deleted = true; },
+  } });
+  try {
+    await assert.rejects(new DocumentService().delete(folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally { prisma.$transaction = original; }
+});
+
+test('a document filed in a folder cannot bypass disposal through direct deletion', async () => {
+  const original = prisma.$transaction;
+  let deleted = false;
+  prisma.$transaction = async (callback) => callback({ document: {
+    findFirst: async () => ({ legalHold: false, folderId, boxId: null, folder: { legalHold: false, retentionPolicy: null, box: null, transferListItem: null }, box: null }),
     delete: async () => { deleted = true; },
   } });
   try {
@@ -265,6 +292,42 @@ test('personnel documents cannot be removed while their HR folder is held', asyn
     await assert.rejects(new HRService().removeDocument(folderId, tenantId), { statusCode: 409 });
     assert.equal(deleted, false);
   } finally { prisma.$transaction = original; }
+});
+
+test('personnel documents cannot be removed outside disposal even without a hold', async () => {
+  const original = prisma.$transaction;
+  let deleted = false;
+  prisma.$transaction = async (callback) => callback({ hRDocument: {
+    findFirst: async () => ({ hrFolderPart: { hrFolder: { litigationHold: false } } }),
+    delete: async () => { deleted = true; },
+  } });
+  try {
+    await assert.rejects(new HRService().removeDocument(folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally { prisma.$transaction = original; }
+});
+
+test('an attachment linked to archive records cannot be deleted from storage', async () => {
+  const originalCount = prisma.hRDocument.count;
+  const originalDelete = prisma.attachment.delete;
+  let deleted = false;
+  prisma.hRDocument.count = async () => 0;
+  prisma.attachment.delete = async () => { deleted = true; };
+  try {
+    for (const relation of ['documentId', 'folderId', 'boxId']) {
+      const service = new AttachmentService();
+      service.getById = async () => ({ id: folderId, filePath: 'test', [relation]: folderId });
+      await assert.rejects(service.delete(folderId, tenantId), { statusCode: 409 });
+    }
+    const service = new AttachmentService();
+    service.getById = async () => ({ id: folderId, filePath: 'test', documentId: null, folderId: null, boxId: null });
+    prisma.hRDocument.count = async () => 1;
+    await assert.rejects(service.delete(folderId, tenantId), { statusCode: 409 });
+    assert.equal(deleted, false);
+  } finally {
+    prisma.hRDocument.count = originalCount;
+    prisma.attachment.delete = originalDelete;
+  }
 });
 
 test('audit revert cannot change a folder while it is under legal hold', async () => {
