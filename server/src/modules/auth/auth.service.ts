@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../../config/database';
 import { config } from '../../config/env';
-import { ROLE_PERMISSIONS, RoleCode } from '@archivecore/shared';
+import { ROLE_PERMISSIONS, RoleCode, requiresMfaForRoles } from '@archivecore/shared';
 import { generateTotpSecret, verifyTotpToken, generateRecoveryCodes } from './totp.service';
 import { encryptAES256, decryptAES256 } from '../../utils/crypto';
 
@@ -30,7 +30,6 @@ export class AuthService {
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     if (user.mfaEnabled) {
-      // Return temp token for 2FA
       const tempToken = jwt.sign(
         { userId: user.id, purpose: '2fa' },
         config.jwt.secret,
@@ -39,28 +38,36 @@ export class AuthService {
       return { requiresTwoFactor: true, tempToken };
     }
 
+    if (requiresMfaForRoles(user.userRoles.map(({ role }) => role.code))) {
+      const tempToken = jwt.sign(
+        { userId: user.id, purpose: 'mfa_enrollment' },
+        config.jwt.secret,
+        { expiresIn: '15m' },
+      );
+      return { requiresMfaSetup: true, tempToken };
+    }
+
     return this.generateTokens(user);
   }
 
-  async validateTwoFactor(tempToken: string, totpCode: string) {
-    let decoded: any;
+  private tempUserId(token: string, purpose: '2fa' | 'mfa_enrollment'): string {
     try {
-      decoded = jwt.verify(tempToken, config.jwt.secret);
-    } catch {
-      throw Object.assign(new Error('Token 2FA wygasł'), { statusCode: 401 });
-    }
+      const decoded = jwt.verify(token, config.jwt.secret);
+      if (typeof decoded === 'object' && decoded.purpose === purpose && typeof decoded.userId === 'string') {
+        return decoded.userId;
+      }
+    } catch { /* Expired or invalid temporary token. */ }
+    throw Object.assign(new Error('Token weryfikacyjny jest nieprawidłowy lub wygasł'), { statusCode: 401 });
+  }
 
-    if (decoded.purpose !== '2fa') {
-      throw Object.assign(new Error('Nieprawidłowy token'), { statusCode: 401 });
-    }
-
+  async validateTwoFactor(tempToken: string, totpCode: string) {
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: this.tempUserId(tempToken, '2fa') },
       include: { userRoles: { include: { role: true } } },
     });
 
-    if (!user || !user.mfaSecret) {
-      throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
+    if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret) {
+      throw Object.assign(new Error('Konto lub 2FA nie jest aktywne'), { statusCode: 401 });
     }
 
     const secret = decryptAES256(user.mfaSecret);
@@ -68,7 +75,54 @@ export class AuthService {
       throw Object.assign(new Error('Nieprawidłowy kod 2FA'), { statusCode: 401 });
     }
 
-    return this.generateTokens(user);
+    return this.generateTokens(user, true);
+  }
+
+  async validateRecoveryCode(tempToken: string, recoveryCode: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: this.tempUserId(tempToken, '2fa') },
+      include: { userRoles: { include: { role: true } } },
+    });
+    if (!user || !user.isActive || !user.mfaEnabled) {
+      throw Object.assign(new Error('Konto lub 2FA nie jest aktywne'), { statusCode: 401 });
+    }
+    const normalized = recoveryCode.toUpperCase();
+    let matchingHash: string | undefined;
+    for (const hash of user.totpRecoveryCodes) {
+      if (await bcrypt.compare(normalized, hash)) {
+        matchingHash = hash;
+        break;
+      }
+    }
+    if (!matchingHash) throw Object.assign(new Error('Nieprawidłowy kod odzyskiwania'), { statusCode: 401 });
+
+    const used = await prisma.$executeRaw`
+      UPDATE users SET "totpRecoveryCodes" = array_remove("totpRecoveryCodes", ${matchingHash})
+      WHERE id = ${user.id}::uuid AND ${matchingHash} = ANY("totpRecoveryCodes")
+    `;
+    if (used !== 1) throw Object.assign(new Error('Kod odzyskiwania został już użyty'), { statusCode: 401 });
+    return this.generateTokens(user, true);
+  }
+
+  private async enrollmentUser(token: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: this.tempUserId(token, 'mfa_enrollment') },
+      include: { userRoles: { include: { role: true } } },
+    });
+    if (!user || !user.isActive || user.mfaEnabled || !requiresMfaForRoles(user.userRoles.map(({ role }) => role.code))) {
+      throw Object.assign(new Error('Konfiguracja 2FA nie jest już dostępna dla tego konta'), { statusCode: 401 });
+    }
+    return user;
+  }
+
+  async setupRequiredTwoFactor(token: string) {
+    const user = await this.enrollmentUser(token);
+    return this.setupTwoFactor(user.id);
+  }
+
+  async verifyRequiredTwoFactor(token: string, totpCode: string) {
+    const user = await this.enrollmentUser(token);
+    return this.verifyTwoFactorSetup(user.id, totpCode);
   }
 
   async setupTwoFactor(userId: string) {
@@ -96,7 +150,7 @@ export class AuthService {
 
   async verifyTwoFactorSetup(userId: string, totpCode: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.mfaSecret) {
+    if (!user || !user.isActive || user.mfaEnabled || !user.mfaSecret) {
       throw Object.assign(new Error('Najpierw rozpocznij konfigurację 2FA'), { statusCode: 400 });
     }
 
@@ -106,15 +160,21 @@ export class AuthService {
     }
 
     const recoveryCodes = generateRecoveryCodes();
-    await prisma.user.update({
-      where: { id: userId },
+    const updatedCount = await prisma.user.updateMany({
+      where: { id: userId, mfaEnabled: false, mfaSecret: user.mfaSecret },
       data: {
         mfaEnabled: true,
         totpRecoveryCodes: recoveryCodes.map((c) => bcrypt.hashSync(c, 10)),
       },
     });
+    if (updatedCount.count !== 1) throw Object.assign(new Error('Konfiguracja 2FA została już zakończona lub zmieniona'), { statusCode: 409 });
+    const updated = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { userRoles: { include: { role: true } } },
+    });
+    if (!updated) throw Object.assign(new Error('Użytkownik nie znaleziony'), { statusCode: 404 });
 
-    return { recoveryCodes };
+    return { ...(await this.generateTokens(updated, true)), recoveryCodes };
   }
 
   async refreshToken(token: string) {
@@ -132,10 +192,15 @@ export class AuthService {
       throw Object.assign(new Error('Konto nieaktywne'), { statusCode: 401 });
     }
 
+    const roles = user.userRoles.map(({ role }) => role.code);
+    if ((user.mfaEnabled || requiresMfaForRoles(roles)) && !stored.mfaVerifiedAt) {
+      throw Object.assign(new Error('Wymagane ponowne logowanie i potwierdzenie 2FA'), { statusCode: 401 });
+    }
+
     // Revoke old, issue new
     await prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
 
-    return this.generateTokens(user);
+    return this.generateTokens(user, Boolean(stored.mfaVerifiedAt));
   }
 
   async logout(token: string) {
@@ -177,9 +242,12 @@ export class AuthService {
     });
   }
 
-  private async generateTokens(user: any) {
+  private async generateTokens(user: any, mfaVerified = false) {
     const roles = user.userRoles.map((ur: any) => ur.role.code);
     const permissions = this.collectPermissions(roles);
+    if ((user.mfaEnabled || requiresMfaForRoles(roles)) && !mfaVerified) {
+      throw Object.assign(new Error('Wymagane potwierdzenie 2FA'), { statusCode: 401 });
+    }
 
     const payload = {
       userId: user.id,
@@ -188,6 +256,7 @@ export class AuthService {
       email: user.email,
       roles,
       permissions,
+      mfaVerified,
     };
 
     const accessToken = jwt.sign(payload, config.jwt.secret, {
@@ -203,6 +272,7 @@ export class AuthService {
         userId: user.id,
         token: refreshToken,
         expiresAt: refreshExpiresAt,
+        mfaVerifiedAt: mfaVerified ? new Date() : null,
       },
     });
 
@@ -218,6 +288,7 @@ export class AuthService {
         department: user.department,
         roles,
         permissions,
+        mfaEnabled: user.mfaEnabled,
       },
     };
   }

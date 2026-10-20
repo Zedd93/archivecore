@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
-import api from '@/services/api';
+import api, { setAccessToken } from '@/services/api';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { User, Shield, Bell, Palette, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
@@ -152,7 +152,7 @@ function ProfileTab({ user }: { user: any }) {
 
 // ─── Security Tab ────────────────────────────────────────
 function SecurityTab() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -163,6 +163,7 @@ function SecurityTab() {
   const [mfaSetup, setMfaSetup] = useState<{ secret: string; qrCodeUrl: string } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaLoading, setMfaLoading] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
 
   useEffect(() => {
     setMfaEnabled(!!user?.mfaEnabled);
@@ -207,7 +208,10 @@ function SecurityTab() {
   const handleVerifyMfa = async () => {
     setMfaLoading(true);
     try {
-      await api.post('/auth/2fa/verify', { totpCode: mfaCode });
+      const { data } = await api.post('/auth/2fa/verify', { totpCode: mfaCode });
+      setAccessToken(data.data.accessToken);
+      await refreshUser();
+      setRecoveryCodes(data.data.recoveryCodes);
       toast.success(t('settings.security.twoFaEnabled'));
       setMfaEnabled(true);
       setMfaSetup(null);
@@ -366,6 +370,14 @@ function SecurityTab() {
           {mfaEnabled && (
             <p className="text-xs text-green-700">{t('settings.security.twoFaEnabledDesc')}</p>
           )}
+          {recoveryCodes && <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+            <p className="text-sm font-medium text-amber-950">{t('auth.recoveryCodesTitle')}</p>
+            <p className="text-xs text-amber-900">{t('auth.recoveryCodesDesc')}</p>
+            <ul className="grid grid-cols-2 gap-2 font-mono text-sm text-amber-950">
+              {recoveryCodes.map((code) => <li key={code}>{code}</li>)}
+            </ul>
+            <button type="button" className="btn-secondary" onClick={() => setRecoveryCodes(null)}>{t('auth.recoveryCodesSaved')}</button>
+          </div>}
         </div>
       </div>
     </div>

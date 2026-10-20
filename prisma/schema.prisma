@@ -1321,6 +1321,7 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime  @default(now())
   revokedAt DateTime?
+  mfaVerifiedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -20,8 +20,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ requiresMfa: boolean; mfaSessionToken?: string }>;
-  verifyMfa: (token: string, code: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ requiresMfa: boolean; requiresMfaSetup: boolean; mfaSessionToken?: string }>;
+  verifyMfa: (token: string, code: string, recovery?: boolean) => Promise<void>;
+  setupRequiredMfa: (token: string) => Promise<{ secret: string; qrCodeUrl: string }>;
+  verifyRequiredMfa: (token: string, code: string) => Promise<string[]>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
@@ -105,18 +107,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = data.data;
 
     if (result.requiresTwoFactor || result.requiresMfa) {
-      return { requiresMfa: true, mfaSessionToken: result.tempToken || result.mfaSessionToken };
+      return { requiresMfa: true, requiresMfaSetup: false, mfaSessionToken: result.tempToken || result.mfaSessionToken };
+    }
+    if (result.requiresMfaSetup) {
+      return { requiresMfa: false, requiresMfaSetup: true, mfaSessionToken: result.tempToken };
     }
 
     setAccessToken(result.accessToken);
     await fetchMe();
-    return { requiresMfa: false };
+    return { requiresMfa: false, requiresMfaSetup: false };
   };
 
-  const verifyMfa = async (mfaSessionToken: string, code: string) => {
-    const { data } = await api.post('/auth/2fa/validate', { tempToken: mfaSessionToken, totpCode: code });
+  const verifyMfa = async (mfaSessionToken: string, code: string, recovery = false) => {
+    const { data } = await api.post('/auth/2fa/validate', {
+      tempToken: mfaSessionToken,
+      ...(recovery ? { recoveryCode: code } : { totpCode: code }),
+    });
     setAccessToken(data.data.accessToken);
     await fetchMe();
+  };
+
+  const setupRequiredMfa = async (tempToken: string) => {
+    const { data } = await api.post('/auth/2fa/enroll/setup', { tempToken });
+    return data.data as { secret: string; qrCodeUrl: string };
+  };
+
+  const verifyRequiredMfa = async (tempToken: string, code: string) => {
+    const { data } = await api.post('/auth/2fa/enroll/verify', { tempToken, totpCode: code });
+    setAccessToken(data.data.accessToken);
+    await fetchMe();
+    return data.data.recoveryCodes as string[];
   };
 
   const logout = async () => {
@@ -145,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, isAuthenticated: !!user, login, verifyMfa, logout, refreshUser: fetchMe, hasPermission, hasRole }}
+      value={{ user, isLoading, isAuthenticated: !!user, login, verifyMfa, setupRequiredMfa, verifyRequiredMfa, logout, refreshUser: fetchMe, hasPermission, hasRole }}
     >
       {children}
     </AuthContext.Provider>

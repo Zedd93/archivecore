@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
 import { IJwtPayload } from '@archivecore/shared';
+import { requiresMfaForRoles } from '@archivecore/shared';
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -12,6 +13,10 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as IJwtPayload;
+    if (!decoded.userId || !Array.isArray(decoded.roles) || !Array.isArray(decoded.permissions)
+      || (requiresMfaForRoles(decoded.roles) && decoded.mfaVerified !== true)) {
+      return res.status(401).json({ success: false, error: 'Wymagane ponowne logowanie z 2FA' });
+    }
     req.user = decoded;
     next();
   } catch (err) {

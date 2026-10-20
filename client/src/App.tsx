@@ -123,7 +123,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/share/:token" element={<Suspense fallback={suspenseFallback}><PublicSharePage /></Suspense>} />
 
       {/* Protected */}

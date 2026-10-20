@@ -11,7 +11,7 @@ Multi-tenant archive management system for organizations. Manage physical docume
 | **Database** | PostgreSQL 16, Redis 7 |
 | **Storage** | MinIO (S3-compatible) |
 | **i18n** | react-i18next (PL/EN) |
-| **Auth** | JWT + refresh tokens, RBAC, optional TOTP 2FA |
+| **Auth** | JWT + refresh tokens, RBAC, required TOTP 2FA for privileged roles |
 
 ## Features
 
@@ -130,6 +130,17 @@ See `.env.example` for all required variables. Key ones:
 | `JWT_REFRESH_SECRET` | Secret for signing refresh tokens |
 | `ENCRYPTION_KEY` | 32-byte key for PESEL encryption |
 | `MINIO_*` | MinIO/S3 storage credentials |
+
+### Required MFA (Native Server)
+
+Deploy the database migration before starting the updated server. Privileged
+accounts must enroll an authenticator app at their next login; until they verify
+its six-digit code, no application session is issued. Existing privileged
+sessions must log in again. Each account receives ten one-time recovery codes
+during enrollment. Store them securely outside ArchiveCore: they are shown only
+once. Keep `ENCRYPTION_KEY` unchanged across deployments, as existing TOTP
+secrets depend on it. The native `C:\Apps\update.ps1` procedure should stop the
+server, run `prisma migrate deploy` and `prisma generate`, build, then restart it.
 
 ### Loan Return Emails (Native Server)
 

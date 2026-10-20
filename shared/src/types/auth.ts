@@ -36,6 +36,7 @@ export interface IJwtPayload {
   email: string;
   roles: string[];
   permissions: string[];
+  mfaVerified?: boolean;
   iat?: number;
   exp?: number;
 }

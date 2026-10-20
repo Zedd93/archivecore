@@ -46,3 +46,18 @@ export const ASSIGNABLE_ROLE_CODES = [
   RoleCode.TENANT_LEADERSHIP,
   RoleCode.TENANT_EMPLOYEE,
 ] as const;
+
+export const MFA_REQUIRED_ROLES = new Set<RoleCode>([
+  RoleCode.SUPER_ADMIN,
+  RoleCode.DOXART_ADMIN,
+  RoleCode.TENANT_LEADERSHIP,
+  RoleCode.ADMIN_TENANT,
+  RoleCode.COORDINATOR_ARCHIVE,
+  RoleCode.OPERATOR_WAREHOUSE,
+  RoleCode.USER_HR,
+  RoleCode.AUDITOR,
+]);
+
+export function requiresMfaForRoles(roles: readonly string[]): boolean {
+  return roles.some((role) => MFA_REQUIRED_ROLES.has(role as RoleCode));
+}

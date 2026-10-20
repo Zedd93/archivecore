@@ -55,3 +55,14 @@ export const updateUserAccessSchema = z.object({
 export const totpVerifySchema = z.object({
   totpCode: z.string().length(6, 'Kod musi mieć 6 cyfr').regex(/^\d{6}$/),
 });
+
+export const mfaEnrollmentTokenSchema = z.object({
+  tempToken: z.string().min(1).max(2000),
+});
+
+export const mfaEnrollmentVerifySchema = mfaEnrollmentTokenSchema.merge(totpVerifySchema);
+
+export const mfaLoginVerifySchema = mfaEnrollmentTokenSchema.extend({
+  totpCode: totpVerifySchema.shape.totpCode.optional(),
+  recoveryCode: z.string().regex(/^[0-9A-Fa-f]{8}$/).optional(),
+}).refine((value) => Boolean(value.totpCode) !== Boolean(value.recoveryCode), 'Podaj kod 2FA albo kod odzyskiwania');

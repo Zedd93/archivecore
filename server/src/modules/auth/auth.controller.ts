@@ -56,6 +56,9 @@ export class AuthController {
       if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
         return successResponse(res, { requiresTwoFactor: true, tempToken: result.tempToken });
       }
+      if ('requiresMfaSetup' in result && result.requiresMfaSetup) {
+        return successResponse(res, { requiresMfaSetup: true, tempToken: result.tempToken });
+      }
 
       // Narrow type after 2FA check
       const loginResult = result as { accessToken: string; refreshToken: string; user: any };
@@ -76,7 +79,9 @@ export class AuthController {
     try {
       const tempToken = req.body.tempToken || req.body.mfaSessionToken;
       const totpCode = req.body.totpCode || req.body.code;
-      const result = await authService.validateTwoFactor(tempToken, totpCode);
+      const result = req.body.recoveryCode
+        ? await authService.validateRecoveryCode(tempToken, req.body.recoveryCode)
+        : await authService.validateTwoFactor(tempToken, totpCode);
 
       setRefreshTokenCookie(req, res, result.refreshToken);
 
@@ -98,11 +103,30 @@ export class AuthController {
     }
   }
 
+  async setupRequiredTwoFactor(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await authService.setupRequiredTwoFactor(req.body.tempToken);
+      res.setHeader('Cache-Control', 'no-store');
+      return successResponse(res, result);
+    } catch (err) { next(err); }
+  }
+
+  async verifyRequiredTwoFactor(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await authService.verifyRequiredTwoFactor(req.body.tempToken, req.body.totpCode);
+      setRefreshTokenCookie(req, res, result.refreshToken);
+      res.setHeader('Cache-Control', 'no-store');
+      return successResponse(res, { accessToken: result.accessToken, user: result.user, recoveryCodes: result.recoveryCodes });
+    } catch (err) { next(err); }
+  }
+
   async verifyTwoFactorSetup(req: Request, res: Response, next: NextFunction) {
     try {
       const { totpCode } = req.body;
       const result = await authService.verifyTwoFactorSetup(req.user!.userId, totpCode);
-      return successResponse(res, result);
+      setRefreshTokenCookie(req, res, result.refreshToken);
+      res.setHeader('Cache-Control', 'no-store');
+      return successResponse(res, { accessToken: result.accessToken, user: result.user, recoveryCodes: result.recoveryCodes });
     } catch (err) {
       next(err);
     }
