@@ -7,6 +7,7 @@ const {
   parseTransferListImportOptions,
 } = require('../dist/modules/transfer-lists/transfer-list-import.parser');
 const { importService } = require('../dist/modules/import-export/import.service');
+const { TransferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
 
 function workbook(sheets) {
   const book = XLSX.utils.book_new();
@@ -75,6 +76,44 @@ test('maps a selected sheet and unconventional headers without changing the sour
   const preview = await importService.previewTransferLists(buffer, 'dane.xlsx', options);
   assert.equal(preview.rows[0]._rowIndex, 3);
   assert.deepEqual(preview.errors, parsed.errors);
+});
+
+test('distinguishes explicit missing dates from an empty date range', async () => {
+  const buffer = workbook([['Spis', [
+    ['Znak teczki', 'Tytuł teczki lub tomu', 'Daty skrajne', 'Kat. akt'],
+    ['A/1', 'Brak dat w źródle', 'brak dat', 'B50'],
+    ['A/2', 'Puste pole', '', 'B50'],
+    ['A/3', 'Daty podane', '2020-2024', 'B50'],
+  ]]]);
+  const parsed = parseTransferListImport(buffer);
+  assert.equal(parsed.items.length, 3);
+  assert.deepEqual(parsed.items.map((item) => item.dateRangeUnknown), [true, false, false]);
+  assert.deepEqual(parsed.items.map((item) => [item.dateFrom, item.dateTo]), [
+    [null, null],
+    [null, null],
+    ['2020-01-01', '2024-12-31'],
+  ]);
+});
+
+test('persists a source missing-dates marker without inventing folder dates', async () => {
+  const service = new TransferListService();
+  let folderData;
+  let itemData;
+  const tx = {
+    folder: { create: async ({ data }) => { folderData = data; return { id: 'folder-id' }; } },
+    transferListItem: { create: async ({ data }) => { itemData = data; return data; } },
+  };
+  const list = { id: 'list-id', tenantId: 'tenant-id' };
+  const data = { folderSignature: 'A/1', folderTitle: 'Akta', categoryCode: 'B50', dateRangeUnknown: true };
+  await service.createItemWithCanonicalFolder(tx, list, data, null, null, 1);
+  assert.equal(folderData.dateFrom, null);
+  assert.equal(folderData.dateTo, null);
+  assert.equal(itemData.dateRangeUnknown, true);
+  assert.equal(itemData.folderId, 'folder-id');
+  await assert.rejects(
+    service.createItemWithCanonicalFolder(tx, list, { ...data, dateFrom: '2020-01-01' }, null, null, 2),
+    { statusCode: 400 },
+  );
 });
 
 test('rejects unsafe, duplicate, or incomplete mappings before import', () => {

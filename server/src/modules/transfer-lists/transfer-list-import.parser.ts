@@ -269,6 +269,9 @@ export function parseTransferListImport(buffer: Buffer, options?: TransferListIm
 
     if (isColumnNumberingRow(mapped)) return null;
 
+    const dateRangeUnknown = [mapped._dateRange, mapped.dateFrom, mapped.dateTo]
+      .some((value) => /^brak\s+dat$/i.test(String(value ?? '').trim()));
+
     if (mapped._dateRange && !mapped.dateFrom && !mapped.dateTo) {
       const range = parseDateRange(mapped._dateRange);
       mapped.dateFrom = range.from;
@@ -299,6 +302,7 @@ export function parseTransferListImport(buffer: Buffer, options?: TransferListIm
       folderTitle: folderTitle || 'Bez tytułu',
       dateFrom: parseDate(mapped.dateFrom),
       dateTo: parseDate(mapped.dateTo),
+      dateRangeUnknown,
       categoryCode: categoryCode || 'B10',
       folderCount: Math.max(1, parseInt(String(mapped.folderCount), 10) || 1),
       storageLocation: mapped.storageLocation ? normalizeDisplayText(mapped.storageLocation).trim() || null : null,

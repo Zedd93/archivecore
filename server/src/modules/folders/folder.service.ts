@@ -121,6 +121,7 @@ export class FolderService {
             id: true,
             categoryCode: true,
             sourceBoxNumber: true,
+            dateRangeUnknown: true,
             transferList: { select: { id: true, listNumber: true, title: true, status: true, legalHold: true } },
           },
         },
@@ -230,6 +231,7 @@ export class FolderService {
             folderTitle: data.title,
             dateFrom,
             dateTo,
+            ...(dateFrom || dateTo ? { dateRangeUnknown: false } : {}),
             notes: data.description,
           },
         });

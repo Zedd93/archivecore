@@ -40,6 +40,12 @@ export class TransferListService {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  private ensureConsistentDateRange(data: { dateFrom?: unknown; dateTo?: unknown; dateRangeUnknown?: boolean }) {
+    if (data.dateRangeUnknown && (data.dateFrom || data.dateTo)) {
+      throw Object.assign(new Error('Nie można jednocześnie oznaczyć braku dat i podać dat skrajnych'), { statusCode: 400 });
+    }
+  }
+
   private getCanonicalFolderData(
     list: { id: string; tenantId: string },
     data: any,
@@ -76,6 +82,7 @@ export class TransferListService {
       folderTitle: String(data.folderTitle || '').trim().substring(0, 1000),
       dateFrom: this.parseOptionalDate(data.dateFrom),
       dateTo: this.parseOptionalDate(data.dateTo),
+      dateRangeUnknown: data.dateRangeUnknown === true,
       categoryCode: String(data.categoryCode || 'B10').trim().substring(0, 20),
       folderCount: Math.max(1, Number.parseInt(String(data.folderCount), 10) || 1),
       storageLocation: normalizeOptionalText(data.storageLocation)?.substring(0, 500) ?? null,
@@ -94,6 +101,7 @@ export class TransferListService {
     sourceBoxNumber: string | null,
     ordinalNumber: number
   ) {
+    this.ensureConsistentDateRange(data);
     const folder = await tx.folder.create({
       data: this.getCanonicalFolderData(list, data, boxId, ordinalNumber),
     });
@@ -354,9 +362,17 @@ export class TransferListService {
     this.ensureDraftStatus(list);
     const item = await prisma.transferListItem.findFirst({
       where: { id: itemId, transferListId: listId },
-      select: { id: true, folderId: true, ordinalNumber: true, categoryCode: true, folder: { select: { retentionPolicyId: true } } },
+      select: { id: true, folderId: true, ordinalNumber: true, categoryCode: true, dateFrom: true, dateTo: true, dateRangeUnknown: true, folder: { select: { retentionPolicyId: true } } },
     });
     if (!item) throw Object.assign(new Error('Pozycja spisu nie znaleziona'), { statusCode: 404 });
+    const nextDateRange = {
+      dateFrom: data.dateFrom === undefined ? item.dateFrom : data.dateFrom,
+      dateTo: data.dateTo === undefined ? item.dateTo : data.dateTo,
+      dateRangeUnknown: data.dateRangeUnknown === undefined
+        ? (data.dateFrom || data.dateTo ? false : item.dateRangeUnknown)
+        : data.dateRangeUnknown,
+    };
+    this.ensureConsistentDateRange(nextDateRange);
     const selectedPolicyId = data.retentionPolicyId === undefined ? item.folder?.retentionPolicyId : data.retentionPolicyId;
     await jrwaSuggestionService.validateSelection(tenantId, selectedPolicyId, data.categoryCode ?? item.categoryCode, item.folder?.retentionPolicyId);
     const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, data);
@@ -374,11 +390,11 @@ export class TransferListService {
         }
         await tx.folder.update({
           where: { id: folderId },
-          data: this.getCanonicalFolderData(list, { ...data, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
+          data: this.getCanonicalFolderData(list, { ...data, ...nextDateRange, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
         });
       } else {
         const folder = await tx.folder.create({
-          data: this.getCanonicalFolderData(list, { ...data, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
+          data: this.getCanonicalFolderData(list, { ...data, ...nextDateRange, retentionPolicyId: selectedPolicyId }, boxId, item.ordinalNumber),
         });
         folderId = folder.id;
       }
@@ -387,7 +403,7 @@ export class TransferListService {
         where: { id: itemId },
         data: {
           folderId,
-          ...this.getTransferListItemData(data, boxId, sourceBoxNumber, item.ordinalNumber),
+          ...this.getTransferListItemData({ ...data, ...nextDateRange }, boxId, sourceBoxNumber, item.ordinalNumber),
         },
         include: {
           box: { select: TRANSFER_LIST_ITEM_BOX_SELECT },

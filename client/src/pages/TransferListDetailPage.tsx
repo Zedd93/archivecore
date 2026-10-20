@@ -104,6 +104,7 @@ export default function TransferListDetailPage() {
     folderTitle: '',
     dateFrom: '',
     dateTo: '',
+    dateRangeUnknown: false,
     categoryCode: 'B10',
     retentionPolicyId: '',
     folderCount: 1,
@@ -150,16 +151,18 @@ export default function TransferListDetailPage() {
 
   const resetForm = () => {
     setForm({
-      folderSignature: '', folderTitle: '', dateFrom: '', dateTo: '',
+      folderSignature: '', folderTitle: '', dateFrom: '', dateTo: '', dateRangeUnknown: false,
       categoryCode: 'B10', retentionPolicyId: '', folderCount: 1, storageLocation: '',
       disposalOrTransferDate: '', notes: '', boxNumber: '',
     });
   };
 
-  const updateFormField = (field: keyof typeof form, value: string | number) => {
+  const updateFormField = (field: keyof typeof form, value: string | number | boolean) => {
     setForm((prev) => ({
       ...prev,
       [field]: value,
+      ...(field === 'dateRangeUnknown' && value === true ? { dateFrom: '', dateTo: '' } : {}),
+      ...((field === 'dateFrom' || field === 'dateTo') && value ? { dateRangeUnknown: false } : {}),
       ...((field === 'folderSignature' || field === 'categoryCode') && prev[field] !== value ? { retentionPolicyId: '' } : {}),
     }));
   };
@@ -175,6 +178,7 @@ export default function TransferListDetailPage() {
         folderCount: Number(form.folderCount),
         dateFrom: form.dateFrom || null,
         dateTo: form.dateTo || null,
+        dateRangeUnknown: form.dateRangeUnknown,
         disposalOrTransferDate: form.disposalOrTransferDate || null,
         storageLocation: form.storageLocation || null,
         notes: form.notes || null,
@@ -200,6 +204,7 @@ export default function TransferListDetailPage() {
         folderCount: Number(form.folderCount),
         dateFrom: form.dateFrom || null,
         dateTo: form.dateTo || null,
+        dateRangeUnknown: form.dateRangeUnknown,
         disposalOrTransferDate: form.disposalOrTransferDate || null,
         storageLocation: form.storageLocation || null,
         notes: form.notes || null,
@@ -220,6 +225,7 @@ export default function TransferListDetailPage() {
       folderTitle: item.folderTitle || '',
       dateFrom: item.dateFrom ? item.dateFrom.split('T')[0] : '',
       dateTo: item.dateTo ? item.dateTo.split('T')[0] : '',
+      dateRangeUnknown: item.dateRangeUnknown === true,
       categoryCode: item.categoryCode || 'B10',
       retentionPolicyId: item.folder?.retentionPolicyId || '',
       folderCount: item.folderCount || 1,
@@ -867,10 +873,18 @@ export default function TransferListDetailPage() {
                         <div className="text-xs text-gray-400 mt-0.5 truncate">{item.notes}</div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap">
-                      {item.dateFrom ? new Date(item.dateFrom).getFullYear() : '—'}
-                      {' – '}
-                      {item.dateTo ? new Date(item.dateTo).getFullYear() : '—'}
+                    <td className="px-3 py-2.5 text-gray-600 text-xs">
+                      {item.dateRangeUnknown ? (
+                        <span className="text-amber-700 font-medium">{t('transferLists.detail.dateRangeUnknown')}</span>
+                      ) : item.dateFrom || item.dateTo ? (
+                        <span className="whitespace-nowrap">
+                          {item.dateFrom ? new Date(item.dateFrom).getFullYear() : '—'}
+                          {' – '}
+                          {item.dateTo ? new Date(item.dateTo).getFullYear() : '—'}
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">{t('transferLists.detail.dateRangeMissing')}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-bold ${
@@ -1023,6 +1037,7 @@ export default function TransferListDetailPage() {
                 type="date"
                 value={form.dateFrom}
                 onChange={(e) => updateFormField('dateFrom', e.target.value)}
+                disabled={form.dateRangeUnknown}
                 className="input-field"
               />
             </div>
@@ -1033,6 +1048,7 @@ export default function TransferListDetailPage() {
                 type="date"
                 value={form.dateTo}
                 onChange={(e) => updateFormField('dateTo', e.target.value)}
+                disabled={form.dateRangeUnknown}
                 className="input-field"
               />
             </div>
@@ -1048,6 +1064,16 @@ export default function TransferListDetailPage() {
               />
             </div>
           </div>
+
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={form.dateRangeUnknown}
+              onChange={(e) => updateFormField('dateRangeUnknown', e.target.checked)}
+              className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span>{t('transferLists.detail.sourceDatesUnknown')}<span className="block text-xs text-gray-500">{t('transferLists.detail.sourceDatesUnknownHint')}</span></span>
+          </label>
 
           <div>
             <label htmlFor="item-storageLocation" className="label-text">{t('transferLists.detail.storageLocation')}</label>

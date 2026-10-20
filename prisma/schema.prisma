@@ -1369,6 +1369,7 @@ model TransferListItem {
   folderTitle            String    @db.VarChar(1000) // Tytuł teczki lub tomu
   dateFrom               DateTime? @db.Date // Daty skrajne — od
   dateTo                 DateTime? @db.Date // Daty skrajne — do
+  dateRangeUnknown       Boolean   @default(false) // Zrodlo jawnie podaje brak dat
   categoryCode           String    @db.VarChar(20) // Kat. akt (A, B5, B10, B25, BE5, BE10)
   folderCount            Int       @default(1) // Liczba teczek
   storageLocation        String?   @db.VarChar(500) // Miejsce przechowywania akt w archiwum

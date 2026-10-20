@@ -18,6 +18,7 @@ export const createTransferListItemSchema = z.object({
   folderTitle: z.string().min(1, 'Tytuł teczki jest wymagany').max(1000),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  dateRangeUnknown: z.boolean().optional(),
   categoryCode: z.string().min(1, 'Kategoria akt jest wymagana').max(20),
   retentionPolicyId: z.string().uuid('Nieprawidłowa pozycja JRWA').optional().nullable(),
   folderCount: z.number().int().min(1).default(1),
