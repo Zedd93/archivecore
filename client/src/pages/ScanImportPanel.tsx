@@ -165,6 +165,7 @@ export default function ScanImportPanel() {
       {pageTexts.length > 0 && (
         <>
           <p className="text-sm text-amber-800 rounded-lg bg-amber-50 p-3">{t('import.scanReviewWarning', { pages })}</p>
+          <p className="text-sm text-amber-800 rounded-lg bg-amber-50 p-3">{t('import.scanParsedFieldsWarning')}</p>
           {pageTexts.map((text, index) => (
             <div key={index} className="space-y-2 rounded-lg border border-gray-200 p-3">
               <label className="block text-sm font-medium text-gray-700">

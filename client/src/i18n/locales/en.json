@@ -1439,6 +1439,7 @@
     "scanPageWithoutRows": "Page {{page}} produced no items. Correct the text or confirm that it contains no list items.",
     "scanTooManyRows": "More than 500 items were recognized. Split the list into smaller files; nothing was saved.",
     "scanReviewWarning": "Read {{pages}} pages. OCR can misread characters, columns and dates. Compare with the original; nothing has been saved yet.",
+    "scanParsedFieldsWarning": "The preview can fill in signature, title, date range, category and box number. Other columns, including storage location and disposal date, are not transferred automatically from the scan; review and complete them in the list after import.",
     "scanOcrText": "OCR text (editable; separate columns with semicolons, tabs or multiple spaces)",
     "scanDraftRows": "Draft items from text",
     "scanNoRows": "No items found in the text",

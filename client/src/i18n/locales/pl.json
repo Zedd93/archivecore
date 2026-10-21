@@ -1439,6 +1439,7 @@
     "scanPageWithoutRows": "Strona {{page}} nie dała żadnych pozycji. Uzupełnij tekst lub potwierdź, że strona nie zawiera pozycji spisu.",
     "scanTooManyRows": "Rozpoznano ponad 500 pozycji. Podziel spis na mniejsze pliki; nic nie zostało zapisane.",
     "scanReviewWarning": "Odczytano {{pages}} stron. OCR może mylić znaki, kolumny i daty. Sprawdź skan z oryginałem; nic nie zostało jeszcze zapisane.",
+    "scanParsedFieldsWarning": "Podgląd może uzupełnić znak, tytuł, daty skrajne, kategorię i numer kartonu. Pozostałe kolumny, w tym miejsce przechowywania i data zniszczenia, nie są przenoszone automatycznie ze skanu; sprawdź je i uzupełnij w spisie po imporcie.",
     "scanOcrText": "Tekst OCR (możesz poprawić; rozdzielaj kolumny średnikiem, tabulatorem lub kilkoma spacjami)",
     "scanDraftRows": "Utwórz robocze pozycje z tekstu",
     "scanNoRows": "Nie rozpoznano pozycji w tekście",

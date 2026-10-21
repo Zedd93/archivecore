@@ -87,3 +87,38 @@ test('requires explicit acknowledgement for empty pages and never truncates the 
   assert.equal(overflow.tooMany, true);
   assert.equal(overflow.rows.length, 0);
 });
+
+test('maps the supplied nine-column transfer-list layout and joins a continued title', () => {
+  const header = 'Lp.; Znak teczki; Tytuł teczki lub tomu; Daty skrajne od –do; Kat. akt; Liczba teczek; Miejsce przechowy-wania akt w archiwum; Data zniszczenia lub przekazania do Archiwum Państwowego; Numer kartonu';
+  const firstPage = `${header}\n1; A/1; Dokumentacja zarządu; 2020-2024; B10; 1; Magazyn; ; 7\n; ; i uchwały wspólnoty; ; ; ; ; ; `;
+  const secondPage = '2; A/2; Akta finansowe; brak dat; B50; 1; Magazyn; ; 8';
+  const result = draftScanPages([firstPage, secondPage], []);
+  assert.equal(result.missingPage, null);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows[0].folderTitle, 'Dokumentacja zarządu i uchwały wspólnoty');
+  assert.equal(result.rows[0].dateFrom, '2020-01-01');
+  assert.equal(result.rows[0].dateTo, '2024-12-31');
+  assert.equal(result.rows[0].categoryCode, 'B10');
+  assert.equal(result.rows[0].boxNumber, '7');
+  assert.equal(result.rows[1].sourcePage, 2);
+  assert.equal(result.rows[1].dateRangeUnknown, true);
+  assert.equal(result.rows[1].boxNumber, '8');
+});
+
+test('leaves ambiguous OCR categories and invalid dates for manual correction', () => {
+  const header = 'Lp.; Znak teczki; Tytuł teczki lub tomu; Daty skrajne; Kat. akt';
+  const rows = draftScanRows(`${header}\n1; A/1; Akta zarządu; 0020-2024; B1O\n2; A/2; Umowy; 2020-2024; B10`);
+  assert.equal(rows[0].folderSignature, 'A/1');
+  assert.equal(rows[0].categoryCode, '');
+  assert.equal(rows[0].dateFrom, '');
+  assert.equal(rows[0].dateTo, '');
+  assert.equal(rows[1].categoryCode, 'B10');
+  assert.equal(rows[1].dateFrom, '2020-01-01');
+});
+
+test('joins an indented continuation but keeps a new incomplete entry separate', () => {
+  const rows = draftScanRows('A/1; Umowy; B10\n    i aneksy\nA/2; Wiersz bez kategorii');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].folderTitle, 'Umowy i aneksy');
+  assert.equal(rows[1].categoryCode, '');
+});
