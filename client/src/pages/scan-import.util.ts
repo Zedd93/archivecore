@@ -158,6 +158,8 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
         pending = { signature: start[1], content: start[2] };
       } else if (pending) {
         pending.content += ` ${line}`;
+      } else if (rows.at(-1)?.categoryCode && /^[\p{L}][\p{L}\p{M}\s–—-]{0,79}$/u.test(line)) {
+        rows[rows.length - 1].folderTitle += ` ${line}`;
       }
       if (pending && visualRow(pending.signature, pending.content, sourcePage)) flushPending();
       if (rows.length > 500) break;

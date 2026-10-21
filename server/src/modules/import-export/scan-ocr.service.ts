@@ -10,6 +10,31 @@ const MAX_PAGES = 12;
 
 type ScanKind = 'pdf' | 'png' | 'jpeg' | 'tiff';
 
+type PdfTextItem = { str: string; transform: number[] };
+
+function textFromPdfItems(items: PdfTextItem[]): string {
+  const positioned = items.filter((item) => item.str.trim()).map((item) => ({
+    text: item.str.replace(/\s+/g, ' ').trim(), x: item.transform[4], y: item.transform[5],
+  })).sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines: { y: number; items: typeof positioned }[] = [];
+  for (const item of positioned) {
+    const line = lines.at(-1);
+    if (line && Math.abs(line.y - item.y) <= 2) line.items.push(item);
+    else lines.push({ y: item.y, items: [item] });
+  }
+  return lines.map((line) => line.items.sort((a, b) => a.x - b.x).map((item) => item.text).join(' ')).join('\n');
+}
+
+async function loadPdf(buffer: Buffer) {
+  // TypeScript emits require() for dynamic imports in this CommonJS server; PDF.js is ESM-only.
+  const pdfjs = await (new Function('return import("pdfjs-dist/legacy/build/pdf.mjs")') as () => Promise<any>)();
+  try {
+    return await pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true, isEvalSupported: false }).promise;
+  } catch {
+    throw Object.assign(new Error('Nie udało się otworzyć PDF. Sprawdź, czy plik nie jest uszkodzony lub zaszyfrowany.'), { statusCode: 422 });
+  }
+}
+
 export function scanKind(buffer: Buffer): ScanKind {
   if (buffer.subarray(0, 5).toString() === '%PDF-') return 'pdf';
   if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'png';
@@ -47,16 +72,14 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
     throw Object.assign(new Error('Nieprawidłowy numer strony skanu'), { statusCode: 400 });
   }
   const directory = await mkdtemp(path.join(os.tmpdir(), 'archivecore-ocr-'));
+  let pdf: Awaited<ReturnType<typeof loadPdf>> | undefined;
   try {
     const source = path.join(directory, `source.${kind === 'jpeg' ? 'jpg' : kind}`);
     await writeFile(source, buffer);
     let pageCount = 1;
     if (kind === 'pdf') {
-      const info = await execute('pdfinfo', [source], 10000);
-      pageCount = Number(info.match(/^Pages:\s+(\d+)/m)?.[1]);
-      if (!Number.isInteger(pageCount) || pageCount < 1) {
-        throw Object.assign(new Error('Nie można ustalić liczby stron PDF'), { statusCode: 422 });
-      }
+      pdf = await loadPdf(buffer);
+      pageCount = pdf.numPages;
       if (pageCount > MAX_PAGES) {
         throw Object.assign(new Error(`Skan PDF może mieć maksymalnie ${MAX_PAGES} stron. Podziel większy spis na mniejsze pliki.`), { statusCode: 400 });
       }
@@ -72,6 +95,17 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
       : [requestedPage];
     const parts: string[] = [];
     for (const page of pagesToRead) {
+      if (pdf) {
+        const pdfPage = await pdf.getPage(page);
+        const { items } = await pdfPage.getTextContent();
+        const embeddedText = textFromPdfItems(items.filter((item: unknown): item is PdfTextItem =>
+          typeof item === 'object' && item !== null && 'str' in item && 'transform' in item));
+        pdfPage.cleanup();
+        if (embeddedText.trim().length >= 40) {
+          parts.push(embeddedText);
+          continue;
+        }
+      }
       let image = source;
       if (kind === 'pdf') {
         const prefix = path.join(directory, `page-${page}`);
@@ -91,6 +125,7 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
     if (!parts.some(Boolean) && requestedPage === undefined) throw Object.assign(new Error('OCR nie odczytał tekstu. Sprawdź jakość i orientację skanu.'), { statusCode: 422 });
     return { text, pages: pageCount };
   } finally {
+    if (pdf) await pdf.destroy();
     await rm(directory, { recursive: true, force: true });
   }
 }

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { mock } = require('node:test');
+const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
@@ -18,6 +19,25 @@ test('recognizes scan formats by content rather than filename', () => {
   assert.equal(scanKind(Buffer.from([255, 216, 255, 224])), 'jpeg');
   assert.equal(scanKind(Buffer.from([73, 73, 42, 0])), 'tiff');
   assert.throws(() => scanKind(Buffer.from('not-an-image')), /Obsługiwane skany/);
+});
+
+test('reads a text-based PDF without external Poppler or OCR programs', async () => {
+  const document = await PDFDocument.create();
+  const font = await document.embedFont(StandardFonts.Helvetica);
+  const first = document.addPage();
+  first.drawText('Lp. Znak teczki Tytul teczki lub tomu Daty skrajne Kat. akt Liczba teczek', { x: 40, y: 700, font, size: 10 });
+  first.drawText('1 TEST/1 Umowy 2010-2012 B5 1', { x: 40, y: 680, font, size: 10 });
+  const second = document.addPage();
+  second.drawText('Przekazujacy akta Kierownik Komorki Organizacyjnej Przyjmujacy akta', { x: 40, y: 700, font, size: 10 });
+  const buffer = Buffer.from(await document.save());
+  const pageOne = await recognizeScan(buffer, 1);
+  const pageTwo = await recognizeScan(buffer, 2);
+  assert.equal(pageOne.pages, 2);
+  assert.equal(pageTwo.pages, 2);
+  const preview = draftScanPages([pageOne.text, pageTwo.text], [2]);
+  assert.equal(preview.rows.length, 1);
+  assert.equal(preview.rows[0].folderSignature, 'TEST/1');
+  assert.equal(preview.rows[0].dateTo, '2012-12-31');
 });
 
 test('requires explicit approval and complete rows before creating a list', async () => {
@@ -130,9 +150,8 @@ test('reads a Word-generated PDF table with wrapped titles and ignores its foote
     'teczek Miejsce przechowywania Data zniszczenia',
     '1 2 3 4 5 6 7 8',
     '1 TEST/1 Umowy 2007-2017 B5 1',
-    '2 TEST/2 Dokumentacja kredytowa',
+    '2 TEST/2 Dokumentacja kredytowa 2012-2016 B10 3',
     'i aneksy',
-    '2012-2016 B10 3',
     '3 TEST/3 Akta osobowe 2018 B50 46',
     '4 TEST/4 Sprawozdanie',
     'finansowe i protokół',
