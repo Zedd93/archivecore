@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { draftScanPages, emptyScanRow, ScanRow } from './scan-import.util';
+import { draftScanPages, emptyScanRow, ScanRow, validFolderCount } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -108,6 +108,10 @@ export default function ScanImportPanel() {
 
   const save = async () => {
     if (!confirmed || !rows.length) return;
+    if (rows.some((row) => !validFolderCount(row.folderCount))) {
+      toast.error(t('import.scanFolderCountInvalid'));
+      return;
+    }
     setSaving(true);
     try {
       const items = rows.map((row) => ({
@@ -119,7 +123,7 @@ export default function ScanImportPanel() {
         dateRangeUnknown: row.dateRangeUnknown,
         boxNumber: row.boxNumber.trim() || null,
         notes: row.notes.trim() || null,
-        folderCount: 1,
+        folderCount: Number(row.folderCount),
       }));
       const response = await api.post('/import/transfer-lists/scan', { title: title.trim(), confirmed: true, items });
       setResult(response.data.data);
@@ -228,6 +232,13 @@ export default function ScanImportPanel() {
                     {t('import.mappingFields.boxNumber')}
                     <input className="input-field mt-1" value={row.boxNumber} onChange={(event) => updateRow(index, 'boxNumber', event.target.value)} />
                   </label>
+                  <label className="text-xs text-gray-700">
+                    {t('import.mappingFields.folderCount')} *
+                    <input className="input-field mt-1" type="text" inputMode="numeric" value={row.folderCount}
+                      aria-invalid={!validFolderCount(row.folderCount)}
+                      onChange={(event) => updateRow(index, 'folderCount', event.target.value)} />
+                    {!validFolderCount(row.folderCount) && <span className="text-red-700">{t('import.scanFolderCountInvalid')}</span>}
+                  </label>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-gray-700">
                   <input type="checkbox" checked={row.dateRangeUnknown}
@@ -251,7 +262,7 @@ export default function ScanImportPanel() {
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim())}
+            disabled={saving || !confirmed || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>

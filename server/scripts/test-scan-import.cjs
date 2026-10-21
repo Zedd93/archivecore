@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows, draftScanPages } = require('../../client/src/pages/scan-import.util.ts');
+const { draftScanRows, draftScanPages, validFolderCount } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -26,7 +26,7 @@ test('reads a text-based PDF without external Poppler or OCR programs', async ()
   const font = await document.embedFont(StandardFonts.Helvetica);
   const first = document.addPage();
   first.drawText('Lp. Znak teczki Tytul teczki lub tomu Daty skrajne Kat. akt Liczba teczek', { x: 40, y: 700, font, size: 10 });
-  first.drawText('1 TEST/1 Umowy 2010-2012 B5 1', { x: 40, y: 680, font, size: 10 });
+  first.drawText('1 TEST/1 Umowy 2010-2012 B5 46', { x: 40, y: 680, font, size: 10 });
   const second = document.addPage();
   second.drawText('Przekazujacy akta Kierownik Komorki Organizacyjnej Przyjmujacy akta', { x: 40, y: 700, font, size: 10 });
   const buffer = Buffer.from(await document.save());
@@ -38,6 +38,7 @@ test('reads a text-based PDF without external Poppler or OCR programs', async ()
   assert.equal(preview.rows.length, 1);
   assert.equal(preview.rows[0].folderSignature, 'TEST/1');
   assert.equal(preview.rows[0].dateTo, '2012-12-31');
+  assert.equal(preview.rows[0].folderCount, '46');
 });
 
 test('requires explicit approval and complete rows before creating a list', async () => {
@@ -49,6 +50,7 @@ test('requires explicit approval and complete rows before creating a list', asyn
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ folderSignature: '', folderTitle: 'Umowy', categoryCode: 'B10' }] }, 'tenant', 'user'), /Pozycja 1/);
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [] }, 'tenant', 'user'), /Array must contain/);
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateFrom: '2020-01-01', dateRangeUnknown: true }] }, 'tenant', 'user'), /Pozycja 1: Nie można jednocześnie/);
+  await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], folderCount: 0 }] }, 'tenant', 'user'), /Pozycja 1:/);
 });
 
 test('creates conservative draft rows and leaves uncertain categories for review', () => {
@@ -84,12 +86,13 @@ test('passes reviewed missing-date markers to the transfer list import', async (
       title: 'Spis testowy',
       confirmed: true,
       items: [
-        { folderSignature: 'A/1', folderTitle: 'Brak dat w źródle', categoryCode: 'B10', dateRangeUnknown: true },
+        { folderSignature: 'A/1', folderTitle: 'Brak dat w źródle', categoryCode: 'B10', dateRangeUnknown: true, folderCount: 46 },
         { folderSignature: 'A/2', folderTitle: 'Daty niewypełnione', categoryCode: 'B10' },
       ],
     }, 'tenant', 'user');
     assert.equal(result.imported, 2);
     assert.equal(importedItems[0].dateRangeUnknown, true);
+    assert.equal(importedItems[0].folderCount, 46);
     assert.equal(importedItems[1].dateRangeUnknown, undefined);
   } finally {
     create.mock.restore();
@@ -110,8 +113,8 @@ test('requires explicit acknowledgement for empty pages and never truncates the 
 
 test('maps the supplied nine-column transfer-list layout and joins a continued title', () => {
   const header = 'Lp.; Znak teczki; Tytuł teczki lub tomu; Daty skrajne od –do; Kat. akt; Liczba teczek; Miejsce przechowy-wania akt w archiwum; Data zniszczenia lub przekazania do Archiwum Państwowego; Numer kartonu';
-  const firstPage = `${header}\n1; A/1; Dokumentacja zarządu; 2020-2024; B10; 1; Magazyn; ; 7\n; ; i uchwały wspólnoty; ; ; ; ; ; `;
-  const secondPage = '2; A/2; Akta finansowe; brak dat; B50; 1; Magazyn; ; 8';
+  const firstPage = `${header}\n1; A/1; Dokumentacja zarządu; 2020-2024; B10; 46; Magazyn; ; 7\n; ; i uchwały wspólnoty; ; ; ; ; ; `;
+  const secondPage = '2; A/2; Akta finansowe; brak dat; B50; 3; Magazyn; ; 8';
   const result = draftScanPages([firstPage, secondPage], []);
   assert.equal(result.missingPage, null);
   assert.equal(result.rows.length, 2);
@@ -119,10 +122,22 @@ test('maps the supplied nine-column transfer-list layout and joins a continued t
   assert.equal(result.rows[0].dateFrom, '2020-01-01');
   assert.equal(result.rows[0].dateTo, '2024-12-31');
   assert.equal(result.rows[0].categoryCode, 'B10');
+  assert.equal(result.rows[0].folderCount, '46');
   assert.equal(result.rows[0].boxNumber, '7');
   assert.equal(result.rows[1].sourcePage, 2);
   assert.equal(result.rows[1].dateRangeUnknown, true);
+  assert.equal(result.rows[1].folderCount, '3');
   assert.equal(result.rows[1].boxNumber, '8');
+});
+
+test('keeps an empty or invalid count visible for correction instead of silently using one', () => {
+  const rows = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt; Liczba teczek\nA/1; Umowy; B10; \nA/2; Akta; B50; 0');
+  assert.equal(rows[0].folderCount, '');
+  assert.equal(rows[1].folderCount, '0');
+  assert.equal(validFolderCount(rows[0].folderCount), false);
+  assert.equal(validFolderCount(rows[1].folderCount), false);
+  assert.equal(validFolderCount('46'), true);
+  assert.equal(validFolderCount('1.5'), false);
 });
 
 test('leaves ambiguous OCR categories and invalid dates for manual correction', () => {
@@ -167,10 +182,14 @@ test('reads a Word-generated PDF table with wrapped titles and ignores its foote
   assert.deepEqual(reviewed.rows.map((row) => row.folderSignature), ['TEST/1', 'TEST/2', 'TEST/3', 'TEST/4']);
   assert.equal(reviewed.rows[0].dateFrom, '2007-01-01');
   assert.equal(reviewed.rows[0].dateTo, '2017-12-31');
+  assert.equal(reviewed.rows[0].folderCount, '1');
   assert.equal(reviewed.rows[1].folderTitle, 'Dokumentacja kredytowa i aneksy');
   assert.equal(reviewed.rows[1].categoryCode, 'B10');
+  assert.equal(reviewed.rows[1].folderCount, '3');
   assert.equal(reviewed.rows[2].dateTo, '2018-12-31');
+  assert.equal(reviewed.rows[2].folderCount, '46');
   assert.equal(reviewed.rows[2].boxNumber, '');
   assert.equal(reviewed.rows[3].folderTitle, 'Sprawozdanie finansowe i protokół');
   assert.equal(reviewed.rows[3].dateFrom, '2019-01-01');
+  assert.equal(reviewed.rows[3].folderCount, '3');
 });

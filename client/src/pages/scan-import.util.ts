@@ -3,6 +3,7 @@ export interface ScanRow {
   folderSignature: string;
   folderTitle: string;
   categoryCode: string;
+  folderCount: string;
   dateFrom: string;
   dateTo: string;
   dateRangeUnknown: boolean;
@@ -11,7 +12,7 @@ export interface ScanRow {
   notes: string;
 }
 
-type ScanField = 'folderSignature' | 'folderTitle' | 'categoryCode' | 'dateRange' | 'dateFrom' | 'dateTo' | 'boxNumber';
+type ScanField = 'folderSignature' | 'folderTitle' | 'categoryCode' | 'folderCount' | 'dateRange' | 'dateFrom' | 'dateTo' | 'boxNumber';
 type Header = (ScanField | null)[];
 
 const HEADER_FIELDS: Record<string, ScanField> = {
@@ -21,13 +22,18 @@ const HEADER_FIELDS: Record<string, ScanField> = {
   'daty skrajne od': 'dateFrom', 'daty skrajne do': 'dateTo',
   'data od': 'dateFrom', 'data do': 'dateTo',
   'kat akt': 'categoryCode', kategoria: 'categoryCode', 'kategoria akt': 'categoryCode',
+  'liczba teczek': 'folderCount', 'liczba teczek akt': 'folderCount', 'ilosc teczek': 'folderCount',
   'numer kartonu': 'boxNumber', 'nr kartonu': 'boxNumber', karton: 'boxNumber',
 };
 const CATEGORY = /^(?:A|BE|Bc|B)\d*(?:\+\d+)?$/i;
 
 export const emptyScanRow = (): ScanRow => ({
-  id: crypto.randomUUID(), folderSignature: '', folderTitle: '', categoryCode: '', dateFrom: '', dateTo: '', dateRangeUnknown: false, boxNumber: '', notes: '',
+  id: crypto.randomUUID(), folderSignature: '', folderTitle: '', categoryCode: '', folderCount: '1', dateFrom: '', dateTo: '', dateRangeUnknown: false, boxNumber: '', notes: '',
 });
+
+export function validFolderCount(value: string): boolean {
+  return /^[1-9]\d*$/.test(value.trim()) && Number(value) <= 2147483647;
+}
 
 function normalizeHeader(value: string): string {
   return value.normalize('NFKD').toLowerCase().replace(/ł/g, 'l').replace(/\p{M}/gu, '')
@@ -79,6 +85,7 @@ function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRo
     folderSignature: fields.folderSignature || '',
     folderTitle: fields.folderTitle || '',
     categoryCode: CATEGORY.test(fields.categoryCode || '') ? fields.categoryCode! : '',
+    folderCount: fields.folderCount ?? '1',
     boxNumber: fields.boxNumber || '',
     dateFrom: dateRangeUnknown ? '' : parseDateCell(fields.dateFrom || '', false) || dates.dateFrom,
     dateTo: dateRangeUnknown ? '' : parseDateCell(fields.dateTo || '', true) || dates.dateTo,
@@ -109,7 +116,7 @@ function isVisualTableHeader(line: string): boolean {
 }
 
 const VISUAL_ROW_START = /^\d{1,4}[.)]?\s+(\S+)\s+(.+)$/;
-const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|\d{4}(?:\s*[-–—]\s*\d{4})?)\s+)?((?:A|BE|BC|B)\d*(?:\+\d+)?)\s+\d+\s*$/i;
+const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|\d{4}(?:\s*[-–—]\s*\d{4})?)\s+)?((?:A|BE|BC|B)\d*(?:\+\d+)?)\s+(\d+)\s*$/i;
 
 function visualRow(signature: string, content: string, sourcePage?: number): ScanRow | null {
   const match = content.match(VISUAL_ROW_END);
@@ -120,6 +127,7 @@ function visualRow(signature: string, content: string, sourcePage?: number): Sca
   return {
     ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
     folderSignature: signature, folderTitle: match[1].trim(), categoryCode,
+    folderCount: match[4],
     ...dates,
   };
 }
