@@ -64,6 +64,9 @@ jobs:
       - name: Verify scan import approval
         run: npm run test:scan-import
 
+      - name: Verify multi-page scan recognition
+        run: npm run test:scan-ocr-pages
+
       - name: Verify QR scan batch assignment
         run: npm run test:scan-batch
 

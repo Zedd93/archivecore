@@ -165,8 +165,8 @@ export class ImportService {
     return inspectTableImport(buffer, HR_COLUMN_MAP, 'hr');
   }
 
-  async recognizeTransferListScan(buffer: Buffer) {
-    return recognizeScan(buffer);
+  async recognizeTransferListScan(buffer: Buffer, page?: number) {
+    return recognizeScan(buffer, page);
   }
 
   async importReviewedScan(input: unknown, tenantId: string, userId: string): Promise<ImportResult> {

@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { draftScanRows, emptyScanRow, ScanRow } from './scan-import.util';
+import { draftScanPages, emptyScanRow, ScanRow } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -18,8 +18,10 @@ export default function ScanImportPanel() {
   const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
-  const [ocrText, setOcrText] = useState('');
+  const [pageTexts, setPageTexts] = useState<string[]>([]);
   const [pages, setPages] = useState(0);
+  const [workingPage, setWorkingPage] = useState(0);
+  const [emptyPages, setEmptyPages] = useState<number[]>([]);
   const [rows, setRows] = useState<ScanRow[]>([]);
   const [confirmed, setConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
@@ -29,8 +31,10 @@ export default function ScanImportPanel() {
   const selectFile = (next: File | null) => {
     setFile(next);
     setTitle(next?.name.replace(/\.[^.]+$/, '') || '');
-    setOcrText('');
+    setPageTexts([]);
     setPages(0);
+    setWorkingPage(0);
+    setEmptyPages([]);
     setRows([]);
     setConfirmed(false);
     setResult(null);
@@ -43,25 +47,50 @@ export default function ScanImportPanel() {
       return;
     }
     setWorking(true);
+    let currentPage = 1;
     try {
-      const data = new FormData();
-      data.append('file', file);
-      const response = await api.post('/import/transfer-lists/scan/recognize', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setOcrText(response.data.data.text);
-      setPages(response.data.data.pages);
+      const recognized: string[] = [];
+      let totalPages = 0;
+      do {
+        setWorkingPage(currentPage);
+        const data = new FormData();
+        data.append('file', file);
+        const response = await api.post(`/import/transfer-lists/scan/recognize?page=${currentPage}`, data, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (currentPage === 1) {
+          totalPages = response.data.data.pages;
+          setPages(totalPages);
+        } else if (response.data.data.pages !== totalPages) {
+          throw new Error(t('import.scanPageCountChanged'));
+        }
+        recognized.push(response.data.data.text);
+        currentPage++;
+      } while (currentPage <= totalPages);
+      setPageTexts(recognized);
+      setEmptyPages([]);
       setRows([]);
       setConfirmed(false);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      toast.error(t('import.scanPageError', { page: currentPage, message: getApiErrorMessage(error, t('common.genericError')) }));
     } finally {
       setWorking(false);
+      setWorkingPage(0);
     }
   };
 
   const convert = () => {
-    const next = draftScanRows(ocrText);
+    const { rows: next, missingPage, tooMany } = draftScanPages(pageTexts, emptyPages);
+    if (missingPage !== null) {
+      toast.error(t('import.scanPageWithoutRows', { page: missingPage }));
+      return;
+    }
+    if (tooMany) {
+      setRows([]);
+      setConfirmed(false);
+      toast.error(t('import.scanTooManyRows'));
+      return;
+    }
     setRows(next);
     setConfirmed(false);
     if (!next.length) toast.error(t('import.scanNoRows'));
@@ -127,19 +156,38 @@ export default function ScanImportPanel() {
         <input type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff" className="input-field mt-1" disabled={working || saving}
           onChange={(event) => selectFile(event.target.files?.[0] || null)} />
       </label>
-      {file && !ocrText && (
+      {file && pageTexts.length === 0 && (
         <button type="button" className="btn-primary inline-flex items-center gap-2" disabled={working} onClick={recognize}>
-          {working && <Loader2 size={16} className="animate-spin" />}{t('import.scanRecognize')}
+          {working && <Loader2 size={16} className="animate-spin" />}
+          {working ? t('import.scanRecognizingPage', { page: workingPage, pages: pages || '?' }) : t('import.scanRecognize')}
         </button>
       )}
-      {ocrText && (
+      {pageTexts.length > 0 && (
         <>
           <p className="text-sm text-amber-800 rounded-lg bg-amber-50 p-3">{t('import.scanReviewWarning', { pages })}</p>
-          <label className="block text-sm font-medium text-gray-700">
-            {t('import.scanOcrText')}
-            <textarea className="input-field mt-1 min-h-48 font-mono text-xs" value={ocrText}
-              onChange={(event) => { setOcrText(event.target.value); setRows([]); setConfirmed(false); }} />
-          </label>
+          {pageTexts.map((text, index) => (
+            <div key={index} className="space-y-2 rounded-lg border border-gray-200 p-3">
+              <label className="block text-sm font-medium text-gray-700">
+                {t('import.scanOcrText')} - {t('import.scanPage', { page: index + 1, pages })}
+                <textarea className="input-field mt-1 min-h-40 font-mono text-xs" value={text}
+                  onChange={(event) => {
+                    setPageTexts((previous) => previous.map((value, pageIndex) => pageIndex === index ? event.target.value : value));
+                    setEmptyPages((previous) => previous.filter((page) => page !== index + 1));
+                    setRows([]);
+                    setConfirmed(false);
+                  }} />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-700">
+                <input type="checkbox" checked={emptyPages.includes(index + 1)}
+                  onChange={(event) => {
+                    setEmptyPages((previous) => event.target.checked ? [...previous, index + 1] : previous.filter((page) => page !== index + 1));
+                    setRows([]);
+                    setConfirmed(false);
+                  }} />
+                {t('import.scanPageNoItems')}
+              </label>
+            </div>
+          ))}
           <button type="button" className="btn-secondary" onClick={convert}>{t('import.scanDraftRows')}</button>
         </>
       )}
@@ -155,7 +203,7 @@ export default function ScanImportPanel() {
             {rows.map((row, index) => (
               <div key={row.id} className="rounded-lg border border-gray-200 p-3 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}</span>
+                  <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}{row.sourcePage ? ` - ${t('import.scanPage', { page: row.sourcePage, pages })}` : ''}</span>
                   <button type="button" aria-label={t('import.scanRemoveRow', { number: index + 1 })} className="text-red-600"
                     onClick={() => { setRows((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); }}>
                     <Trash2 size={17} />

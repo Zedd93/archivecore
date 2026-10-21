@@ -1,12 +1,12 @@
 import { execFile } from 'child_process';
-import { mkdtemp, readdir, rm, writeFile } from 'fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
 const run = promisify(execFile);
 const MAX_SCAN_BYTES = 10 * 1024 * 1024;
-const MAX_PAGES = 3;
+const MAX_PAGES = 12;
 
 type ScanKind = 'pdf' | 'png' | 'jpeg' | 'tiff';
 
@@ -38,41 +38,58 @@ async function execute(binary: string, args: string[], timeout: number): Promise
   }
 }
 
-export async function recognizeScan(buffer: Buffer): Promise<{ text: string; pages: number }> {
+export async function recognizeScan(buffer: Buffer, requestedPage?: number): Promise<{ text: string; pages: number }> {
   if (!buffer.length || buffer.length > MAX_SCAN_BYTES) {
     throw Object.assign(new Error('Skan musi mieć od 1 B do 10 MB'), { statusCode: 400 });
   }
   const kind = scanKind(buffer);
+  if (requestedPage !== undefined && (!Number.isInteger(requestedPage) || requestedPage < 1)) {
+    throw Object.assign(new Error('Nieprawidłowy numer strony skanu'), { statusCode: 400 });
+  }
   const directory = await mkdtemp(path.join(os.tmpdir(), 'archivecore-ocr-'));
   try {
     const source = path.join(directory, `source.${kind === 'jpeg' ? 'jpg' : kind}`);
     await writeFile(source, buffer);
-    let images = [source];
+    let pageCount = 1;
     if (kind === 'pdf') {
       const info = await execute('pdfinfo', [source], 10000);
-      const pageCount = Number(info.match(/^Pages:\s+(\d+)/m)?.[1]);
+      pageCount = Number(info.match(/^Pages:\s+(\d+)/m)?.[1]);
       if (!Number.isInteger(pageCount) || pageCount < 1) {
         throw Object.assign(new Error('Nie można ustalić liczby stron PDF'), { statusCode: 422 });
       }
       if (pageCount > MAX_PAGES) {
-        throw Object.assign(new Error(`Skan PDF może mieć maksymalnie ${MAX_PAGES} strony. Import większego spisu jako jednej całości nie jest jeszcze obsługiwany.`), { statusCode: 400 });
+        throw Object.assign(new Error(`Skan PDF może mieć maksymalnie ${MAX_PAGES} stron. Podziel większy spis na mniejsze pliki.`), { statusCode: 400 });
       }
-      const prefix = path.join(directory, 'page');
-      await execute('pdftoppm', ['-f', '1', '-l', String(MAX_PAGES), '-r', '180', '-png', source, prefix], 60000);
-      images = (await readdir(directory))
-        .filter((name) => /^page-\d+\.png$/.test(name))
-        .sort((a, b) => Number(a.match(/\d+/)![0]) - Number(b.match(/\d+/)![0]))
-        .map((name) => path.join(directory, name));
-      if (images.length === 0) throw Object.assign(new Error('PDF nie zawiera stron możliwych do odczytu'), { statusCode: 422 });
+      if (requestedPage === undefined && pageCount > 3) {
+        throw Object.assign(new Error('Dla PDF powyżej 3 stron odczytuj jedną stronę na żądanie'), { statusCode: 400 });
+      }
     }
+    if (requestedPage !== undefined && requestedPage > pageCount) {
+      throw Object.assign(new Error('Numer strony przekracza liczbę stron skanu'), { statusCode: 400 });
+    }
+    const pagesToRead = requestedPage === undefined
+      ? Array.from({ length: pageCount }, (_, index) => index + 1)
+      : [requestedPage];
     const parts: string[] = [];
-    for (const image of images) {
-      const text = await execute('tesseract', [image, 'stdout', '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 30000);
+    for (const page of pagesToRead) {
+      let image = source;
+      if (kind === 'pdf') {
+        const prefix = path.join(directory, `page-${page}`);
+        image = `${prefix}.png`;
+        await execute('pdftoppm', ['-f', String(page), '-l', String(page), '-singlefile', '-r', '180', '-scale-to', '3500', '-png', source, prefix], 25000);
+        try {
+          await access(image);
+        } catch {
+          throw Object.assign(new Error(`Nie udało się przygotować strony ${page} PDF do odczytu`), { statusCode: 422 });
+        }
+      }
+      const text = await execute('tesseract', [image, 'stdout', '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 20000);
       parts.push(text.trim());
+      if (kind === 'pdf') await rm(image, { force: true });
     }
-    const text = parts.filter(Boolean).join('\n\n');
-    if (!text) throw Object.assign(new Error('OCR nie odczytał tekstu. Sprawdź jakość i orientację skanu.'), { statusCode: 422 });
-    return { text, pages: images.length };
+    const text = parts.join('\n\n');
+    if (!parts.some(Boolean) && requestedPage === undefined) throw Object.assign(new Error('OCR nie odczytał tekstu. Sprawdź jakość i orientację skanu.'), { statusCode: 422 });
+    return { text, pages: pageCount };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -4,7 +4,7 @@ const { mock } = require('node:test');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows } = require('../../client/src/pages/scan-import.util.ts');
+const { draftScanRows, draftScanPages } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -75,4 +75,15 @@ test('passes reviewed missing-date markers to the transfer list import', async (
     create.mock.restore();
     importItems.mock.restore();
   }
+});
+
+test('requires explicit acknowledgement for empty pages and never truncates the 501st item', () => {
+  const first = 'A/1; Umowy; B10';
+  assert.deepEqual(draftScanPages([first, ''], []).missingPage, 2);
+  const reviewed = draftScanPages([first, ''], [2]);
+  assert.equal(reviewed.rows.length, 1);
+  assert.equal(reviewed.rows[0].sourcePage, 1);
+  const overflow = draftScanPages([Array.from({ length: 501 }, (_, index) => `A/${index}; Umowy; B10`).join('\n')], []);
+  assert.equal(overflow.tooMany, true);
+  assert.equal(overflow.rows.length, 0);
 });

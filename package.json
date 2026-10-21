@@ -49,6 +49,7 @@
     "test:missing-date-filters": "node --import tsx --test server/scripts/test-missing-date-filters.cjs",
     "test:table-import-mapping": "node --import tsx --test server/scripts/test-table-import-mapping.cjs",
     "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",
+    "test:scan-ocr-pages": "node --import tsx --test server/scripts/test-scan-ocr-pages.cjs",
     "test:scan-batch": "node --import tsx --test server/scripts/test-scan-batch.mjs",
     "test:offline-shell": "node --test client/scripts/test-offline-shell.cjs",
     "test:order-draft": "node --import tsx --test client/scripts/test-order-draft.mjs",

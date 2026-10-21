@@ -26,7 +26,8 @@ export class ImportController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       if (!req.file) return errorResponse(res, 'Nie załączono skanu', 400);
-      return successResponse(res, await importService.recognizeTransferListScan(req.file.buffer));
+      const page = req.query.page === undefined ? undefined : Number(req.query.page);
+      return successResponse(res, await importService.recognizeTransferListScan(req.file.buffer, page));
     } catch (err) { next(err); }
   }
 
