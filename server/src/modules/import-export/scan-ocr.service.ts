@@ -9,6 +9,7 @@ const run = promisify(execFile);
 const MAX_SCAN_BYTES = 10 * 1024 * 1024;
 const MAX_PAGES = 12;
 const WINDOWS_OCR_DIR = 'C:\\Apps\\ocr-tools\\runtime\\Library\\bin';
+const WINDOWS_TESSDATA_DIR = 'C:\\Apps\\ocr-tools\\runtime\\share\\tessdata';
 
 type ScanKind = 'pdf' | 'png' | 'jpeg' | 'tiff';
 type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
@@ -134,7 +135,11 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
           throw Object.assign(new Error(`Nie udało się przygotować strony ${page} PDF do odczytu`), { statusCode: 422 });
         }
       }
-      const text = await execute('tesseract', [image, 'stdout', '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 20000);
+      const tessdataDir = process.env.OCR_TESSDATA_DIR
+        || (process.platform === 'win32' && existsSync(WINDOWS_TESSDATA_DIR) ? WINDOWS_TESSDATA_DIR : undefined);
+      const text = await execute('tesseract', [image, 'stdout',
+        ...(tessdataDir ? ['--tessdata-dir', tessdataDir] : []),
+        '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 20000);
       parts.push(text.trim());
       pageDiagnostics.push({ page, source: 'ocr', reviewFlag: scanReviewFlag(text) });
       if (kind === 'pdf') await rm(image, { force: true });

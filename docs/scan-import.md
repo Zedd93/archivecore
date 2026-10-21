@@ -8,7 +8,7 @@ PDF zawierający warstwę tekstową jest odczytywany przez aplikację bez dodatk
 
 1. Tesseract OCR z pakietami językowymi `pol` i `eng`.
 2. Poppler for Windows (`pdftoppm.exe`) do przygotowania stron PDF jako obrazów. Dla JPG/PNG/TIFF wystarczy Tesseract.
-3. Katalogi tych programów w `PATH` procesu `archivecore-server` w PM2 lub oba programy w katalogu wskazanym przez `OCR_BIN_DIR`. Na serwerze Doxart domyślnie wykrywany jest `C:\Apps\ocr-tools\runtime\Library\bin`; ustawienie `OCR_BIN_DIR` pozwala wskazać inną instalację. Sprawdź `tesseract --list-langs` i `pdftoppm -v` w odpowiednim środowisku. Na liście języków muszą być `pol` i `eng`.
+3. Katalogi tych programów w `PATH` procesu `archivecore-server` w PM2 lub oba programy w katalogu wskazanym przez `OCR_BIN_DIR`. Na serwerze Doxart domyślnie wykrywany jest `C:\Apps\ocr-tools\runtime\Library\bin`; ustawienie `OCR_BIN_DIR` pozwala wskazać inną instalację. Modele językowe są domyślnie pobierane z `C:\Apps\ocr-tools\runtime\share\tessdata`; przy innej instalacji wskaż je przez `OCR_TESSDATA_DIR`. Samo `tesseract --list-langs` nie potwierdza, że program potrafi użyć modeli przy odczycie obrazu. Na liście języków muszą być `pol` i `eng`.
 4. Ponowne uruchomienie procesu PM2 po instalacji lub zmianie konfiguracji OCR. Sam `npm install` tych programów nie instaluje.
 
 Nie trzeba nowej migracji bazy danych. Aktualizację aplikacji wykonaj istniejącym `C:\Apps\update.ps1`. Programy zewnętrzne są konieczne tylko dla OCR obrazów.
