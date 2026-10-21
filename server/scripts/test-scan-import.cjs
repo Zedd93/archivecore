@@ -122,3 +122,36 @@ test('joins an indented continuation but keeps a new incomplete entry separate',
   assert.equal(rows[0].folderTitle, 'Umowy i aneksy');
   assert.equal(rows[1].categoryCode, '');
 });
+
+test('reads a Word-generated PDF table with wrapped titles and ignores its footer', () => {
+  const firstPage = [
+    'Spis zdawczo-odbiorczy akt nr 1/08/2022',
+    'Lp. Znak teczki Tytuł teczki lub tomu Daty skrajne od –do Kat. akt Liczba',
+    'teczek Miejsce przechowywania Data zniszczenia',
+    '1 2 3 4 5 6 7 8',
+    '1 TEST/1 Umowy 2007-2017 B5 1',
+    '2 TEST/2 Dokumentacja kredytowa',
+    'i aneksy',
+    '2012-2016 B10 3',
+    '3 TEST/3 Akta osobowe 2018 B50 46',
+    '4 TEST/4 Sprawozdanie',
+    'finansowe i protokół',
+    '2019 B10 3',
+    'Przekazujący akta Kierownik Komórki Organizacyjnej Przyjmujący akta',
+    'Imię i nazwisko',
+  ].join('\n');
+  const secondPage = 'Dane kontaktowe\n(podpis)\nData przekazania akt:';
+  const withoutReview = draftScanPages([firstPage, secondPage], []);
+  assert.equal(withoutReview.missingPage, 2);
+  const reviewed = draftScanPages([firstPage, secondPage], [2]);
+  assert.equal(reviewed.rows.length, 4);
+  assert.deepEqual(reviewed.rows.map((row) => row.folderSignature), ['TEST/1', 'TEST/2', 'TEST/3', 'TEST/4']);
+  assert.equal(reviewed.rows[0].dateFrom, '2007-01-01');
+  assert.equal(reviewed.rows[0].dateTo, '2017-12-31');
+  assert.equal(reviewed.rows[1].folderTitle, 'Dokumentacja kredytowa i aneksy');
+  assert.equal(reviewed.rows[1].categoryCode, 'B10');
+  assert.equal(reviewed.rows[2].dateTo, '2018-12-31');
+  assert.equal(reviewed.rows[2].boxNumber, '');
+  assert.equal(reviewed.rows[3].folderTitle, 'Sprawozdanie finansowe i protokół');
+  assert.equal(reviewed.rows[3].dateFrom, '2019-01-01');
+});

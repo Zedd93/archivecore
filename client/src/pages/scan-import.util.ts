@@ -103,15 +103,66 @@ function fallbackRow(cells: string[], line: string, sourcePage?: number): ScanRo
   };
 }
 
-function parsePage(text: string, sourcePage: number | undefined, initialHeader: Header | null) {
+function isVisualTableHeader(line: string): boolean {
+  const normalized = normalizeHeader(line);
+  return normalized.includes('znak teczki') && normalized.includes('tytul teczki') && normalized.includes('kat akt');
+}
+
+const VISUAL_ROW_START = /^\d{1,4}[.)]?\s+(\S+)\s+(.+)$/;
+const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|\d{4}(?:\s*[-–—]\s*\d{4})?)\s+)?((?:A|BE|BC|B)\d*(?:\+\d+)?)\s+\d+\s*$/i;
+
+function visualRow(signature: string, content: string, sourcePage?: number): ScanRow | null {
+  const match = content.match(VISUAL_ROW_END);
+  if (!match || !match[1].trim()) return null;
+  const categoryCode = match[3];
+  if (!categoryCode || !CATEGORY.test(categoryCode)) return null;
+  const dates = parseYearRange(match[2] || '');
+  return {
+    ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
+    folderSignature: signature, folderTitle: match[1].trim(), categoryCode,
+    ...dates,
+  };
+}
+
+function parsePage(text: string, sourcePage: number | undefined, initialHeader: Header | null, initialVisualTable = false) {
   const rows: ScanRow[] = [];
   let header = initialHeader;
+  let visualTable = initialVisualTable;
+  const hasVisualHeader = text.split(/\r?\n/).some((line) => !/[;\t]/.test(line) && isVisualTableHeader(line));
+  let pending: { signature: string; content: string } | null = null;
+  const flushPending = () => {
+    if (!pending) return;
+    rows.push(visualRow(pending.signature, pending.content, sourcePage) || {
+      ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
+      folderSignature: pending.signature, folderTitle: pending.content,
+    });
+    pending = null;
+  };
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
     const { cells, delimited } = splitCells(line);
     const detected = detectHeader(cells);
-    if (detected) { header = detected; continue; }
+    if (detected) { flushPending(); header = detected; visualTable = !delimited; continue; }
+    if (!delimited && isVisualTableHeader(line)) { flushPending(); visualTable = true; continue; }
+    if (hasVisualHeader && !visualTable) continue;
+    if (visualTable && !delimited) {
+      if (/^(?:Przekazuj[aą]cy akta|Kierownik Kom[oó]rki|Przyjmuj[aą]cy akta|Imi[eę] i nazwisko)/i.test(line)) {
+        flushPending();
+        break;
+      }
+      if (/^\d+(?:\s+\d+){3,}\s*$/.test(line)) continue;
+      const start = line.match(VISUAL_ROW_START);
+      if (start && !/^\d+$/.test(start[1]) && !CATEGORY.test(start[1])) {
+        flushPending();
+        pending = { signature: start[1], content: start[2] };
+      } else if (pending) {
+        pending.content += ` ${line}`;
+      }
+      if (pending && visualRow(pending.signature, pending.content, sourcePage)) flushPending();
+      if (rows.length > 500) break;
+      continue;
+    }
 
     const categoryIndex = header?.indexOf('categoryCode') ?? -1;
     const signatureIndex = header?.indexOf('folderSignature') ?? -1;
@@ -132,7 +183,8 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
     }
     if (rows.length > 500) break;
   }
-  return { rows, header };
+  flushPending();
+  return { rows, header, visualTable };
 }
 
 export function draftScanRows(text: string, sourcePage?: number): ScanRow[] {
@@ -142,10 +194,12 @@ export function draftScanRows(text: string, sourcePage?: number): ScanRow[] {
 export function draftScanPages(pageTexts: string[], emptyPages: number[]) {
   const rows: ScanRow[] = [];
   let header: Header | null = null;
+  let visualTable = false;
   for (const [index, text] of pageTexts.entries()) {
     if (emptyPages.includes(index + 1)) continue;
-    const parsed = parsePage(text, index + 1, header);
+    const parsed = parsePage(text, index + 1, header, visualTable);
     header = parsed.header;
+    visualTable = parsed.visualTable;
     if (!parsed.rows.length) return { rows: [], missingPage: index + 1, tooMany: false };
     rows.push(...parsed.rows);
     if (rows.length > 500) return { rows: [], missingPage: null, tooMany: true };
