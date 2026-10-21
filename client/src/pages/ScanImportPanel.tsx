@@ -14,11 +14,14 @@ interface ScanResult {
   listNumber: string;
 }
 
+type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
+
 export default function ScanImportPanel() {
   const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [pageTexts, setPageTexts] = useState<string[]>([]);
+  const [pageDiagnostics, setPageDiagnostics] = useState<(PageDiagnostic | null)[]>([]);
   const [pages, setPages] = useState(0);
   const [workingPage, setWorkingPage] = useState(0);
   const [emptyPages, setEmptyPages] = useState<number[]>([]);
@@ -32,6 +35,7 @@ export default function ScanImportPanel() {
     setFile(next);
     setTitle(next?.name.replace(/\.[^.]+$/, '') || '');
     setPageTexts([]);
+    setPageDiagnostics([]);
     setPages(0);
     setWorkingPage(0);
     setEmptyPages([]);
@@ -50,6 +54,7 @@ export default function ScanImportPanel() {
     let currentPage = 1;
     try {
       const recognized: string[] = [];
+      const diagnostics: (PageDiagnostic | null)[] = [];
       let totalPages = 0;
       do {
         setWorkingPage(currentPage);
@@ -65,9 +70,11 @@ export default function ScanImportPanel() {
           throw new Error(t('import.scanPageCountChanged'));
         }
         recognized.push(response.data.data.text);
+        diagnostics.push(response.data.data.pageDiagnostics?.[0] ?? null);
         currentPage++;
       } while (currentPage <= totalPages);
       setPageTexts(recognized);
+      setPageDiagnostics(diagnostics);
       setEmptyPages([]);
       setRows([]);
       setConfirmed(false);
@@ -172,6 +179,14 @@ export default function ScanImportPanel() {
           <p className="text-sm text-amber-800 rounded-lg bg-amber-50 p-3">{t('import.scanParsedFieldsWarning')}</p>
           {pageTexts.map((text, index) => (
             <div key={index} className="space-y-2 rounded-lg border border-gray-200 p-3">
+              {pageDiagnostics[index] && (
+                <p className="text-xs text-gray-600">{t(pageDiagnostics[index].source === 'embedded' ? 'import.scanTextLayer' : 'import.scanLocalOcr')}</p>
+              )}
+              {pageDiagnostics[index]?.reviewFlag && (
+                <p role="alert" className="text-sm text-red-800 rounded-lg bg-red-50 p-3">
+                  {t(`import.scanReviewFlag.${pageDiagnostics[index].reviewFlag}`)}
+                </p>
+              )}
               <label className="block text-sm font-medium text-gray-700">
                 {t('import.scanOcrText')} - {t('import.scanPage', { page: index + 1, pages })}
                 <textarea className="input-field mt-1 min-h-40 font-mono text-xs" value={text}

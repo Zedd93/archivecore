@@ -1439,6 +1439,13 @@
     "scanPageWithoutRows": "Page {{page}} produced no items. Correct the text or confirm that it contains no list items.",
     "scanTooManyRows": "More than 500 items were recognized. Split the list into smaller files; nothing was saved.",
     "scanReviewWarning": "Read {{pages}} pages. OCR can misread characters, columns and dates. Compare with the original; nothing has been saved yet.",
+    "scanTextLayer": "Read from the PDF text layer",
+    "scanLocalOcr": "Read using local OCR",
+    "scanReviewFlag": {
+      "empty": "OCR found no text on this page. Check the image; do not mark the page empty without comparing it with the original.",
+      "short": "OCR found very little text. Check whether list items were missed.",
+      "replacement": "The extracted text contains unrecognized characters. Compare the text and items with the original."
+    },
     "scanParsedFieldsWarning": "The preview can fill in signature, title, date range, category, folder count and box number. Other columns, including storage location and disposal date, are not transferred automatically from the scan; review and complete them in the list after import.",
     "scanOcrText": "Extracted text (editable; separate columns with semicolons, tabs or multiple spaces)",
     "scanDraftRows": "Draft items from text",

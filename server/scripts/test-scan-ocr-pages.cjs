@@ -14,6 +14,7 @@ test('reads a selected PDF page without silently skipping other pages', async ()
   const originalExecFile = childProcess.execFile;
   const calls = [];
   let emptyPage = null;
+  let ocrOverride = null;
   childProcess.execFile = (binary, args, _options, callback) => {
     calls.push({ binary, args });
     if (binary === 'pdftoppm') {
@@ -23,7 +24,7 @@ test('reads a selected PDF page without silently skipping other pages', async ()
     }
     if (binary === 'tesseract') {
       const page = Number(args[0].match(/page-(\d+)\.png$/)?.[1]);
-      return callback(null, { stdout: page === emptyPage ? '' : `OCR page ${page}` });
+      return callback(null, { stdout: page === emptyPage ? '' : ocrOverride ?? `OCR page ${page}` });
     }
     callback(new Error(`Unexpected binary: ${binary}`));
   };
@@ -32,7 +33,9 @@ test('reads a selected PDF page without silently skipping other pages', async ()
     const { recognizeScan } = require('../dist/modules/import-export/scan-ocr.service');
     const pdf = await blankPdf(5);
     const selected = await recognizeScan(pdf, 4);
-    assert.deepEqual(selected, { text: 'OCR page 4', pages: 5 });
+    assert.deepEqual(selected, { text: 'OCR page 4', pages: 5, pageDiagnostics: [
+      { page: 4, source: 'ocr', reviewFlag: 'short' },
+    ] });
     await assert.rejects(recognizeScan(pdf), { statusCode: 400 });
     assert.deepEqual(calls.filter((call) => call.binary === 'pdftoppm').map((call) => call.args.slice(0, 4)), [
       ['-f', '4', '-l', '4'],
@@ -41,15 +44,31 @@ test('reads a selected PDF page without silently skipping other pages', async ()
     assert.ok(calls.find((call) => call.binary === 'pdftoppm').args.includes('3500'));
 
     emptyPage = 2;
-    assert.deepEqual(await recognizeScan(pdf, 2), { text: '', pages: 5 });
+    assert.deepEqual(await recognizeScan(pdf, 2), { text: '', pages: 5, pageDiagnostics: [
+      { page: 2, source: 'ocr', reviewFlag: 'empty' },
+    ] });
     emptyPage = null;
+
+    ocrOverride = 'Nieczytelny znak \uFFFD w rozpoznanym tekscie';
+    assert.deepEqual((await recognizeScan(pdf, 1)).pageDiagnostics, [
+      { page: 1, source: 'ocr', reviewFlag: 'replacement' },
+    ]);
+    ocrOverride = 'Poprawnie odczytany tekst ze skanu spisu zdawczo odbiorczego, z wystarczajaca liczba znakow do podgladu pozycji.';
+    assert.deepEqual((await recognizeScan(pdf, 1)).pageDiagnostics, [
+      { page: 1, source: 'ocr', reviewFlag: null },
+    ]);
+    ocrOverride = null;
 
     await assert.rejects(recognizeScan(pdf, 6), { statusCode: 400 });
     await assert.rejects(recognizeScan(pdf, Number.NaN), { statusCode: 400 });
     await assert.rejects(recognizeScan(await blankPdf(13), 1), { statusCode: 400 });
 
     const legacy = await recognizeScan(await blankPdf(3));
-    assert.deepEqual(legacy, { text: 'OCR page 1\n\nOCR page 2\n\nOCR page 3', pages: 3 });
+    assert.deepEqual(legacy, { text: 'OCR page 1\n\nOCR page 2\n\nOCR page 3', pages: 3, pageDiagnostics: [
+      { page: 1, source: 'ocr', reviewFlag: 'short' },
+      { page: 2, source: 'ocr', reviewFlag: 'short' },
+      { page: 3, source: 'ocr', reviewFlag: 'short' },
+    ] });
 
     emptyPage = 1;
     await assert.rejects(recognizeScan(await blankPdf(1)), { statusCode: 422 });

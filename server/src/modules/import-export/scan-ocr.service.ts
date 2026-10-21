@@ -9,6 +9,7 @@ const MAX_SCAN_BYTES = 10 * 1024 * 1024;
 const MAX_PAGES = 12;
 
 type ScanKind = 'pdf' | 'png' | 'jpeg' | 'tiff';
+type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
 
 type PdfTextItem = { str: string; transform: number[] };
 
@@ -63,7 +64,15 @@ async function execute(binary: string, args: string[], timeout: number): Promise
   }
 }
 
-export async function recognizeScan(buffer: Buffer, requestedPage?: number): Promise<{ text: string; pages: number }> {
+function scanReviewFlag(text: string): PageDiagnostic['reviewFlag'] {
+  const content = text.replace(/\s/g, '');
+  if (!content.length) return 'empty';
+  if (content.includes('\uFFFD')) return 'replacement';
+  if (content.length < 80) return 'short';
+  return null;
+}
+
+export async function recognizeScan(buffer: Buffer, requestedPage?: number): Promise<{ text: string; pages: number; pageDiagnostics: PageDiagnostic[] }> {
   if (!buffer.length || buffer.length > MAX_SCAN_BYTES) {
     throw Object.assign(new Error('Skan musi mieć od 1 B do 10 MB'), { statusCode: 400 });
   }
@@ -94,6 +103,7 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
       ? Array.from({ length: pageCount }, (_, index) => index + 1)
       : [requestedPage];
     const parts: string[] = [];
+    const pageDiagnostics: PageDiagnostic[] = [];
     for (const page of pagesToRead) {
       if (pdf) {
         const pdfPage = await pdf.getPage(page);
@@ -103,6 +113,7 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
         pdfPage.cleanup();
         if (embeddedText.trim().length >= 40) {
           parts.push(embeddedText);
+          pageDiagnostics.push({ page, source: 'embedded', reviewFlag: null });
           continue;
         }
       }
@@ -119,11 +130,12 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
       }
       const text = await execute('tesseract', [image, 'stdout', '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 20000);
       parts.push(text.trim());
+      pageDiagnostics.push({ page, source: 'ocr', reviewFlag: scanReviewFlag(text) });
       if (kind === 'pdf') await rm(image, { force: true });
     }
     const text = parts.join('\n\n');
     if (!parts.some(Boolean) && requestedPage === undefined) throw Object.assign(new Error('OCR nie odczytał tekstu. Sprawdź jakość i orientację skanu.'), { statusCode: 422 });
-    return { text, pages: pageCount };
+    return { text, pages: pageCount, pageDiagnostics };
   } finally {
     if (pdf) await pdf.destroy();
     await rm(directory, { recursive: true, force: true });

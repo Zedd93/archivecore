@@ -1439,6 +1439,13 @@
     "scanPageWithoutRows": "Strona {{page}} nie dała żadnych pozycji. Uzupełnij tekst lub potwierdź, że strona nie zawiera pozycji spisu.",
     "scanTooManyRows": "Rozpoznano ponad 500 pozycji. Podziel spis na mniejsze pliki; nic nie zostało zapisane.",
     "scanReviewWarning": "Odczytano {{pages}} stron. OCR może mylić znaki, kolumny i daty. Sprawdź skan z oryginałem; nic nie zostało jeszcze zapisane.",
+    "scanTextLayer": "Odczyt z warstwy tekstowej PDF",
+    "scanLocalOcr": "Odczyt przez lokalny OCR",
+    "scanReviewFlag": {
+      "empty": "OCR nie odczytał tekstu z tej strony. Sprawdź obraz; nie oznaczaj strony jako pustej bez porównania z oryginałem.",
+      "short": "OCR odczytał bardzo mało tekstu. Sprawdź, czy nie pominął pozycji spisu.",
+      "replacement": "Odczyt zawiera nierozpoznane znaki. Porównaj tekst i pozycje z oryginałem."
+    },
     "scanParsedFieldsWarning": "Podgląd może uzupełnić znak, tytuł, daty skrajne, kategorię, liczbę teczek i numer kartonu. Pozostałe kolumny, w tym miejsce przechowywania i data zniszczenia, nie są przenoszone automatycznie ze skanu; sprawdź je i uzupełnij w spisie po imporcie.",
     "scanOcrText": "Odczytany tekst (możesz poprawić; rozdzielaj kolumny średnikiem, tabulatorem lub kilkoma spacjami)",
     "scanDraftRows": "Utwórz robocze pozycje z tekstu",
