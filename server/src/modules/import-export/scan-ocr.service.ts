@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import { existsSync } from 'fs';
 import { access, mkdtemp, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -7,6 +8,7 @@ import { promisify } from 'util';
 const run = promisify(execFile);
 const MAX_SCAN_BYTES = 10 * 1024 * 1024;
 const MAX_PAGES = 12;
+const WINDOWS_OCR_DIR = 'C:\\Apps\\ocr-tools\\runtime\\Library\\bin';
 
 type ScanKind = 'pdf' | 'png' | 'jpeg' | 'tiff';
 type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
@@ -46,8 +48,12 @@ export function scanKind(buffer: Buffer): ScanKind {
 }
 
 async function execute(binary: string, args: string[], timeout: number): Promise<string> {
+  const configuredDir = process.env.OCR_BIN_DIR;
+  const installedDir = process.platform === 'win32' ? WINDOWS_OCR_DIR : undefined;
+  const candidate = configuredDir || installedDir;
+  const executable = candidate && path.join(candidate, `${binary}${process.platform === 'win32' ? '.exe' : ''}`);
   try {
-    const { stdout } = await run(binary, args, {
+    const { stdout } = await run(executable && existsSync(executable) ? executable : binary, args, {
       timeout,
       maxBuffer: 2 * 1024 * 1024,
       windowsHide: true,
