@@ -6,12 +6,14 @@ export class FolderService {
     const search = String(filters.search || '').trim();
     const source = String(filters.source || '').trim();
     const boxId = String(filters.boxId || '').trim();
+    const dates = String(filters.dates || '').trim();
 
     const folderWhere: Prisma.FolderWhereInput = {
       tenantId,
       ...(boxId ? { boxId } : {}),
       ...(source === 'transfer_list' ? { transferListItem: { isNot: null } } : {}),
       ...(source === 'manual' ? { transferListItem: { is: null } } : {}),
+      ...(dates === 'unknown' ? { AND: [{ transferListItem: { is: { dateRangeUnknown: true } } }] } : {}),
       ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}),
       ...(search ? {
         OR: [
@@ -75,6 +77,7 @@ export class FolderService {
         locationPath: folder.box?.location?.fullPath ?? sourceItem?.storageLocation ?? null,
         transferList: sourceItem?.transferList ?? null,
         transferListItemId: sourceItem?.id ?? null,
+        dateRangeUnknown: sourceItem?.dateRangeUnknown ?? false,
         documentsCount: folder._count.documents,
         attachmentsCount: folder._count.attachments,
         updatedAt: folder.updatedAt,

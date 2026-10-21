@@ -207,6 +207,8 @@
   "custodyHistory": { "order": "Order", "more": "Show older events", "moreDocuments": "Show more documents", "documentNotFound": "Document not found", "date": "Document date", "pages": "Page count" },
   "folders": {
     "retentionPolicy": "JRWA class / retention",
+    "dateFilter": "Folder date filter",
+    "dateFilterAll": "All dates",
     "title": "Folders",
     "subtitle": "Smallest archive units: transfer-list folders and manually added folders",
     "searchPlaceholder": "Search by sign, title, box, location, or transfer list...",
@@ -694,6 +696,8 @@
       "boxFilter": "Box association",
       "boxFilterWith": "With box",
       "boxFilterWithout": "Without box",
+      "dateFilter": "Item date filter",
+      "dateFilterAll": "All dates",
       "importTitle": "Import from Excel/CSV file",
       "importDesc": "The file should have columns: Folder sign, Folder title, Date from, Date to, Record category, Number of folders, Storage location, Destruction/transfer date. The system will automatically recognize column headers.",
       "assignBox": "Assign box",

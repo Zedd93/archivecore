@@ -23,10 +23,12 @@ export default function FolderListPage() {
   const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState('');
   const [source, setSource] = useState('');
+  const [dates, setDates] = useState('');
 
   const params: Record<string, any> = { page, limit: pageSize };
   if (search) params.search = search;
   if (source) params.source = source;
+  if (dates) params.dates = dates;
 
   const { data, isLoading } = useList('folders', '/folders', params);
   const folders = data?.data || [];
@@ -39,7 +41,7 @@ export default function FolderListPage() {
 
   const openFolder = (folder: any) => {
     if (folder.source === 'transfer_list' && folder.transferList?.id) {
-      navigate(`/transfer-lists/${folder.transferList.id}`);
+      navigate(`/transfer-lists/${folder.transferList.id}${folder.dateRangeUnknown ? '?dates=unknown' : ''}`);
       return;
     }
     if (folder.box?.id) {
@@ -74,6 +76,15 @@ export default function FolderListPage() {
             <option value="">{t('folders.sourceAll')}</option>
             <option value="transfer_list">{t('folders.sourceTransferList')}</option>
             <option value="manual">{t('folders.sourceManual')}</option>
+          </select>
+          <select
+            value={dates}
+            onChange={(e) => { setDates(e.target.value); setPage(1); }}
+            className="input-field lg:w-64"
+            aria-label={t('folders.dateFilter')}
+          >
+            <option value="">{t('folders.dateFilterAll')}</option>
+            <option value="unknown">{t('transferLists.detail.dateRangeUnknown')}</option>
           </select>
         </div>
       </div>
@@ -122,7 +133,7 @@ export default function FolderListPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{formatYearRange(folder.dateFrom, folder.dateTo)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600">{folder.dateRangeUnknown ? <span className="font-medium text-amber-700">{t('transferLists.detail.dateRangeUnknown')}</span> : formatYearRange(folder.dateFrom, folder.dateTo)}</td>
                       <td className="px-4 py-3 text-xs text-gray-600">{folder.categoryCode || folder.docType || '—'}</td>
                       <td className="px-4 py-3">
                         {folder.box ? (

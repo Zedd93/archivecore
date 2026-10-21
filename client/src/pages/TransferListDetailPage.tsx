@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDetail, useList, useCreate, useUpdate, useDelete } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,6 +58,8 @@ export default function TransferListDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const datesFilter = searchParams.get('dates') === 'unknown' ? 'unknown' : '';
   const { hasPermission } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -128,6 +130,7 @@ export default function TransferListDetailPage() {
   if (search) itemParams.search = search;
   if (categoryFilter) itemParams.categoryCode = categoryFilter;
   if (boxFilter) itemParams.hasBox = boxFilter;
+  if (datesFilter) itemParams.dates = datesFilter;
 
   const { data: itemsResult, isLoading: itemsLoading, refetch: refetchItems } = useList(
     'transfer-list-items',
@@ -610,7 +613,7 @@ export default function TransferListDetailPage() {
               className="input-field pl-10"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Filter size={16} className="text-gray-400" />
             <select
               value={categoryFilter}
@@ -628,6 +631,22 @@ export default function TransferListDetailPage() {
               <option value="">{t('transferLists.detail.boxFilter')}</option>
               <option value="true">{t('transferLists.detail.boxFilterWith')}</option>
               <option value="false">{t('transferLists.detail.boxFilterWithout')}</option>
+            </select>
+            <select
+              value={datesFilter}
+              onChange={(e) => {
+                const next = new URLSearchParams(searchParams);
+                if (e.target.value) next.set('dates', e.target.value);
+                else next.delete('dates');
+                setSearchParams(next);
+                setPage(1);
+                setSelectedItemIds(new Set());
+              }}
+              className="input-field w-auto"
+              aria-label={t('transferLists.detail.dateFilter')}
+            >
+              <option value="">{t('transferLists.detail.dateFilterAll')}</option>
+              <option value="unknown">{t('transferLists.detail.dateRangeUnknown')}</option>
             </select>
           </div>
         </div>

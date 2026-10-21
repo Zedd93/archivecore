@@ -642,6 +642,7 @@ export class TransferListService {
     if (filters.boxId) where.boxId = filters.boxId;
     if (filters.hasBox === 'true') where.boxId = { not: null };
     if (filters.hasBox === 'false') where.boxId = null;
+    if (filters.dates === 'unknown') where.dateRangeUnknown = true;
 
     const [data, total] = await Promise.all([
       prisma.transferListItem.findMany({

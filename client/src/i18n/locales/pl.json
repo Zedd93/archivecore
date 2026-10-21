@@ -207,6 +207,8 @@
   "custodyHistory": { "order": "Zlecenie", "more": "Pokaż starsze zdarzenia", "moreDocuments": "Pokaż więcej dokumentów", "documentNotFound": "Dokument nie znaleziony", "date": "Data dokumentu", "pages": "Liczba stron" },
   "folders": {
     "retentionPolicy": "Pozycja JRWA / retencja",
+    "dateFilter": "Filtr dat teczek",
+    "dateFilterAll": "Wszystkie daty",
     "title": "Teczki",
     "subtitle": "Najmniejsze jednostki archiwalne: teczki ze spisów ZO i teczki dodane ręcznie",
     "searchPlaceholder": "Szukaj po znaku, tytule, kartonie, lokalizacji lub spisie...",
@@ -694,6 +696,8 @@
       "boxFilter": "Powiązanie z kartonem",
       "boxFilterWith": "Z kartonem",
       "boxFilterWithout": "Bez kartonu",
+      "dateFilter": "Filtr dat pozycji",
+      "dateFilterAll": "Wszystkie daty",
       "importTitle": "Import z pliku Excel/CSV",
       "importDesc": "Plik powinien mieć kolumny: Znak teczki, Tytuł teczki lub tomu, Daty skrajne od, Daty skrajne do, Kat. akt, Liczba teczek, Miejsce przechowywania akt w archiwum, Data zniszczenia lub przekazania do Archiwum Państwowego. System automatycznie rozpozna nagłówki kolumn.",
       "assignBox": "Przypisz karton",

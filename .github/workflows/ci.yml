@@ -55,6 +55,9 @@ jobs:
       - name: Verify transfer list column mapping
         run: npm run test:transfer-list-mapping
 
+      - name: Verify missing-date filters
+        run: npm run test:missing-date-filters
+
       - name: Verify box and personnel column mapping
         run: npm run test:table-import-mapping
 
