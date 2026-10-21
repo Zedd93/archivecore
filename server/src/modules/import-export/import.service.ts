@@ -50,7 +50,17 @@ const reviewedScanSchema = z.object({
   title: z.string().trim().min(1).max(500),
   confirmed: z.literal(true),
   items: z.array(createTransferListItemSchema).min(1).max(500),
-}).strict();
+}).strict().superRefine((data, ctx) => {
+  data.items.forEach((item, index) => {
+    if (item.dateRangeUnknown && (item.dateFrom || item.dateTo)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['items', index, 'dateRangeUnknown'],
+        message: 'Nie można jednocześnie oznaczyć braku dat i podać dat teczki',
+      });
+    }
+  });
+});
 
 // ─── Column mapping (header → field) ─────────────────────
 

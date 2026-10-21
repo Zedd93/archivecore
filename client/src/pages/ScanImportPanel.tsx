@@ -67,8 +67,13 @@ export default function ScanImportPanel() {
     if (!next.length) toast.error(t('import.scanNoRows'));
   };
 
-  const updateRow = (index: number, field: keyof ScanRow, value: string) => {
-    setRows((previous) => previous.map((row, i) => i === index ? { ...row, [field]: value } : row));
+  const updateRow = <K extends keyof ScanRow>(index: number, field: K, value: ScanRow[K]) => {
+    setRows((previous) => previous.map((row, i) => i === index ? {
+      ...row,
+      [field]: value,
+      ...(field === 'dateRangeUnknown' && value === true ? { dateFrom: '', dateTo: '' } : {}),
+      ...((field === 'dateFrom' || field === 'dateTo') && value ? { dateRangeUnknown: false } : {}),
+    } : row));
     setConfirmed(false);
   };
 
@@ -82,6 +87,7 @@ export default function ScanImportPanel() {
         categoryCode: row.categoryCode.trim(),
         dateFrom: row.dateFrom || null,
         dateTo: row.dateTo || null,
+        dateRangeUnknown: row.dateRangeUnknown,
         boxNumber: row.boxNumber.trim() || null,
         notes: row.notes.trim() || null,
         folderCount: 1,
@@ -165,7 +171,8 @@ export default function ScanImportPanel() {
                   {(['dateFrom', 'dateTo'] as const).map((field) => (
                     <label key={field} className="text-xs text-gray-700">
                       {t(`import.mappingFields.${field}`)}
-                      <input type="date" className="input-field mt-1" value={row[field]} onChange={(event) => updateRow(index, field, event.target.value)} />
+                      <input type="date" className="input-field mt-1" value={row[field]} disabled={row.dateRangeUnknown}
+                        onChange={(event) => updateRow(index, field, event.target.value)} />
                     </label>
                   ))}
                   <label className="text-xs text-gray-700">
@@ -173,6 +180,11 @@ export default function ScanImportPanel() {
                     <input className="input-field mt-1" value={row.boxNumber} onChange={(event) => updateRow(index, 'boxNumber', event.target.value)} />
                   </label>
                 </div>
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={row.dateRangeUnknown}
+                    onChange={(event) => updateRow(index, 'dateRangeUnknown', event.target.checked)} />
+                  {t('transferLists.detail.dateRangeUnknown')}
+                </label>
                 <label className="block text-xs text-gray-700">
                   {t('import.mappingFields.notes')}
                   <input className="input-field mt-1" value={row.notes} onChange={(event) => updateRow(index, 'notes', event.target.value)} />

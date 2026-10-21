@@ -5,12 +5,13 @@ export interface ScanRow {
   categoryCode: string;
   dateFrom: string;
   dateTo: string;
+  dateRangeUnknown: boolean;
   boxNumber: string;
   notes: string;
 }
 
 export const emptyScanRow = (): ScanRow => ({
-  id: crypto.randomUUID(), folderSignature: '', folderTitle: '', categoryCode: '', dateFrom: '', dateTo: '', boxNumber: '', notes: '',
+  id: crypto.randomUUID(), folderSignature: '', folderTitle: '', categoryCode: '', dateFrom: '', dateTo: '', dateRangeUnknown: false, boxNumber: '', notes: '',
 });
 
 export function draftScanRows(text: string): ScanRow[] {
@@ -21,11 +22,13 @@ export function draftScanRows(text: string): ScanRow[] {
     if (cells.length < 3 || !/^(?:A|B|BE)\d*(?:\+\d+)?$/i.test(cells[cells.length - 1])) {
       return { ...emptyScanRow(), folderTitle: line };
     }
+    const dateRangeUnknown = cells.length >= 4 && /^brak\s+dat$/i.test(cells[cells.length - 2]);
     return {
       ...emptyScanRow(),
       folderSignature: cells[0],
-      folderTitle: cells.slice(1, -1).join(' '),
+      folderTitle: cells.slice(1, dateRangeUnknown ? -2 : -1).join(' '),
       categoryCode: cells[cells.length - 1],
+      dateRangeUnknown,
     };
   }).filter((row): row is ScanRow => row !== null);
 }
