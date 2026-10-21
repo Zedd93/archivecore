@@ -195,3 +195,33 @@ test('reads a Word-generated PDF table with wrapped titles and ignores its foote
   assert.equal(reviewed.rows[3].dateFrom, '2019-01-01');
   assert.equal(reviewed.rows[3].folderCount, '3');
 });
+
+test('separates dates and titles when OCR misreads a category or count', () => {
+  const text = [
+    'Spis zdawczo-odbiorczy akt nr 1/08/2022',
+    'Lp. Znak teczki Tytuł teczki lub tomu Daty skrajne od —do Kat. akt Liczba teczek',
+    '1 NOVUM/1 URZAD SKARBOWY 2007-2017 BS l',
+    '2 NOVUM/2 KSIĄŻKA KONTROLI | 2008-2016 BS 1',
+    '11 NOVUM/11 AKTA OSOBOWE 2008-2018 B50 46',
+    '12 NOVUM/12 | SAD- UMOWA 2012-2016 B10 3',
+    'KREDYT',
+    '14 NOVUM/14 | SPRAWY SĄDOWE 2016 B10 l',
+    'Przekazujacy akta Kierownik Komórki Organizacyjnej Przyjmujący akta',
+  ].join('\n');
+  const rows = draftScanRows(text);
+  assert.equal(rows.length, 5);
+  assert.equal(rows[0].folderTitle, 'URZAD SKARBOWY');
+  assert.equal(rows[0].dateFrom, '2007-01-01');
+  assert.equal(rows[0].dateTo, '2017-12-31');
+  assert.equal(rows[0].categoryCode, '');
+  assert.equal(rows[0].folderCount, 'l');
+  assert.equal(validFolderCount(rows[0].folderCount), false);
+  assert.equal(rows[1].folderTitle, 'KSIĄŻKA KONTROLI');
+  assert.equal(rows[1].categoryCode, '');
+  assert.equal(rows[2].categoryCode, 'B50');
+  assert.equal(rows[2].folderCount, '46');
+  assert.equal(rows[3].folderTitle, 'SAD- UMOWA KREDYT');
+  assert.equal(rows[4].folderTitle, 'SPRAWY SĄDOWE');
+  assert.equal(rows[4].categoryCode, 'B10');
+  assert.equal(rows[4].folderCount, 'l');
+});

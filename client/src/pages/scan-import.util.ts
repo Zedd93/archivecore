@@ -116,17 +116,17 @@ function isVisualTableHeader(line: string): boolean {
 }
 
 const VISUAL_ROW_START = /^\d{1,4}[.)]?\s+(\S+)\s+(.+)$/;
-const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|\d{4}(?:\s*[-–—]\s*\d{4})?)\s+)?((?:A|BE|BC|B)\d*(?:\+\d+)?)\s+(\d+)\s*$/i;
+const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|\d{4}(?:\s*[-–—]\s*\d{4})?)\s+)?([AB][A-Z0-9+]{0,6})\s+(\d+|[lI])\s*$/i;
 
 function visualRow(signature: string, content: string, sourcePage?: number): ScanRow | null {
   const match = content.match(VISUAL_ROW_END);
   if (!match || !match[1].trim()) return null;
   const categoryCode = match[3];
-  if (!categoryCode || !CATEGORY.test(categoryCode)) return null;
   const dates = parseYearRange(match[2] || '');
   return {
     ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
-    folderSignature: signature, folderTitle: match[1].trim(), categoryCode,
+    folderSignature: signature, folderTitle: match[1].replace(/(?:^|\s)\|(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim(),
+    categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
     folderCount: match[4],
     ...dates,
   };
@@ -138,12 +138,15 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
   let visualTable = initialVisualTable;
   const hasVisualHeader = text.split(/\r?\n/).some((line) => !/[;\t]/.test(line) && isVisualTableHeader(line));
   let pending: { signature: string; content: string } | null = null;
+  let canContinueVisualRow = false;
   const flushPending = () => {
     if (!pending) return;
-    rows.push(visualRow(pending.signature, pending.content, sourcePage) || {
+    const parsed = visualRow(pending.signature, pending.content, sourcePage);
+    rows.push(parsed || {
       ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
       folderSignature: pending.signature, folderTitle: pending.content,
     });
+    canContinueVisualRow = !!parsed;
     pending = null;
   };
   for (const rawLine of text.split(/\r?\n/)) {
@@ -166,7 +169,7 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
         pending = { signature: start[1], content: start[2] };
       } else if (pending) {
         pending.content += ` ${line}`;
-      } else if (rows.at(-1)?.categoryCode && /^[\p{L}][\p{L}\p{M}\s–—-]{0,79}$/u.test(line)) {
+      } else if (canContinueVisualRow && /^[\p{L}][\p{L}\p{M}\s–—-]{0,79}$/u.test(line)) {
         rows[rows.length - 1].folderTitle += ` ${line}`;
       }
       if (pending && visualRow(pending.signature, pending.content, sourcePage)) flushPending();
