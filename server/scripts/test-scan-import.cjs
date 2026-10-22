@@ -55,6 +55,8 @@ test('requires explicit approval and complete rows before creating a list', asyn
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateFrom: '2020-01-01', dateRangeUnknown: true }] }, 'tenant', 'user'), /Pozycja 1: Nie można jednocześnie/);
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], folderCount: 0 }] }, 'tenant', 'user'), /Pozycja 1:/);
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateFrom: '2025-01-01', dateTo: '2024-12-31' }] }, 'tenant', 'user'), /Pozycja 1: Data końcowa nie może być wcześniejsza/);
+  await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateFrom: '2025-02-29' }] }, 'tenant', 'user'), /Pozycja 1: Data nie istnieje w kalendarzu/);
+  await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateTo: '2024-02-31' }] }, 'tenant', 'user'), /Pozycja 1: Data nie istnieje w kalendarzu/);
 });
 
 test('rejects reversed scan date ranges but allows equal and partial dates in the preview', () => {
@@ -100,12 +102,14 @@ test('passes reviewed missing-date markers to the transfer list import', async (
       items: [
         { folderSignature: 'A/1', folderTitle: 'Brak dat w źródle', categoryCode: 'B10', dateRangeUnknown: true, folderCount: 46 },
         { folderSignature: 'A/2', folderTitle: 'Daty niewypełnione', categoryCode: 'B10' },
+        { folderSignature: 'A/3', folderTitle: 'Rok przestępny', categoryCode: 'B10', dateFrom: '2024-02-29', dateTo: '2024-02-29' },
       ],
     }, 'tenant', 'user');
-    assert.equal(result.imported, 2);
+    assert.equal(result.imported, 3);
     assert.equal(importedItems[0].dateRangeUnknown, true);
     assert.equal(importedItems[0].folderCount, 46);
     assert.equal(importedItems[1].dateRangeUnknown, undefined);
+    assert.equal(importedItems[2].dateFrom, '2024-02-29');
   } finally {
     create.mock.restore();
     importItems.mock.restore();

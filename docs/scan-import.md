@@ -26,3 +26,5 @@ Jeżeli w skanie rozpoznano kolumnę „Lp.”, numery są widoczne przy roboczy
 Opcjonalnie wpisz liczbę pozycji widocznych na załączonych stronach oryginału (od 1 do 500). Podgląd porównuje ją z liczbą roboczych pozycji, również gdy skan nie ma kolumny „Lp.”. Rozbieżność lub niepoprawna liczba blokuje zapis, aż poprawisz podgląd albo wpisaną liczbę. W ten sposób można wykryć brak końcowej pozycji, którego sama kontrola luk w numeracji nie pokaże. Zmiana liczby wymaga ponownego potwierdzenia podglądu. Przy podziale dużego spisu na pliki podaj liczbę pozycji tylko z aktualnie importowanych stron.
 
 Podgląd nie pozwala zapisać pozycji, w której „Data od” jest późniejsza od „Data do”. Tę samą chronologię sprawdza serwer przed utworzeniem spisu. Równe daty oraz podanie tylko jednej z nich są dozwolone.
+
+Serwer sprawdza też, czy obie podane daty istnieją w kalendarzu. Na przykład 29 lutego w roku nieprzestępnym jest odrzucany przed utworzeniem spisu, zamiast zostać automatycznie przesunięty na marzec. Prawidłowy 29 lutego w roku przestępnym jest dozwolony.

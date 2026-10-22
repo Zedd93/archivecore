@@ -46,12 +46,27 @@ const hrImportRowSchema = z.object({
   storageForm: z.enum(['paper', 'digital', 'hybrid']).default('paper'),
 });
 
+function isCalendarDate(value: string): boolean {
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 const reviewedScanSchema = z.object({
   title: z.string().trim().min(1).max(500),
   confirmed: z.literal(true),
   items: z.array(createTransferListItemSchema).min(1).max(500),
 }).strict().superRefine((data, ctx) => {
   data.items.forEach((item, index) => {
+    for (const field of ['dateFrom', 'dateTo'] as const) {
+      const value = item[field];
+      if (value && !isCalendarDate(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, field],
+          message: 'Data nie istnieje w kalendarzu',
+        });
+      }
+    }
     if (item.dateRangeUnknown && (item.dateFrom || item.dateTo)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
