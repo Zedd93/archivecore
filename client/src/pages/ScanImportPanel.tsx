@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber } from './scan-import.util';
+import { correctScanSourceOrdinal, draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -43,6 +43,8 @@ export default function ScanImportPanel() {
   const ordinalIssues = scanOrdinalIssues(rows);
   const hasOrdinalIssues = ordinalIssues.gaps.length > 0 || ordinalIssues.duplicates.length > 0 || ordinalIssues.unreadableRows.length > 0 || ordinalIssues.outOfOrderRows.length > 0;
   const ordinalLocations = hasOrdinalIssues ? scanOrdinalIssueLocations(rows) : [];
+  const hasSourceOrdinals = rows.some((row) => row.sourceOrdinalExpected || row.sourceOrdinal !== undefined);
+  const hasInvalidSourceOrdinal = rows.some((row) => row.sourceOrdinalInput !== undefined && row.sourceOrdinalInput.trim() !== '' && !validScanSourceOrdinal(row.sourceOrdinalInput));
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -136,6 +138,13 @@ export default function ScanImportPanel() {
     setOrdinalsConfirmed(false);
   };
 
+  const updateSourceOrdinal = (index: number, value: string) => {
+    setRows((previous) => previous.map((row, i) => i === index ? correctScanSourceOrdinal(row, value) : row));
+    setConfirmed(false);
+    setBoxesConfirmed(false);
+    setOrdinalsConfirmed(false);
+  };
+
   const save = async () => {
     if (!confirmed || !rows.length) return;
     if (rows.some((row) => !validFolderCount(row.folderCount))) {
@@ -148,6 +157,10 @@ export default function ScanImportPanel() {
     }
     if (rows.some((row) => !validScanBoxNumber(row.boxNumber))) {
       toast.error(t('import.scanBoxNumberInvalid'));
+      return;
+    }
+    if (hasInvalidSourceOrdinal) {
+      toast.error(t('import.scanSourceOrdinalInvalid'));
       return;
     }
     if (boxNumbers.length && !boxesConfirmed) {
@@ -262,6 +275,7 @@ export default function ScanImportPanel() {
               onChange={(event) => { setTitle(event.target.value); setConfirmed(false); }} />
           </label>
           <p className="text-sm text-gray-600">{t('import.scanRowCount', { count: rows.length })}</p>
+          {hasSourceOrdinals && <p className="text-xs text-gray-600">{t('import.scanSourceOrdinalHint')}</p>}
           {hasOrdinalIssues && (
             <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2 text-sm text-amber-900">
               <p className="font-medium">{t('import.scanOrdinalReview')}</p>
@@ -294,6 +308,17 @@ export default function ScanImportPanel() {
                     <Trash2 size={17} />
                   </button>
                 </div>
+                {hasSourceOrdinals && (
+                  <label className="block max-w-40 text-xs text-gray-700">
+                    {t('import.scanSourceOrdinalEdit')}
+                    <input className="input-field mt-1" type="text" inputMode="numeric" value={row.sourceOrdinalInput ?? row.sourceOrdinal?.toString() ?? ''}
+                      aria-invalid={row.sourceOrdinalInput !== undefined && row.sourceOrdinalInput.trim() !== '' && !validScanSourceOrdinal(row.sourceOrdinalInput)}
+                      onChange={(event) => updateSourceOrdinal(index, event.target.value)} />
+                    {row.sourceOrdinalInput !== undefined && row.sourceOrdinalInput.trim() !== '' && !validScanSourceOrdinal(row.sourceOrdinalInput) && (
+                      <span className="mt-1 block text-red-700">{t('import.scanSourceOrdinalInvalid')}</span>
+                    )}
+                  </label>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {(['folderSignature', 'folderTitle', 'categoryCode'] as const).map((field) => (
                     <label key={field} className="text-xs text-gray-700">
@@ -350,7 +375,7 @@ export default function ScanImportPanel() {
             ))}
           </div>
           <button type="button" className="btn-secondary inline-flex items-center gap-2" disabled={rows.length >= 500}
-            onClick={() => { setRows((previous) => [...previous, emptyScanRow()]); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); }}>
+            onClick={() => { setRows((previous) => [...previous, { ...emptyScanRow(), ...(hasSourceOrdinals ? { sourceOrdinalExpected: true } : {}) }]); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); }}>
             <Plus size={16} />{t('import.scanAddRow')}
           </button>
           <p className="text-xs text-amber-800">{t('import.scanBoxWarning')}</p>
@@ -370,7 +395,7 @@ export default function ScanImportPanel() {
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row))}
+            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || hasInvalidSourceOrdinal || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>

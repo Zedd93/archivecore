@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber } = require('../../client/src/pages/scan-import.util.ts');
+const { correctScanSourceOrdinal, draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -225,6 +225,31 @@ test('points ordinal warnings to the relevant draft rows and source pages', () =
     { kind: 'unreadable', value: '4', row: 4, page: 2 },
     { kind: 'outOfOrder', value: '5', row: 5, page: 2 },
   ]);
+});
+
+test('corrects source ordinals in the draft without changing the extracted text or row order', () => {
+  const rows = draftScanRows('Lp.; Znak teczki; Tytuł teczki; Kat. akt\n1; A/1; Umowy; B10\n3; A/2; Akta; B10\n2; A/3; Pisma; B10');
+  const corrected = rows.map((row, index) => index === 1 ? correctScanSourceOrdinal(row, '2') : index === 2 ? correctScanSourceOrdinal(row, '3') : row);
+  assert.deepEqual(rows.map((row) => row.sourceOrdinal), [1, 3, 2]);
+  assert.deepEqual(corrected.map((row) => row.sourceOrdinal), [1, 2, 3]);
+  assert.deepEqual(corrected.map((row) => row.folderSignature), ['A/1', 'A/2', 'A/3']);
+  assert.deepEqual(scanOrdinalIssues(corrected), { gaps: [], duplicates: [], unreadableRows: [], outOfOrderRows: [] });
+});
+
+test('keeps invalid source-number edits visible and treats an empty edit as unreadable', () => {
+  const row = draftScanRows('Lp.; Znak teczki; Tytuł teczki; Kat. akt\n1; A/1; Umowy; B10')[0];
+  for (const value of ['0', '10000', '1.5', 'abc', '01']) {
+    assert.equal(validScanSourceOrdinal(value), false);
+    const edited = correctScanSourceOrdinal(row, value);
+    assert.equal(edited.sourceOrdinalInput, value);
+    assert.equal(edited.sourceOrdinal, undefined);
+    assert.deepEqual(scanOrdinalIssues([edited]).unreadableRows, [1]);
+  }
+  assert.equal(validScanSourceOrdinal(' 9999 '), true);
+  const empty = correctScanSourceOrdinal(row, '');
+  assert.equal(empty.sourceOrdinal, undefined);
+  assert.deepEqual(scanOrdinalIssues([empty]).unreadableRows, [1]);
+  assert.equal(row.sourceOrdinal, 1);
 });
 
 test('keeps an empty or invalid count visible for correction instead of silently using one', () => {

@@ -14,6 +14,7 @@ export interface ScanRow {
   dateRangeUnknown: boolean;
   sourcePage?: number;
   sourceOrdinal?: number;
+  sourceOrdinalInput?: string;
   sourceOrdinalExpected?: boolean;
   boxNumber: string;
   notes: string;
@@ -45,6 +46,19 @@ export function validFolderCount(value: string): boolean {
 
 export function validScanBoxNumber(value: string): boolean {
   return value.trim().length <= 100;
+}
+
+export function validScanSourceOrdinal(value: string): boolean {
+  return /^[1-9]\d{0,3}$/.test(value.trim());
+}
+
+export function correctScanSourceOrdinal(row: ScanRow, value: string): ScanRow {
+  return {
+    ...row,
+    sourceOrdinalInput: value,
+    sourceOrdinal: validScanSourceOrdinal(value) ? Number(value.trim()) : undefined,
+    sourceOrdinalExpected: true,
+  };
 }
 
 export function scanBoxNumbers(rows: ScanRow[]): string[] {
