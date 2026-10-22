@@ -234,6 +234,9 @@ export default function ScanImportPanel() {
                     <label key={field} className="text-xs text-gray-700">
                       {t(`import.mappingFields.${field}`)} *
                       <input className="input-field mt-1" value={row[field]} onChange={(event) => updateRow(index, field, event.target.value)} />
+                      {field === 'categoryCode' && row.uncertainCategory && (
+                        <span className="mt-1 block text-amber-800">{t('import.scanCategoryReview', { value: row.uncertainCategory })}</span>
+                      )}
                     </label>
                   ))}
                   {(['dateFrom', 'dateTo'] as const).map((field) => (

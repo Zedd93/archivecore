@@ -3,6 +3,7 @@ export interface ScanRow {
   folderSignature: string;
   folderTitle: string;
   categoryCode: string;
+  uncertainCategory?: string;
   folderCount: string;
   dateFrom: string;
   dateTo: string;
@@ -77,6 +78,7 @@ function parseDateCell(value: string, endOfYear: boolean): string {
 function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRow {
   const fields: Partial<Record<ScanField, string>> = {};
   header.forEach((field, index) => { if (field) fields[field] = cells[index] || ''; });
+  const categoryCode = fields.categoryCode || '';
   const dates = parseYearRange(fields.dateRange || '');
   const dateRangeUnknown = dates.dateRangeUnknown || [fields.dateFrom, fields.dateTo].some((value) => /^brak\s+dat$/i.test(value || ''));
   return {
@@ -84,7 +86,8 @@ function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRo
     ...(sourcePage ? { sourcePage } : {}),
     folderSignature: fields.folderSignature || '',
     folderTitle: fields.folderTitle || '',
-    categoryCode: CATEGORY.test(fields.categoryCode || '') ? fields.categoryCode! : '',
+    categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
+    ...(categoryCode && !CATEGORY.test(categoryCode) ? { uncertainCategory: categoryCode } : {}),
     folderCount: fields.folderCount ?? '1',
     boxNumber: fields.boxNumber || '',
     dateFrom: dateRangeUnknown ? '' : parseDateCell(fields.dateFrom || '', false) || dates.dateFrom,
@@ -127,6 +130,7 @@ function visualRow(signature: string, content: string, sourcePage?: number): Sca
     ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
     folderSignature: signature, folderTitle: match[1].replace(/(?:^|\s)\|(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim(),
     categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
+    ...(!CATEGORY.test(categoryCode) ? { uncertainCategory: categoryCode } : {}),
     folderCount: match[4],
     ...dates,
   };

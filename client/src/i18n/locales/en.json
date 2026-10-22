@@ -1453,6 +1453,7 @@
     "scanListTitle": "New list title",
     "scanRowCount": "Draft items: {{count}}. Check signature, full title, category and folder count; remove headers and incorrect lines.",
     "scanFolderCountInvalid": "Folder count must be an integer from 1 to 2147483647.",
+    "scanCategoryReview": "OCR read: “{{value}}”. Check the original and enter the correct category.",
     "scanRemoveRow": "Remove item {{number}}",
     "scanAddRow": "Add item",
     "scanBoxWarning": "Entering a box number may create a new box for this list. Check the numbers before approval.",

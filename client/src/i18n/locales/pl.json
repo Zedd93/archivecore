@@ -1453,6 +1453,7 @@
     "scanListTitle": "Tytuł nowego spisu",
     "scanRowCount": "Robocze pozycje: {{count}}. Sprawdź znak, pełny tytuł, kategorię i liczbę teczek; usuń nagłówki oraz błędne linie.",
     "scanFolderCountInvalid": "Liczba teczek musi być liczbą całkowitą od 1 do 2147483647.",
+    "scanCategoryReview": "OCR odczytał: „{{value}}”. Porównaj z oryginałem i wpisz poprawną kategorię.",
     "scanRemoveRow": "Usuń pozycję {{number}}",
     "scanAddRow": "Dodaj pozycję",
     "scanBoxWarning": "Wpisanie numeru kartonu może utworzyć nowy karton w tym spisie. Sprawdź numery przed zatwierdzeniem.",

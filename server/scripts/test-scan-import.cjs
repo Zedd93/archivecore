@@ -147,6 +147,7 @@ test('leaves ambiguous OCR categories and invalid dates for manual correction', 
   const rows = draftScanRows(`${header}\n1; A/1; Akta zarządu; 0020-2024; B1O\n2; A/2; Umowy; 2020-2024; B10`);
   assert.equal(rows[0].folderSignature, 'A/1');
   assert.equal(rows[0].categoryCode, '');
+  assert.equal(rows[0].uncertainCategory, 'B1O');
   assert.equal(rows[0].dateFrom, '');
   assert.equal(rows[0].dateTo, '');
   assert.equal(rows[1].categoryCode, 'B10');
@@ -214,11 +215,14 @@ test('separates dates and titles when OCR misreads a category or count', () => {
   assert.equal(rows[0].dateFrom, '2007-01-01');
   assert.equal(rows[0].dateTo, '2017-12-31');
   assert.equal(rows[0].categoryCode, '');
+  assert.equal(rows[0].uncertainCategory, 'BS');
   assert.equal(rows[0].folderCount, 'l');
   assert.equal(validFolderCount(rows[0].folderCount), false);
   assert.equal(rows[1].folderTitle, 'KSIĄŻKA KONTROLI');
   assert.equal(rows[1].categoryCode, '');
+  assert.equal(rows[1].uncertainCategory, 'BS');
   assert.equal(rows[2].categoryCode, 'B50');
+  assert.equal(rows[2].uncertainCategory, undefined);
   assert.equal(rows[2].folderCount, '46');
   assert.equal(rows[3].folderTitle, 'SAD- UMOWA KREDYT');
   assert.equal(rows[4].folderTitle, 'SPRAWY SĄDOWE');
