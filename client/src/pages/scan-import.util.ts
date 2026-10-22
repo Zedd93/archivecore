@@ -128,6 +128,10 @@ export function needsScanDateReview(row: ScanRow): boolean {
     || (row.uncertainDateTo && !row.dateTo));
 }
 
+export function invalidScanDateRange(row: ScanRow): boolean {
+  return !!(row.dateFrom && row.dateTo && row.dateFrom > row.dateTo);
+}
+
 function normalizeHeader(value: string): string {
   return value.normalize('NFKD').toLowerCase().replace(/ł/g, 'l').replace(/\p{M}/gu, '')
     .replace(/(?<=\p{L})-\s*(?=\p{L})/gu, '').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');

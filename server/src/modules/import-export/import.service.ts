@@ -59,6 +59,13 @@ const reviewedScanSchema = z.object({
         message: 'Nie można jednocześnie oznaczyć braku dat i podać dat teczki',
       });
     }
+    if (item.dateFrom && item.dateTo && item.dateFrom > item.dateTo) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['items', index, 'dateTo'],
+        message: 'Data końcowa nie może być wcześniejsza niż początkowa',
+      });
+    }
   });
 });
 

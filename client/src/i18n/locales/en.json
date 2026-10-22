@@ -1473,6 +1473,7 @@
     "scanDateReview": "OCR read the date as “{{value}}”. Check the original and correct the date.",
     "scanCountReview": "OCR read the count as “{{value}}”. Check the original and correct the folder count.",
     "scanDateUnresolved": "Correct uncertain OCR dates or mark the item as ‘No dates / needs review’ before saving.",
+    "scanDateRangeInvalid": "The end date cannot be earlier than the start date.",
     "scanRemoveRow": "Remove item {{number}}",
     "scanAddRow": "Add item",
     "scanBoxWarning": "Entering a box number may create a new box for this list. Check the numbers before approval.",

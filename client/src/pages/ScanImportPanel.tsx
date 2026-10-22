@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { correctScanSourceOrdinal, draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } from './scan-import.util';
+import { correctScanSourceOrdinal, draftScanPages, emptyScanRow, invalidScanDateRange, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -157,6 +157,10 @@ export default function ScanImportPanel() {
     }
     if (rows.some(needsScanDateReview)) {
       toast.error(t('import.scanDateUnresolved'));
+      return;
+    }
+    if (rows.some(invalidScanDateRange)) {
+      toast.error(t('import.scanDateRangeInvalid'));
       return;
     }
     if (rows.some((row) => !validScanBoxNumber(row.boxNumber))) {
@@ -351,6 +355,7 @@ export default function ScanImportPanel() {
                     <label key={field} className="text-xs text-gray-700">
                       {t(`import.mappingFields.${field}`)}
                       <input type="date" className="input-field mt-1" value={row[field]} disabled={row.dateRangeUnknown}
+                        aria-invalid={invalidScanDateRange(row)}
                         onChange={(event) => updateRow(index, field, event.target.value)} />
                       {field === 'dateFrom' && row.uncertainDateRange && (
                         <span className="mt-1 block text-amber-800">{t('import.scanDateReview', { value: row.uncertainDateRange })}</span>
@@ -363,6 +368,7 @@ export default function ScanImportPanel() {
                       )}
                     </label>
                   ))}
+                  {invalidScanDateRange(row) && <p role="alert" className="sm:col-span-3 text-xs text-red-700">{t('import.scanDateRangeInvalid')}</p>}
                   <label className="text-xs text-gray-700">
                     {t('import.mappingFields.boxNumber')}
                     <input className="input-field mt-1" value={row.boxNumber} aria-invalid={!validScanBoxNumber(row.boxNumber)}
@@ -413,7 +419,7 @@ export default function ScanImportPanel() {
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || hasInvalidSourceOrdinal || expectedRowCountBlocksSave || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row))}
+            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || hasInvalidSourceOrdinal || expectedRowCountBlocksSave || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row) || invalidScanDateRange(row))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>

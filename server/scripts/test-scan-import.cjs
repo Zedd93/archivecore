@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { correctScanSourceOrdinal, draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
+const { correctScanSourceOrdinal, draftScanRows, draftScanPages, invalidScanDateRange, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -54,6 +54,14 @@ test('requires explicit approval and complete rows before creating a list', asyn
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [] }, 'tenant', 'user'), /Array must contain/);
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateFrom: '2020-01-01', dateRangeUnknown: true }] }, 'tenant', 'user'), /Pozycja 1: Nie można jednocześnie/);
   await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], folderCount: 0 }] }, 'tenant', 'user'), /Pozycja 1:/);
+  await assert.rejects(importService.importReviewedScan({ ...base, confirmed: true, items: [{ ...base.items[0], dateFrom: '2025-01-01', dateTo: '2024-12-31' }] }, 'tenant', 'user'), /Pozycja 1: Data końcowa nie może być wcześniejsza/);
+});
+
+test('rejects reversed scan date ranges but allows equal and partial dates in the preview', () => {
+  const row = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt\nA/1; Umowy; B10')[0];
+  assert.equal(invalidScanDateRange({ ...row, dateFrom: '2025-01-01', dateTo: '2024-12-31' }), true);
+  assert.equal(invalidScanDateRange({ ...row, dateFrom: '2025-01-01', dateTo: '2025-01-01' }), false);
+  assert.equal(invalidScanDateRange({ ...row, dateFrom: '2025-01-01' }), false);
 });
 
 test('creates conservative draft rows and leaves uncertain categories for review', () => {
