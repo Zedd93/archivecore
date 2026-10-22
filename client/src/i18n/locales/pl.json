@@ -1455,7 +1455,7 @@
     "scanExpectedRowCount": "Liczba pozycji w oryginale (opcjonalnie)",
     "scanExpectedRowCountHint": "Podaj liczbę pozycji z załączonych stron, nie liczbę stron ani teczek. To pomaga wykryć także brak ostatniej pozycji.",
     "scanExpectedRowCountInvalid": "Wpisz liczbę całkowitą od 1 do 500 albo pozostaw pole puste.",
-    "scanExpectedRowCountMismatch": "Oryginał: {{expected}} pozycji, podgląd: {{actual}}. Popraw pozycje lub liczbę z oryginału przed zapisem.",
+    "scanExpectedRowCountMismatch": "W oryginale: {{expected}}, w podglądzie: {{actual}}. Popraw pozycje lub liczbę z oryginału przed zapisem.",
     "scanExpectedRowCountMatch": "Liczba pozycji zgodna z oryginałem: {{count}}.",
     "scanSourceOrdinal": "Lp. z oryginału: {{number}}",
     "scanSourceOrdinalEdit": "Lp. z oryginału (do kontroli)",
