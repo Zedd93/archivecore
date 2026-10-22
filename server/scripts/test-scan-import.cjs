@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows, draftScanPages, validFolderCount } = require('../../client/src/pages/scan-import.util.ts');
+const { draftScanRows, draftScanPages, needsScanDateReview, validFolderCount } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -71,6 +71,7 @@ test('drafts explicit missing dates only from a separate OCR cell before the cat
   assert.equal(rows[0].dateRangeUnknown, true);
   assert.equal(rows[0].dateFrom, '');
   assert.equal(rows[0].dateTo, '');
+  assert.equal(rows[0].uncertainDateRange, undefined);
   assert.equal(rows[1].folderTitle, 'Brak dat');
   assert.equal(rows[1].dateRangeUnknown, false);
   assert.equal(rows[2].dateRangeUnknown, false);
@@ -150,8 +151,40 @@ test('leaves ambiguous OCR categories and invalid dates for manual correction', 
   assert.equal(rows[0].uncertainCategory, 'B1O');
   assert.equal(rows[0].dateFrom, '');
   assert.equal(rows[0].dateTo, '');
+  assert.equal(rows[0].uncertainDateRange, '0020-2024');
+  assert.equal(needsScanDateReview(rows[0]), true);
   assert.equal(rows[1].categoryCode, 'B10');
   assert.equal(rows[1].dateFrom, '2020-01-01');
+  assert.equal(rows[1].uncertainDateRange, undefined);
+  assert.equal(needsScanDateReview(rows[1]), false);
+});
+
+test('keeps uncertain single dates and counts beside mapped scan fields', () => {
+  const rows = draftScanRows('Znak teczki; Tytuł teczki; Data od; Data do; Kat. akt; Liczba teczek\nA/1; Umowy; 20O0; 2024; B10; ?\nA/2; Akta; brak dat; ; B10; 2');
+  assert.equal(rows[0].folderTitle, 'Umowy');
+  assert.equal(rows[0].dateFrom, '');
+  assert.equal(rows[0].dateTo, '2024-12-31');
+  assert.equal(rows[0].uncertainDateFrom, '20O0');
+  assert.equal(rows[0].uncertainFolderCount, '?');
+  assert.equal(needsScanDateReview(rows[0]), true);
+  assert.equal(needsScanDateReview({ ...rows[0], dateFrom: '2020-01-01' }), false);
+  assert.equal(rows[1].dateRangeUnknown, true);
+  assert.equal(rows[1].uncertainDateFrom, undefined);
+  assert.equal(rows[1].uncertainFolderCount, undefined);
+  assert.equal(needsScanDateReview({ ...rows[0], dateRangeUnknown: true }), false);
+});
+
+test('keeps an OCR-misread year separate from a visual row title', () => {
+  const rows = draftScanRows('Lp. Znak teczki Tytuł teczki lub tomu Daty skrajne od —do Kat. akt Liczba teczek\n1 NOVUM/1 Umowy 2O07-2017 B5 l');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].folderTitle, 'Umowy');
+  assert.equal(rows[0].dateFrom, '');
+  assert.equal(rows[0].dateTo, '');
+  assert.equal(rows[0].uncertainDateRange, '2O07-2017');
+  assert.equal(needsScanDateReview(rows[0]), true);
+  assert.equal(needsScanDateReview({ ...rows[0], dateFrom: '2007-01-01', dateTo: '2017-12-31' }), false);
+  assert.equal(rows[0].folderCount, 'l');
+  assert.equal(rows[0].uncertainFolderCount, 'l');
 });
 
 test('joins an indented continuation but keeps a new incomplete entry separate', () => {
@@ -217,6 +250,7 @@ test('separates dates and titles when OCR misreads a category or count', () => {
   assert.equal(rows[0].categoryCode, '');
   assert.equal(rows[0].uncertainCategory, 'BS');
   assert.equal(rows[0].folderCount, 'l');
+  assert.equal(rows[0].uncertainFolderCount, 'l');
   assert.equal(validFolderCount(rows[0].folderCount), false);
   assert.equal(rows[1].folderTitle, 'KSIĄŻKA KONTROLI');
   assert.equal(rows[1].categoryCode, '');
@@ -224,6 +258,7 @@ test('separates dates and titles when OCR misreads a category or count', () => {
   assert.equal(rows[2].categoryCode, 'B50');
   assert.equal(rows[2].uncertainCategory, undefined);
   assert.equal(rows[2].folderCount, '46');
+  assert.equal(rows[2].uncertainFolderCount, undefined);
   assert.equal(rows[3].folderTitle, 'SAD- UMOWA KREDYT');
   assert.equal(rows[4].folderTitle, 'SPRAWY SĄDOWE');
   assert.equal(rows[4].categoryCode, 'B10');

@@ -5,8 +5,12 @@ export interface ScanRow {
   categoryCode: string;
   uncertainCategory?: string;
   folderCount: string;
+  uncertainFolderCount?: string;
   dateFrom: string;
   dateTo: string;
+  uncertainDateRange?: string;
+  uncertainDateFrom?: string;
+  uncertainDateTo?: string;
   dateRangeUnknown: boolean;
   sourcePage?: number;
   boxNumber: string;
@@ -34,6 +38,13 @@ export const emptyScanRow = (): ScanRow => ({
 
 export function validFolderCount(value: string): boolean {
   return /^[1-9]\d*$/.test(value.trim()) && Number(value) <= 2147483647;
+}
+
+export function needsScanDateReview(row: ScanRow): boolean {
+  if (row.dateRangeUnknown) return false;
+  return !!((row.uncertainDateRange && (!row.dateFrom || !row.dateTo))
+    || (row.uncertainDateFrom && !row.dateFrom)
+    || (row.uncertainDateTo && !row.dateTo));
 }
 
 function normalizeHeader(value: string): string {
@@ -79,8 +90,14 @@ function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRo
   const fields: Partial<Record<ScanField, string>> = {};
   header.forEach((field, index) => { if (field) fields[field] = cells[index] || ''; });
   const categoryCode = fields.categoryCode || '';
-  const dates = parseYearRange(fields.dateRange || '');
+  const rawDateRange = fields.dateRange || '';
+  const rawDateFrom = fields.dateFrom || '';
+  const rawDateTo = fields.dateTo || '';
+  const folderCount = fields.folderCount ?? '1';
+  const dates = parseYearRange(rawDateRange);
   const dateRangeUnknown = dates.dateRangeUnknown || [fields.dateFrom, fields.dateTo].some((value) => /^brak\s+dat$/i.test(value || ''));
+  const parsedDateFrom = parseDateCell(rawDateFrom, false);
+  const parsedDateTo = parseDateCell(rawDateTo, true);
   return {
     ...emptyScanRow(),
     ...(sourcePage ? { sourcePage } : {}),
@@ -88,10 +105,14 @@ function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRo
     folderTitle: fields.folderTitle || '',
     categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
     ...(categoryCode && !CATEGORY.test(categoryCode) ? { uncertainCategory: categoryCode } : {}),
-    folderCount: fields.folderCount ?? '1',
+    folderCount,
+    ...(folderCount && !validFolderCount(folderCount) ? { uncertainFolderCount: folderCount } : {}),
     boxNumber: fields.boxNumber || '',
-    dateFrom: dateRangeUnknown ? '' : parseDateCell(fields.dateFrom || '', false) || dates.dateFrom,
-    dateTo: dateRangeUnknown ? '' : parseDateCell(fields.dateTo || '', true) || dates.dateTo,
+    dateFrom: dateRangeUnknown ? '' : parsedDateFrom || dates.dateFrom,
+    dateTo: dateRangeUnknown ? '' : parsedDateTo || dates.dateTo,
+    ...(rawDateRange && !dates.dateFrom && !dateRangeUnknown ? { uncertainDateRange: rawDateRange } : {}),
+    ...(rawDateFrom && !parsedDateFrom && !dateRangeUnknown ? { uncertainDateFrom: rawDateFrom } : {}),
+    ...(rawDateTo && !parsedDateTo && !dateRangeUnknown ? { uncertainDateTo: rawDateTo } : {}),
     dateRangeUnknown,
   };
 }
@@ -119,19 +140,23 @@ function isVisualTableHeader(line: string): boolean {
 }
 
 const VISUAL_ROW_START = /^\d{1,4}[.)]?\s+(\S+)\s+(.+)$/;
-const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|\d{4}(?:\s*[-–—]\s*\d{4})?)\s+)?([AB][A-Z0-9+]{0,6})\s+(\d+|[lI])\s*$/i;
+const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|[0-9OIl]{4}(?:\s*[-–—]\s*[0-9OIl]{4})?)\s+)?([AB][A-Z0-9+]{0,6})\s+(\d+|[lIoO?])\s*$/i;
 
 function visualRow(signature: string, content: string, sourcePage?: number): ScanRow | null {
   const match = content.match(VISUAL_ROW_END);
   if (!match || !match[1].trim()) return null;
   const categoryCode = match[3];
-  const dates = parseYearRange(match[2] || '');
+  const rawDateRange = match[2] || '';
+  const folderCount = match[4];
+  const dates = parseYearRange(rawDateRange);
   return {
     ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}),
     folderSignature: signature, folderTitle: match[1].replace(/(?:^|\s)\|(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim(),
     categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
     ...(!CATEGORY.test(categoryCode) ? { uncertainCategory: categoryCode } : {}),
-    folderCount: match[4],
+    folderCount,
+    ...(folderCount && !validFolderCount(folderCount) ? { uncertainFolderCount: folderCount } : {}),
+    ...(rawDateRange && !dates.dateFrom && !dates.dateRangeUnknown ? { uncertainDateRange: rawDateRange } : {}),
     ...dates,
   };
 }

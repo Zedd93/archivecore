@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { draftScanPages, emptyScanRow, ScanRow, validFolderCount } from './scan-import.util';
+import { draftScanPages, emptyScanRow, needsScanDateReview, ScanRow, validFolderCount } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -117,6 +117,10 @@ export default function ScanImportPanel() {
     if (!confirmed || !rows.length) return;
     if (rows.some((row) => !validFolderCount(row.folderCount))) {
       toast.error(t('import.scanFolderCountInvalid'));
+      return;
+    }
+    if (rows.some(needsScanDateReview)) {
+      toast.error(t('import.scanDateUnresolved'));
       return;
     }
     setSaving(true);
@@ -244,6 +248,15 @@ export default function ScanImportPanel() {
                       {t(`import.mappingFields.${field}`)}
                       <input type="date" className="input-field mt-1" value={row[field]} disabled={row.dateRangeUnknown}
                         onChange={(event) => updateRow(index, field, event.target.value)} />
+                      {field === 'dateFrom' && row.uncertainDateRange && (
+                        <span className="mt-1 block text-amber-800">{t('import.scanDateReview', { value: row.uncertainDateRange })}</span>
+                      )}
+                      {field === 'dateFrom' && row.uncertainDateFrom && (
+                        <span className="mt-1 block text-amber-800">{t('import.scanDateReview', { value: row.uncertainDateFrom })}</span>
+                      )}
+                      {field === 'dateTo' && row.uncertainDateTo && (
+                        <span className="mt-1 block text-amber-800">{t('import.scanDateReview', { value: row.uncertainDateTo })}</span>
+                      )}
                     </label>
                   ))}
                   <label className="text-xs text-gray-700">
@@ -256,6 +269,9 @@ export default function ScanImportPanel() {
                       aria-invalid={!validFolderCount(row.folderCount)}
                       onChange={(event) => updateRow(index, 'folderCount', event.target.value)} />
                     {!validFolderCount(row.folderCount) && <span className="text-red-700">{t('import.scanFolderCountInvalid')}</span>}
+                    {row.uncertainFolderCount && (
+                      <span className="mt-1 block text-amber-800">{t('import.scanCountReview', { value: row.uncertainFolderCount })}</span>
+                    )}
                   </label>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-gray-700">
@@ -275,12 +291,13 @@ export default function ScanImportPanel() {
             <Plus size={16} />{t('import.scanAddRow')}
           </button>
           <p className="text-xs text-amber-800">{t('import.scanBoxWarning')}</p>
+          {rows.some(needsScanDateReview) && <p className="text-sm text-red-700">{t('import.scanDateUnresolved')}</p>}
           <label className="flex items-start gap-2 text-sm text-gray-700">
             <input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount))}
+            disabled={saving || !confirmed || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || needsScanDateReview(row))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>
