@@ -56,6 +56,8 @@ export function scanOrdinalIssues(rows: ScanRow[]) {
   const duplicates = new Set<number>();
   const seen = new Set<number>();
   const unreadableRows: number[] = [];
+  const outOfOrderRows: number[] = [];
+  let previousOrdinal: number | undefined;
   for (const [index, row] of rows.entries()) {
     const ordinal = row.sourceOrdinal;
     if (ordinal === undefined) {
@@ -63,13 +65,16 @@ export function scanOrdinalIssues(rows: ScanRow[]) {
       continue;
     }
     if (seen.has(ordinal)) duplicates.add(ordinal);
+    if (previousOrdinal !== undefined && ordinal < previousOrdinal) outOfOrderRows.push(index + 1);
     seen.add(ordinal);
+    previousOrdinal = ordinal;
   }
   const ordered = [...seen].sort((a, b) => a - b);
+  if (ordered.length && ordered[0] > 1) gaps.push({ from: 1, to: ordered[0] - 1 });
   for (let index = 1; index < ordered.length; index++) {
     if (ordered[index] > ordered[index - 1] + 1) gaps.push({ from: ordered[index - 1] + 1, to: ordered[index] - 1 });
   }
-  return { gaps, duplicates: [...duplicates].sort((a, b) => a - b), unreadableRows };
+  return { gaps, duplicates: [...duplicates].sort((a, b) => a - b), unreadableRows, outOfOrderRows };
 }
 
 export function needsScanDateReview(row: ScanRow): boolean {

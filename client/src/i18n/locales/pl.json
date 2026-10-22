@@ -1457,6 +1457,7 @@
     "scanOrdinalGaps": "Brakujące numery: {{values}}",
     "scanOrdinalDuplicates": "Powtórzone numery: {{values}}",
     "scanOrdinalUnreadableRows": "Pozycje robocze bez czytelnego numeru „Lp.”: {{values}}",
+    "scanOrdinalOutOfOrderRows": "Pozycje robocze z numerem „Lp.” mniejszym niż poprzedni: {{values}}",
     "scanSourceOrdinalUnreadable": "Lp. nieodczytana",
     "scanConfirmOrdinals": "Sprawdziłem wskazane numery „Lp.” z oryginałem i potwierdzam, że robocze pozycje są kompletne.",
     "scanFolderCountInvalid": "Liczba teczek musi być liczbą całkowitą od 1 do 2147483647.",

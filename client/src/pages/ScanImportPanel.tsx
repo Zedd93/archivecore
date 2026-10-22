@@ -34,7 +34,7 @@ export default function ScanImportPanel() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const boxNumbers = scanBoxNumbers(rows);
   const ordinalIssues = scanOrdinalIssues(rows);
-  const hasOrdinalIssues = ordinalIssues.gaps.length > 0 || ordinalIssues.duplicates.length > 0 || ordinalIssues.unreadableRows.length > 0;
+  const hasOrdinalIssues = ordinalIssues.gaps.length > 0 || ordinalIssues.duplicates.length > 0 || ordinalIssues.unreadableRows.length > 0 || ordinalIssues.outOfOrderRows.length > 0;
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -260,6 +260,7 @@ export default function ScanImportPanel() {
               {ordinalIssues.gaps.length > 0 && <p>{t('import.scanOrdinalGaps', { values: ordinalIssues.gaps.map(({ from, to }) => from === to ? String(from) : `${from}-${to}`).join(', ') })}</p>}
               {ordinalIssues.duplicates.length > 0 && <p>{t('import.scanOrdinalDuplicates', { values: ordinalIssues.duplicates.join(', ') })}</p>}
               {ordinalIssues.unreadableRows.length > 0 && <p>{t('import.scanOrdinalUnreadableRows', { values: ordinalIssues.unreadableRows.join(', ') })}</p>}
+              {ordinalIssues.outOfOrderRows.length > 0 && <p>{t('import.scanOrdinalOutOfOrderRows', { values: ordinalIssues.outOfOrderRows.join(', ') })}</p>}
               <label className="flex items-start gap-2">
                 <input type="checkbox" className="mt-1" checked={ordinalsConfirmed} onChange={(event) => setOrdinalsConfirmed(event.target.checked)} />
                 {t('import.scanConfirmOrdinals')}

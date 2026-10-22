@@ -1457,6 +1457,7 @@
     "scanOrdinalGaps": "Missing numbers: {{values}}",
     "scanOrdinalDuplicates": "Repeated numbers: {{values}}",
     "scanOrdinalUnreadableRows": "Draft items without a readable source number: {{values}}",
+    "scanOrdinalOutOfOrderRows": "Draft items whose source number is lower than the previous one: {{values}}",
     "scanSourceOrdinalUnreadable": "Source number unreadable",
     "scanConfirmOrdinals": "I checked the flagged item numbers against the original and confirm that the draft items are complete.",
     "scanFolderCountInvalid": "Folder count must be an integer from 1 to 2147483647.",
