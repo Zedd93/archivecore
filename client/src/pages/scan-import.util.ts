@@ -40,6 +40,14 @@ export function validFolderCount(value: string): boolean {
   return /^[1-9]\d*$/.test(value.trim()) && Number(value) <= 2147483647;
 }
 
+export function validScanBoxNumber(value: string): boolean {
+  return value.trim().length <= 100;
+}
+
+export function scanBoxNumbers(rows: ScanRow[]): string[] {
+  return [...new Set(rows.map((row) => row.boxNumber.trim()).filter(Boolean))];
+}
+
 export function needsScanDateReview(row: ScanRow): boolean {
   if (row.dateRangeUnknown) return false;
   return !!((row.uncertainDateRange && (!row.dateFrom || !row.dateTo))

@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows, draftScanPages, needsScanDateReview, validFolderCount } = require('../../client/src/pages/scan-import.util.ts');
+const { draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, validFolderCount, validScanBoxNumber } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -131,6 +131,15 @@ test('maps the supplied nine-column transfer-list layout and joins a continued t
   assert.equal(result.rows[1].dateRangeUnknown, true);
   assert.equal(result.rows[1].folderCount, '3');
   assert.equal(result.rows[1].boxNumber, '8');
+});
+
+test('lists every distinct source box number for explicit review before scan import', () => {
+  const rows = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt; Numer kartonu\nA/1; Umowy; B10; 7\nA/2; Akta; B10; 7\nA/3; Korespondencja; B10; 8\nA/4; Puste; B10; ');
+  assert.deepEqual(scanBoxNumbers(rows), ['7', '8']);
+  assert.equal(validScanBoxNumber(''), true);
+  assert.equal(validScanBoxNumber('7'), true);
+  assert.equal(validScanBoxNumber('x'.repeat(100)), true);
+  assert.equal(validScanBoxNumber('x'.repeat(101)), false);
 });
 
 test('keeps an empty or invalid count visible for correction instead of silently using one', () => {

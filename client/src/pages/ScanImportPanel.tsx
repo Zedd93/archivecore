@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { draftScanPages, emptyScanRow, needsScanDateReview, ScanRow, validFolderCount } from './scan-import.util';
+import { draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, ScanRow, validFolderCount, validScanBoxNumber } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -27,9 +27,11 @@ export default function ScanImportPanel() {
   const [emptyPages, setEmptyPages] = useState<number[]>([]);
   const [rows, setRows] = useState<ScanRow[]>([]);
   const [confirmed, setConfirmed] = useState(false);
+  const [boxesConfirmed, setBoxesConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const boxNumbers = scanBoxNumbers(rows);
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -41,6 +43,7 @@ export default function ScanImportPanel() {
     setEmptyPages([]);
     setRows([]);
     setConfirmed(false);
+    setBoxesConfirmed(false);
     setResult(null);
   };
 
@@ -78,6 +81,7 @@ export default function ScanImportPanel() {
       setEmptyPages([]);
       setRows([]);
       setConfirmed(false);
+      setBoxesConfirmed(false);
     } catch (error) {
       toast.error(t('import.scanPageError', { page: currentPage, message: getApiErrorMessage(error, t('common.genericError')) }));
     } finally {
@@ -95,11 +99,13 @@ export default function ScanImportPanel() {
     if (tooMany) {
       setRows([]);
       setConfirmed(false);
+      setBoxesConfirmed(false);
       toast.error(t('import.scanTooManyRows'));
       return;
     }
     setRows(next);
     setConfirmed(false);
+    setBoxesConfirmed(false);
     if (!next.length) toast.error(t('import.scanNoRows'));
   };
 
@@ -111,6 +117,7 @@ export default function ScanImportPanel() {
       ...((field === 'dateFrom' || field === 'dateTo') && value ? { dateRangeUnknown: false } : {}),
     } : row));
     setConfirmed(false);
+    setBoxesConfirmed(false);
   };
 
   const save = async () => {
@@ -121,6 +128,14 @@ export default function ScanImportPanel() {
     }
     if (rows.some(needsScanDateReview)) {
       toast.error(t('import.scanDateUnresolved'));
+      return;
+    }
+    if (rows.some((row) => !validScanBoxNumber(row.boxNumber))) {
+      toast.error(t('import.scanBoxNumberInvalid'));
+      return;
+    }
+    if (boxNumbers.length && !boxesConfirmed) {
+      toast.error(t('import.scanConfirmBoxes'));
       return;
     }
     setSaving(true);
@@ -199,6 +214,7 @@ export default function ScanImportPanel() {
                     setEmptyPages((previous) => previous.filter((page) => page !== index + 1));
                     setRows([]);
                     setConfirmed(false);
+                    setBoxesConfirmed(false);
                   }} />
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-700">
@@ -207,6 +223,7 @@ export default function ScanImportPanel() {
                     setEmptyPages((previous) => event.target.checked ? [...previous, index + 1] : previous.filter((page) => page !== index + 1));
                     setRows([]);
                     setConfirmed(false);
+                    setBoxesConfirmed(false);
                   }} />
                 {t('import.scanPageNoItems')}
               </label>
@@ -229,7 +246,7 @@ export default function ScanImportPanel() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}{row.sourcePage ? ` - ${t('import.scanPage', { page: row.sourcePage, pages })}` : ''}</span>
                   <button type="button" aria-label={t('import.scanRemoveRow', { number: index + 1 })} className="text-red-600"
-                    onClick={() => { setRows((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); }}>
+                    onClick={() => { setRows((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); setBoxesConfirmed(false); }}>
                     <Trash2 size={17} />
                   </button>
                 </div>
@@ -261,7 +278,9 @@ export default function ScanImportPanel() {
                   ))}
                   <label className="text-xs text-gray-700">
                     {t('import.mappingFields.boxNumber')}
-                    <input className="input-field mt-1" value={row.boxNumber} onChange={(event) => updateRow(index, 'boxNumber', event.target.value)} />
+                    <input className="input-field mt-1" value={row.boxNumber} aria-invalid={!validScanBoxNumber(row.boxNumber)}
+                      onChange={(event) => updateRow(index, 'boxNumber', event.target.value)} />
+                    {!validScanBoxNumber(row.boxNumber) && <span className="text-red-700">{t('import.scanBoxNumberInvalid')}</span>}
                   </label>
                   <label className="text-xs text-gray-700">
                     {t('import.mappingFields.folderCount')} *
@@ -287,17 +306,27 @@ export default function ScanImportPanel() {
             ))}
           </div>
           <button type="button" className="btn-secondary inline-flex items-center gap-2" disabled={rows.length >= 500}
-            onClick={() => { setRows((previous) => [...previous, emptyScanRow()]); setConfirmed(false); }}>
+            onClick={() => { setRows((previous) => [...previous, emptyScanRow()]); setConfirmed(false); setBoxesConfirmed(false); }}>
             <Plus size={16} />{t('import.scanAddRow')}
           </button>
           <p className="text-xs text-amber-800">{t('import.scanBoxWarning')}</p>
+          {boxNumbers.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+              <p className="text-sm font-medium text-amber-900">{t('import.scanBoxNumbersReview', { count: boxNumbers.length })}</p>
+              <div className="max-h-28 overflow-y-auto break-words text-sm text-amber-900">{boxNumbers.join(', ')}</div>
+              <label className="flex items-start gap-2 text-sm text-amber-900">
+                <input type="checkbox" className="mt-1" checked={boxesConfirmed} onChange={(event) => setBoxesConfirmed(event.target.checked)} />
+                {t('import.scanConfirmBoxes')}
+              </label>
+            </div>
+          )}
           {rows.some(needsScanDateReview) && <p className="text-sm text-red-700">{t('import.scanDateUnresolved')}</p>}
           <label className="flex items-start gap-2 text-sm text-gray-700">
             <input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || needsScanDateReview(row))}
+            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>
