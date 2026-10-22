@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { correctScanSourceOrdinal, draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
+const { correctScanSourceOrdinal, draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -200,6 +200,22 @@ test('recognizes a misread visual Lp on the next page without treating it as a t
 test('flags missing initial source numbers without guessing a missing final number', () => {
   const rows = draftScanRows('Lp.; Znak teczki; Tytuł teczki; Kat. akt\n2; A/2; Akta; B10\n3; A/3; Pisma; B10');
   assert.deepEqual(scanOrdinalIssues(rows), { gaps: [{ from: 1, to: 1 }], duplicates: [], unreadableRows: [], outOfOrderRows: [] });
+});
+
+test('compares a declared source item count even without source Lp numbers', () => {
+  const rows = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt\nA/1; Umowy; B10\nA/2; Akta; B10');
+  assert.equal(scanExpectedRowCountStatus('', rows.length), 'empty');
+  assert.equal(scanExpectedRowCountStatus('2', rows.length), 'match');
+  assert.equal(scanExpectedRowCountStatus('3', rows.length), 'mismatch');
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [], duplicates: [], unreadableRows: [], outOfOrderRows: [] });
+  assert.equal(scanExpectedRowCountStatus('1', rows.length), 'mismatch');
+});
+
+test('rejects invalid declared source item counts', () => {
+  for (const value of ['0', '501', '1.5', 'abc', '02', '-1']) {
+    assert.equal(scanExpectedRowCountStatus(value, 2), 'invalid');
+  }
+  assert.equal(scanExpectedRowCountStatus(' 2 ', 2), 'match');
 });
 
 test('flags source numbers that move backwards across pages', () => {

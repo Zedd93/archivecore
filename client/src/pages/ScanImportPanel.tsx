@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { correctScanSourceOrdinal, draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } from './scan-import.util';
+import { correctScanSourceOrdinal, draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -33,6 +33,7 @@ export default function ScanImportPanel() {
   const [workingPage, setWorkingPage] = useState(0);
   const [emptyPages, setEmptyPages] = useState<number[]>([]);
   const [rows, setRows] = useState<ScanRow[]>([]);
+  const [expectedRowCount, setExpectedRowCount] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [boxesConfirmed, setBoxesConfirmed] = useState(false);
   const [ordinalsConfirmed, setOrdinalsConfirmed] = useState(false);
@@ -45,6 +46,8 @@ export default function ScanImportPanel() {
   const ordinalLocations = hasOrdinalIssues ? scanOrdinalIssueLocations(rows) : [];
   const hasSourceOrdinals = rows.some((row) => row.sourceOrdinalExpected || row.sourceOrdinal !== undefined);
   const hasInvalidSourceOrdinal = rows.some((row) => row.sourceOrdinalInput !== undefined && row.sourceOrdinalInput.trim() !== '' && !validScanSourceOrdinal(row.sourceOrdinalInput));
+  const expectedRowCountStatus = scanExpectedRowCountStatus(expectedRowCount, rows.length);
+  const expectedRowCountBlocksSave = expectedRowCountStatus === 'invalid' || expectedRowCountStatus === 'mismatch';
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -55,6 +58,7 @@ export default function ScanImportPanel() {
     setWorkingPage(0);
     setEmptyPages([]);
     setRows([]);
+    setExpectedRowCount('');
     setConfirmed(false);
     setBoxesConfirmed(false);
     setOrdinalsConfirmed(false);
@@ -161,6 +165,10 @@ export default function ScanImportPanel() {
     }
     if (hasInvalidSourceOrdinal) {
       toast.error(t('import.scanSourceOrdinalInvalid'));
+      return;
+    }
+    if (expectedRowCountBlocksSave) {
+      toast.error(t(expectedRowCountStatus === 'invalid' ? 'import.scanExpectedRowCountInvalid' : 'import.scanExpectedRowCountMismatch', { expected: expectedRowCount.trim(), actual: rows.length }));
       return;
     }
     if (boxNumbers.length && !boxesConfirmed) {
@@ -275,6 +283,16 @@ export default function ScanImportPanel() {
               onChange={(event) => { setTitle(event.target.value); setConfirmed(false); }} />
           </label>
           <p className="text-sm text-gray-600">{t('import.scanRowCount', { count: rows.length })}</p>
+          <label className="block max-w-sm text-sm font-medium text-gray-700">
+            {t('import.scanExpectedRowCount')}
+            <input className="input-field mt-1" type="text" inputMode="numeric" value={expectedRowCount}
+              aria-invalid={expectedRowCountBlocksSave}
+              onChange={(event) => { setExpectedRowCount(event.target.value); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); }} />
+          </label>
+          <p className="text-xs text-gray-600">{t('import.scanExpectedRowCountHint')}</p>
+          {expectedRowCountStatus === 'invalid' && <p role="alert" className="text-sm text-red-700">{t('import.scanExpectedRowCountInvalid')}</p>}
+          {expectedRowCountStatus === 'mismatch' && <p role="alert" className="text-sm text-red-700">{t('import.scanExpectedRowCountMismatch', { expected: expectedRowCount.trim(), actual: rows.length })}</p>}
+          {expectedRowCountStatus === 'match' && <p className="text-sm text-green-700">{t('import.scanExpectedRowCountMatch', { count: rows.length })}</p>}
           {hasSourceOrdinals && <p className="text-xs text-gray-600">{t('import.scanSourceOrdinalHint')}</p>}
           {hasOrdinalIssues && (
             <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2 text-sm text-amber-900">
@@ -395,7 +413,7 @@ export default function ScanImportPanel() {
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || hasInvalidSourceOrdinal || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row))}
+            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || hasInvalidSourceOrdinal || expectedRowCountBlocksSave || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>

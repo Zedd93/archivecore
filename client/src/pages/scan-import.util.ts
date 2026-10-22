@@ -52,6 +52,13 @@ export function validScanSourceOrdinal(value: string): boolean {
   return /^[1-9]\d{0,3}$/.test(value.trim());
 }
 
+export function scanExpectedRowCountStatus(value: string, actualCount: number): 'empty' | 'invalid' | 'match' | 'mismatch' {
+  const expected = value.trim();
+  if (!expected) return 'empty';
+  if (!/^[1-9]\d*$/.test(expected) || Number(expected) > 500) return 'invalid';
+  return Number(expected) === actualCount ? 'match' : 'mismatch';
+}
+
 export function correctScanSourceOrdinal(row: ScanRow, value: string): ScanRow {
   return {
     ...row,
