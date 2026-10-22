@@ -14,6 +14,7 @@ export interface ScanRow {
   dateRangeUnknown: boolean;
   sourcePage?: number;
   sourceOrdinal?: number;
+  sourceOrdinalExpected?: boolean;
   boxNumber: string;
   notes: string;
 }
@@ -54,9 +55,13 @@ export function scanOrdinalIssues(rows: ScanRow[]) {
   const gaps: { from: number; to: number }[] = [];
   const duplicates = new Set<number>();
   const seen = new Set<number>();
-  for (const row of rows) {
+  const unreadableRows: number[] = [];
+  for (const [index, row] of rows.entries()) {
     const ordinal = row.sourceOrdinal;
-    if (ordinal === undefined) continue;
+    if (ordinal === undefined) {
+      if (row.sourceOrdinalExpected && row.folderSignature.trim()) unreadableRows.push(index + 1);
+      continue;
+    }
     if (seen.has(ordinal)) duplicates.add(ordinal);
     seen.add(ordinal);
   }
@@ -64,7 +69,7 @@ export function scanOrdinalIssues(rows: ScanRow[]) {
   for (let index = 1; index < ordered.length; index++) {
     if (ordered[index] > ordered[index - 1] + 1) gaps.push({ from: ordered[index - 1] + 1, to: ordered[index] - 1 });
   }
-  return { gaps, duplicates: [...duplicates].sort((a, b) => a - b) };
+  return { gaps, duplicates: [...duplicates].sort((a, b) => a - b), unreadableRows };
 }
 
 export function needsScanDateReview(row: ScanRow): boolean {
@@ -135,6 +140,7 @@ function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRo
     ...emptyScanRow(),
     ...(sourcePage ? { sourcePage } : {}),
     ...(sourceOrdinal !== undefined ? { sourceOrdinal } : {}),
+    ...(header.includes('sourceOrdinal') ? { sourceOrdinalExpected: true } : {}),
     folderSignature: fields.folderSignature || '',
     folderTitle: fields.folderTitle || '',
     categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
@@ -151,17 +157,17 @@ function mappedRow(cells: string[], header: Header, sourcePage?: number): ScanRo
   };
 }
 
-function fallbackRow(cells: string[], line: string, sourcePage?: number): ScanRow {
+function fallbackRow(cells: string[], line: string, sourcePage?: number, sourceOrdinalExpected = false): ScanRow {
   const values = cells.filter(Boolean);
   const sourceOrdinal = values.length > 1 ? parseOrdinal(values[0]) : undefined;
   if (sourceOrdinal !== undefined) values.shift();
   const categoryIndex = values.findIndex((cell, index) => index >= 2 && CATEGORY.test(cell));
-  if (categoryIndex < 0) return { ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), ...(sourceOrdinal !== undefined ? { sourceOrdinal } : {}), folderTitle: line };
+  if (categoryIndex < 0) return { ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), ...(sourceOrdinal !== undefined ? { sourceOrdinal } : {}), ...(sourceOrdinalExpected ? { sourceOrdinalExpected } : {}), folderTitle: line };
   const between = values.slice(1, categoryIndex);
   const dates = between.length >= 2 ? parseYearRange(between[between.length - 1]) : parseYearRange('');
   const hasDates = dates.dateRangeUnknown || !!dates.dateFrom;
   return {
-    ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), ...(sourceOrdinal !== undefined ? { sourceOrdinal } : {}),
+    ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), ...(sourceOrdinal !== undefined ? { sourceOrdinal } : {}), ...(sourceOrdinalExpected ? { sourceOrdinalExpected } : {}),
     folderSignature: values[0],
     folderTitle: (hasDates ? between.slice(0, -1) : between).join(' '),
     categoryCode: values[categoryIndex],
@@ -177,7 +183,7 @@ function isVisualTableHeader(line: string): boolean {
 const VISUAL_ROW_START = /^(\d{1,4})[.)]?\s+(\S+)\s+(.+)$/;
 const VISUAL_ROW_END = /^(.*?)\s+(?:(brak\s+dat|[0-9OIl]{4}(?:\s*[-–—]\s*[0-9OIl]{4})?)\s+)?([AB][A-Z0-9+]{0,6})\s+(\d+|[lIoO?])\s*$/i;
 
-function visualRow(sourceOrdinal: number, signature: string, content: string, sourcePage?: number): ScanRow | null {
+function visualRow(sourceOrdinal: number | undefined, signature: string, content: string, sourcePage: number | undefined, sourceOrdinalExpected: boolean): ScanRow | null {
   const match = content.match(VISUAL_ROW_END);
   if (!match || !match[1].trim()) return null;
   const categoryCode = match[3];
@@ -185,7 +191,7 @@ function visualRow(sourceOrdinal: number, signature: string, content: string, so
   const folderCount = match[4];
   const dates = parseYearRange(rawDateRange);
   return {
-    ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), sourceOrdinal,
+    ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), ...(sourceOrdinal !== undefined ? { sourceOrdinal } : {}), ...(sourceOrdinalExpected ? { sourceOrdinalExpected } : {}),
     folderSignature: signature, folderTitle: match[1].replace(/(?:^|\s)\|(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim(),
     categoryCode: CATEGORY.test(categoryCode) ? categoryCode : '',
     ...(!CATEGORY.test(categoryCode) ? { uncertainCategory: categoryCode } : {}),
@@ -196,18 +202,19 @@ function visualRow(sourceOrdinal: number, signature: string, content: string, so
   };
 }
 
-function parsePage(text: string, sourcePage: number | undefined, initialHeader: Header | null, initialVisualTable = false) {
+function parsePage(text: string, sourcePage: number | undefined, initialHeader: Header | null, initialVisualTable = false, initialVisualOrdinalExpected = false) {
   const rows: ScanRow[] = [];
   let header = initialHeader;
   let visualTable = initialVisualTable;
+  let visualOrdinalExpected = initialVisualOrdinalExpected;
   const hasVisualHeader = text.split(/\r?\n/).some((line) => !/[;\t]/.test(line) && isVisualTableHeader(line));
-  let pending: { sourceOrdinal: number; signature: string; content: string } | null = null;
+  let pending: { sourceOrdinal?: number; signature: string; content: string } | null = null;
   let canContinueVisualRow = false;
   const flushPending = () => {
     if (!pending) return;
-    const parsed = visualRow(pending.sourceOrdinal, pending.signature, pending.content, sourcePage);
+    const parsed = visualRow(pending.sourceOrdinal, pending.signature, pending.content, sourcePage, visualOrdinalExpected);
     rows.push(parsed || {
-      ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), sourceOrdinal: pending.sourceOrdinal,
+      ...emptyScanRow(), ...(sourcePage ? { sourcePage } : {}), ...(pending.sourceOrdinal !== undefined ? { sourceOrdinal: pending.sourceOrdinal } : {}), ...(visualOrdinalExpected ? { sourceOrdinalExpected: true } : {}),
       folderSignature: pending.signature, folderTitle: pending.content,
     });
     canContinueVisualRow = !!parsed;
@@ -218,8 +225,8 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
     if (!line) continue;
     const { cells, delimited } = splitCells(line);
     const detected = detectHeader(cells);
-    if (detected) { flushPending(); header = detected; visualTable = !delimited; continue; }
-    if (!delimited && isVisualTableHeader(line)) { flushPending(); visualTable = true; continue; }
+    if (detected) { flushPending(); header = detected; visualTable = !delimited; visualOrdinalExpected = visualTable && detected.includes('sourceOrdinal'); continue; }
+    if (!delimited && isVisualTableHeader(line)) { flushPending(); visualTable = true; visualOrdinalExpected = /(?:^|\s)lp(?:\s|$)/.test(normalizeHeader(line)); continue; }
     if (hasVisualHeader && !visualTable) continue;
     if (visualTable && !delimited) {
       if (/^(?:Przekazuj[aą]cy akta|Kierownik Kom[oó]rki|Przyjmuj[aą]cy akta|Imi[eę] i nazwisko)/i.test(line)) {
@@ -228,15 +235,19 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
       }
       if (/^\d+(?:\s+\d+){3,}\s*$/.test(line)) continue;
       const start = line.match(VISUAL_ROW_START);
+      const unnumberedStart = visualOrdinalExpected ? line.match(/^(?:\S{1,4}\s+)?(\S*\/\S+)\s+(.+)$/) : null;
       if (start && Number(start[1]) > 0 && !/^\d+$/.test(start[2]) && !CATEGORY.test(start[2])) {
         flushPending();
         pending = { sourceOrdinal: Number(start[1]), signature: start[2], content: start[3] };
+      } else if (unnumberedStart) {
+        flushPending();
+        pending = { signature: unnumberedStart[1], content: unnumberedStart[2] };
       } else if (pending) {
         pending.content += ` ${line}`;
       } else if (canContinueVisualRow && /^[\p{L}][\p{L}\p{M}\s–—-]{0,79}$/u.test(line)) {
         rows[rows.length - 1].folderTitle += ` ${line}`;
       }
-      if (pending && visualRow(pending.sourceOrdinal, pending.signature, pending.content, sourcePage)) flushPending();
+      if (pending && visualRow(pending.sourceOrdinal, pending.signature, pending.content, sourcePage, visualOrdinalExpected)) flushPending();
       if (rows.length > 500) break;
       continue;
     }
@@ -256,12 +267,12 @@ function parsePage(text: string, sourcePage: number | undefined, initialHeader: 
     } else if (/^\s{2,}\S/.test(rawLine) && cells.length === 1 && rows.at(-1)?.folderSignature && rows.at(-1)?.categoryCode) {
       rows[rows.length - 1].folderTitle += ` ${line}`;
     } else {
-      rows.push(fallbackRow(cells, line, sourcePage));
+      rows.push(fallbackRow(cells, line, sourcePage, !!header?.includes('sourceOrdinal')));
     }
     if (rows.length > 500) break;
   }
   flushPending();
-  return { rows, header, visualTable };
+  return { rows, header, visualTable, visualOrdinalExpected };
 }
 
 export function draftScanRows(text: string, sourcePage?: number): ScanRow[] {
@@ -272,11 +283,13 @@ export function draftScanPages(pageTexts: string[], emptyPages: number[]) {
   const rows: ScanRow[] = [];
   let header: Header | null = null;
   let visualTable = false;
+  let visualOrdinalExpected = false;
   for (const [index, text] of pageTexts.entries()) {
     if (emptyPages.includes(index + 1)) continue;
-    const parsed = parsePage(text, index + 1, header, visualTable);
+    const parsed = parsePage(text, index + 1, header, visualTable, visualOrdinalExpected);
     header = parsed.header;
     visualTable = parsed.visualTable;
+    visualOrdinalExpected = parsed.visualOrdinalExpected;
     if (!parsed.rows.length) return { rows: [], missingPage: index + 1, tooMany: false };
     rows.push(...parsed.rows);
     if (rows.length > 500) return { rows: [], missingPage: null, tooMany: true };

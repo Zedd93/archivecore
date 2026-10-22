@@ -34,7 +34,7 @@ export default function ScanImportPanel() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const boxNumbers = scanBoxNumbers(rows);
   const ordinalIssues = scanOrdinalIssues(rows);
-  const hasOrdinalIssues = ordinalIssues.gaps.length > 0 || ordinalIssues.duplicates.length > 0;
+  const hasOrdinalIssues = ordinalIssues.gaps.length > 0 || ordinalIssues.duplicates.length > 0 || ordinalIssues.unreadableRows.length > 0;
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -259,6 +259,7 @@ export default function ScanImportPanel() {
               <p className="font-medium">{t('import.scanOrdinalReview')}</p>
               {ordinalIssues.gaps.length > 0 && <p>{t('import.scanOrdinalGaps', { values: ordinalIssues.gaps.map(({ from, to }) => from === to ? String(from) : `${from}-${to}`).join(', ') })}</p>}
               {ordinalIssues.duplicates.length > 0 && <p>{t('import.scanOrdinalDuplicates', { values: ordinalIssues.duplicates.join(', ') })}</p>}
+              {ordinalIssues.unreadableRows.length > 0 && <p>{t('import.scanOrdinalUnreadableRows', { values: ordinalIssues.unreadableRows.join(', ') })}</p>}
               <label className="flex items-start gap-2">
                 <input type="checkbox" className="mt-1" checked={ordinalsConfirmed} onChange={(event) => setOrdinalsConfirmed(event.target.checked)} />
                 {t('import.scanConfirmOrdinals')}
@@ -269,7 +270,7 @@ export default function ScanImportPanel() {
             {rows.map((row, index) => (
               <div key={row.id} className="rounded-lg border border-gray-200 p-3 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}{row.sourcePage ? ` - ${t('import.scanPage', { page: row.sourcePage, pages })}` : ''}{row.sourceOrdinal !== undefined ? ` - ${t('import.scanSourceOrdinal', { number: row.sourceOrdinal })}` : ''}</span>
+                  <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}{row.sourcePage ? ` - ${t('import.scanPage', { page: row.sourcePage, pages })}` : ''}{row.sourceOrdinal !== undefined ? ` - ${t('import.scanSourceOrdinal', { number: row.sourceOrdinal })}` : row.sourceOrdinalExpected ? ` - ${t('import.scanSourceOrdinalUnreadable')}` : ''}</span>
                   <button type="button" aria-label={t('import.scanRemoveRow', { number: index + 1 })} className="text-red-600"
                     onClick={() => { setRows((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); }}>
                     <Trash2 size={17} />

@@ -152,21 +152,49 @@ test('flags missing and repeated source ordinals across pages, independently of 
     `${header}\n4; A/3; Pisma; B10; 1\n4; A/4; Inne; B10; 1`,
   ], []);
   assert.deepEqual(result.rows.map((row) => row.sourceOrdinal), [1, 2, 4, 4]);
-  assert.deepEqual(scanOrdinalIssues(result.rows), { gaps: [{ from: 3, to: 3 }], duplicates: [4] });
+  assert.deepEqual(scanOrdinalIssues(result.rows), { gaps: [{ from: 3, to: 3 }], duplicates: [4], unreadableRows: [] });
   assert.deepEqual(scanBoxNumbers(result.rows), ['9', '1']);
 });
 
 test('does not infer source ordinals from box numbers or an unnumbered table', () => {
   const rows = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt; Numer kartonu\nA/1; Umowy; B10; 1\nA/2; Akta; B10; 3');
   assert.deepEqual(rows.map((row) => row.sourceOrdinal), [undefined, undefined]);
-  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [], duplicates: [] });
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [], duplicates: [], unreadableRows: [] });
 });
 
 test('finds gaps in visual OCR rows without treating wrapped titles as items', () => {
   const rows = draftScanRows('Lp. Znak teczki Tytuł teczki Kat. akt Liczba teczek\n1 A/1 Umowy B10 1\n2 A/2 Dokumentacja B10 1\ni aneksy\n4 A/4 Akta B50 1');
   assert.deepEqual(rows.map((row) => row.sourceOrdinal), [1, 2, 4]);
   assert.equal(rows[1].folderTitle, 'Dokumentacja i aneksy');
-  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [{ from: 3, to: 3 }], duplicates: [] });
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [{ from: 3, to: 3 }], duplicates: [], unreadableRows: [] });
+});
+
+test('flags an unreadable Lp cell but not a continued title in a mapped table', () => {
+  const header = 'Lp.; Znak teczki; Tytuł teczki; Kat. akt';
+  const rows = draftScanRows(`${header}\n1; A/1; Umowy; B10\n; ; i aneksy; \n?; A/2; Akta; B10\n3; A/3; Pisma; B10`);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].folderTitle, 'Umowy i aneksy');
+  assert.equal(rows[1].sourceOrdinalExpected, true);
+  assert.equal(rows[1].sourceOrdinal, undefined);
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [{ from: 2, to: 2 }], duplicates: [], unreadableRows: [2] });
+});
+
+test('keeps a visual OCR row whose Lp was lost instead of joining it to the previous title', () => {
+  const rows = draftScanRows('Lp. Znak teczki Tytuł teczki Kat. akt Liczba teczek\n1 NOVUM/1 Umowy B10 1\nNOVUM/2 Akta B10 1\n3 NOVUM/3 Pisma B10 1');
+  assert.deepEqual(rows.map((row) => row.folderSignature), ['NOVUM/1', 'NOVUM/2', 'NOVUM/3']);
+  assert.deepEqual(rows.map((row) => row.sourceOrdinal), [1, undefined, 3]);
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [{ from: 2, to: 2 }], duplicates: [], unreadableRows: [2] });
+});
+
+test('recognizes a misread visual Lp on the next page without treating it as a title', () => {
+  const result = draftScanPages([
+    'Lp. Znak teczki Tytuł teczki Kat. akt Liczba teczek\n1 NOVUM/1 Umowy B10 1',
+    'I NOVUM/2 Akta B10 1\n3 NOVUM/3 Pisma B10 1',
+  ], []);
+  assert.equal(result.missingPage, null);
+  assert.deepEqual(result.rows.map((row) => row.folderSignature), ['NOVUM/1', 'NOVUM/2', 'NOVUM/3']);
+  assert.equal(result.rows[1].sourcePage, 2);
+  assert.deepEqual(scanOrdinalIssues(result.rows), { gaps: [{ from: 2, to: 2 }], duplicates: [], unreadableRows: [2] });
 });
 
 test('keeps an empty or invalid count visible for correction instead of silently using one', () => {
