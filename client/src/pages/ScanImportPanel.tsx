@@ -5,7 +5,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber } from './scan-import.util';
+import { draftScanPages, emptyScanRow, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, ScanRow, validFolderCount, validScanBoxNumber } from './scan-import.util';
 
 interface ScanResult {
   imported: number;
@@ -15,6 +15,13 @@ interface ScanResult {
 }
 
 type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
+
+const ordinalIssueTranslation = {
+  gap: 'import.scanOrdinalGaps',
+  duplicate: 'import.scanOrdinalDuplicates',
+  unreadable: 'import.scanOrdinalUnreadableRows',
+  outOfOrder: 'import.scanOrdinalOutOfOrderRows',
+} as const;
 
 export default function ScanImportPanel() {
   const { t } = useTranslation();
@@ -35,6 +42,7 @@ export default function ScanImportPanel() {
   const boxNumbers = scanBoxNumbers(rows);
   const ordinalIssues = scanOrdinalIssues(rows);
   const hasOrdinalIssues = ordinalIssues.gaps.length > 0 || ordinalIssues.duplicates.length > 0 || ordinalIssues.unreadableRows.length > 0 || ordinalIssues.outOfOrderRows.length > 0;
+  const ordinalLocations = hasOrdinalIssues ? scanOrdinalIssueLocations(rows) : [];
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -257,10 +265,19 @@ export default function ScanImportPanel() {
           {hasOrdinalIssues && (
             <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2 text-sm text-amber-900">
               <p className="font-medium">{t('import.scanOrdinalReview')}</p>
-              {ordinalIssues.gaps.length > 0 && <p>{t('import.scanOrdinalGaps', { values: ordinalIssues.gaps.map(({ from, to }) => from === to ? String(from) : `${from}-${to}`).join(', ') })}</p>}
-              {ordinalIssues.duplicates.length > 0 && <p>{t('import.scanOrdinalDuplicates', { values: ordinalIssues.duplicates.join(', ') })}</p>}
-              {ordinalIssues.unreadableRows.length > 0 && <p>{t('import.scanOrdinalUnreadableRows', { values: ordinalIssues.unreadableRows.join(', ') })}</p>}
-              {ordinalIssues.outOfOrderRows.length > 0 && <p>{t('import.scanOrdinalOutOfOrderRows', { values: ordinalIssues.outOfOrderRows.join(', ') })}</p>}
+              <div className="max-h-36 space-y-1 overflow-y-auto">
+                {ordinalLocations.map((issue, index) => (
+                  <button key={`${issue.kind}-${issue.row}-${index}`} type="button" className="block text-left underline hover:text-amber-700"
+                    onClick={() => {
+                      const card = document.getElementById(`scan-row-${rows[issue.row - 1].id}`);
+                      card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      card?.querySelector('input')?.focus({ preventScroll: true });
+                    }}>
+                    {t(ordinalIssueTranslation[issue.kind], { values: issue.value })}
+                    {' · '}{issue.page ? `${t('import.scanPage', { page: issue.page, pages })} · ` : ''}{t('import.mappingRow', { number: issue.row })}
+                  </button>
+                ))}
+              </div>
               <label className="flex items-start gap-2">
                 <input type="checkbox" className="mt-1" checked={ordinalsConfirmed} onChange={(event) => setOrdinalsConfirmed(event.target.checked)} />
                 {t('import.scanConfirmOrdinals')}
@@ -269,7 +286,7 @@ export default function ScanImportPanel() {
           )}
           <div className="max-h-[35rem] overflow-y-auto space-y-3">
             {rows.map((row, index) => (
-              <div key={row.id} className="rounded-lg border border-gray-200 p-3 space-y-2">
+              <div id={`scan-row-${row.id}`} key={row.id} className="rounded-lg border border-gray-200 p-3 space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}{row.sourcePage ? ` - ${t('import.scanPage', { page: row.sourcePage, pages })}` : ''}{row.sourceOrdinal !== undefined ? ` - ${t('import.scanSourceOrdinal', { number: row.sourceOrdinal })}` : row.sourceOrdinalExpected ? ` - ${t('import.scanSourceOrdinalUnreadable')}` : ''}</span>
                   <button type="button" aria-label={t('import.scanRemoveRow', { number: index + 1 })} className="text-red-600"

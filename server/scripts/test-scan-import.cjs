@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanOrdinalIssues, validFolderCount, validScanBoxNumber } = require('../../client/src/pages/scan-import.util.ts');
+const { draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -210,6 +210,21 @@ test('flags source numbers that move backwards across pages', () => {
   assert.deepEqual(result.rows.map((row) => row.sourceOrdinal), [1, 3, 2]);
   assert.deepEqual(scanOrdinalIssues(result.rows), { gaps: [], duplicates: [], unreadableRows: [], outOfOrderRows: [3] });
   assert.deepEqual(scanBoxNumbers(result.rows), ['9', '1']);
+});
+
+test('points ordinal warnings to the relevant draft rows and source pages', () => {
+  const result = draftScanPages([
+    'Lp.; Znak teczki; Tytuł teczki; Kat. akt\n2; A/2; Umowy; B10\n5; A/5; Akta; B10',
+    '5; A/5B; Pisma; B10\n?; A/6; Inne; B10\n4; A/4; Rejestry; B10',
+  ], []);
+  assert.deepEqual(scanOrdinalIssueLocations(result.rows), [
+    { kind: 'gap', value: '1', row: 1, page: 1 },
+    { kind: 'gap', value: '3', row: 2, page: 1 },
+    { kind: 'duplicate', value: '5', row: 2, page: 1 },
+    { kind: 'duplicate', value: '5', row: 3, page: 2 },
+    { kind: 'unreadable', value: '4', row: 4, page: 2 },
+    { kind: 'outOfOrder', value: '5', row: 5, page: 2 },
+  ]);
 });
 
 test('keeps an empty or invalid count visible for correction instead of silently using one', () => {

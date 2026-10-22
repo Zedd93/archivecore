@@ -77,6 +77,29 @@ export function scanOrdinalIssues(rows: ScanRow[]) {
   return { gaps, duplicates: [...duplicates].sort((a, b) => a - b), unreadableRows, outOfOrderRows };
 }
 
+export type ScanOrdinalLocation = {
+  kind: 'gap' | 'duplicate' | 'unreadable' | 'outOfOrder';
+  value: string;
+  row: number;
+  page?: number;
+};
+
+export function scanOrdinalIssueLocations(rows: ScanRow[]): ScanOrdinalLocation[] {
+  const issues = scanOrdinalIssues(rows);
+  const location = (kind: ScanOrdinalLocation['kind'], value: string, index: number): ScanOrdinalLocation => ({
+    kind, value, row: index + 1, ...(rows[index].sourcePage ? { page: rows[index].sourcePage } : {}),
+  });
+  return [
+    ...issues.gaps.map(({ from, to }) => {
+      const index = rows.findIndex((row) => row.sourceOrdinal !== undefined && row.sourceOrdinal > to);
+      return location('gap', from === to ? String(from) : `${from}-${to}`, index);
+    }),
+    ...issues.duplicates.flatMap((number) => rows.flatMap((row, index) => row.sourceOrdinal === number ? [location('duplicate', String(number), index)] : [])),
+    ...issues.unreadableRows.map((row) => location('unreadable', String(row), row - 1)),
+    ...issues.outOfOrderRows.map((row) => location('outOfOrder', String(row), row - 1)),
+  ];
+}
+
 export function needsScanDateReview(row: ScanRow): boolean {
   if (row.dateRangeUnknown) return false;
   return !!((row.uncertainDateRange && (!row.dateFrom || !row.dateTo))
