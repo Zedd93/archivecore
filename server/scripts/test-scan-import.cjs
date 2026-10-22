@@ -5,7 +5,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
-const { draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, validFolderCount, validScanBoxNumber } = require('../../client/src/pages/scan-import.util.ts');
+const { draftScanRows, draftScanPages, needsScanDateReview, scanBoxNumbers, scanOrdinalIssues, validFolderCount, validScanBoxNumber } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -39,6 +39,7 @@ test('reads a text-based PDF without external Poppler or OCR programs', async ()
   const preview = draftScanPages([pageOne.text, pageTwo.text], [2]);
   assert.equal(preview.rows.length, 1);
   assert.equal(preview.rows[0].folderSignature, 'TEST/1');
+  assert.equal(preview.rows[0].sourceOrdinal, 1);
   assert.equal(preview.rows[0].dateTo, '2012-12-31');
   assert.equal(preview.rows[0].folderCount, '46');
 });
@@ -122,12 +123,14 @@ test('maps the supplied nine-column transfer-list layout and joins a continued t
   assert.equal(result.missingPage, null);
   assert.equal(result.rows.length, 2);
   assert.equal(result.rows[0].folderTitle, 'Dokumentacja zarządu i uchwały wspólnoty');
+  assert.equal(result.rows[0].sourceOrdinal, 1);
   assert.equal(result.rows[0].dateFrom, '2020-01-01');
   assert.equal(result.rows[0].dateTo, '2024-12-31');
   assert.equal(result.rows[0].categoryCode, 'B10');
   assert.equal(result.rows[0].folderCount, '46');
   assert.equal(result.rows[0].boxNumber, '7');
   assert.equal(result.rows[1].sourcePage, 2);
+  assert.equal(result.rows[1].sourceOrdinal, 2);
   assert.equal(result.rows[1].dateRangeUnknown, true);
   assert.equal(result.rows[1].folderCount, '3');
   assert.equal(result.rows[1].boxNumber, '8');
@@ -140,6 +143,30 @@ test('lists every distinct source box number for explicit review before scan imp
   assert.equal(validScanBoxNumber('7'), true);
   assert.equal(validScanBoxNumber('x'.repeat(100)), true);
   assert.equal(validScanBoxNumber('x'.repeat(101)), false);
+});
+
+test('flags missing and repeated source ordinals across pages, independently of box numbers', () => {
+  const header = 'Lp.; Znak teczki; Tytuł teczki; Kat. akt; Numer kartonu';
+  const result = draftScanPages([
+    `${header}\n1; A/1; Umowy; B10; 9\n2; A/2; Akta; B10; 9`,
+    `${header}\n4; A/3; Pisma; B10; 1\n4; A/4; Inne; B10; 1`,
+  ], []);
+  assert.deepEqual(result.rows.map((row) => row.sourceOrdinal), [1, 2, 4, 4]);
+  assert.deepEqual(scanOrdinalIssues(result.rows), { gaps: [{ from: 3, to: 3 }], duplicates: [4] });
+  assert.deepEqual(scanBoxNumbers(result.rows), ['9', '1']);
+});
+
+test('does not infer source ordinals from box numbers or an unnumbered table', () => {
+  const rows = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt; Numer kartonu\nA/1; Umowy; B10; 1\nA/2; Akta; B10; 3');
+  assert.deepEqual(rows.map((row) => row.sourceOrdinal), [undefined, undefined]);
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [], duplicates: [] });
+});
+
+test('finds gaps in visual OCR rows without treating wrapped titles as items', () => {
+  const rows = draftScanRows('Lp. Znak teczki Tytuł teczki Kat. akt Liczba teczek\n1 A/1 Umowy B10 1\n2 A/2 Dokumentacja B10 1\ni aneksy\n4 A/4 Akta B50 1');
+  assert.deepEqual(rows.map((row) => row.sourceOrdinal), [1, 2, 4]);
+  assert.equal(rows[1].folderTitle, 'Dokumentacja i aneksy');
+  assert.deepEqual(scanOrdinalIssues(rows), { gaps: [{ from: 3, to: 3 }], duplicates: [] });
 });
 
 test('keeps an empty or invalid count visible for correction instead of silently using one', () => {
