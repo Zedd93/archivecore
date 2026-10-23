@@ -103,7 +103,8 @@ async function main() {
     && primaryKey.valid === true);
   const uniqueKey = actualConstraints.get('inventory_resolution_events_sequence_key');
   check('Unikalna numeracja sequence', uniqueKey?.type === 'u'
-    && uniqueKey.definition === 'UNIQUE (sequence)' && uniqueKey.valid === true);
+    && uniqueKey.definition === 'UNIQUE (sequence)' && uniqueKey.valid === true,
+  uniqueKey && `type=${uniqueKey.type}, definition=${uniqueKey.definition}, valid=${uniqueKey.valid}`);
 
   const expectedForeignKeys = {
     inventory_resolution_events_sessionId_fkey: ['sessionId', 'inventory_sessions', 'id', 'c'],
