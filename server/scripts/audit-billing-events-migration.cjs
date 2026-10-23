@@ -177,6 +177,7 @@ async function main() {
     : latest.rolled_back_at ? 'wycofana'
     : 'nieudana / w toku';
   console.log(`Historia Prisma: ${status}`);
+  console.log(`Rozbieznosci schematu: ${missing}`);
   console.log('Dane nie zostaly zmienione.');
   if (missing > 0) process.exitCode = 1;
 }
