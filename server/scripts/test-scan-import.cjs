@@ -7,7 +7,7 @@ const { importService } = require('../dist/modules/import-export/import.service'
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
 const { prisma } = require('../dist/config/database');
 const { errorHandler } = require('../dist/middleware/error-handler');
-const { correctScanSourceOrdinal, draftScanRows, draftScanPages, invalidScanDateRange, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
+const { correctScanSourceOrdinal, draftScanRows, draftScanPages, invalidScanDateRange, needsScanDateReview, scanBoxNumbers, scanContentDuplicateGroups, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
   await assert.rejects(recognizeScan(Buffer.alloc(0)), /Skan musi mieć/);
@@ -311,6 +311,27 @@ test('compares a declared source item count even without source Lp numbers', () 
   assert.equal(scanExpectedRowCountStatus('3', rows.length), 'mismatch');
   assert.deepEqual(scanOrdinalIssues(rows), { gaps: [], duplicates: [], unreadableRows: [], outOfOrderRows: [] });
   assert.equal(scanExpectedRowCountStatus('1', rows.length), 'mismatch');
+});
+
+test('flags repeated folder content across pages without confusing distinct volumes', () => {
+  const result = draftScanPages([
+    'Znak teczki; Tytuł teczki; Daty skrajne; Kat. akt\nA/1; Akta zarządu; 2020; B10\nA/1; Akta zarządu; 2021; B10',
+    'A/1; Akta zarządu; 2020; B10\nA/1; Inne akta; 2020; B10',
+  ], []);
+  assert.deepEqual(scanContentDuplicateGroups(result.rows), [
+    { signature: 'A/1', title: 'Akta zarządu', rows: [1, 3] },
+  ]);
+  assert.deepEqual(result.rows.map((row) => row.sourcePage), [1, 1, 2, 2]);
+});
+
+test('normalizes spacing and case in duplicate checks, but ignores incomplete rows', () => {
+  const rows = draftScanRows('Znak teczki; Tytuł teczki; Kat. akt\nA/1; Umowy Spółki; B10\nA/2; Inne; B10');
+  const repeated = { ...rows[0], folderSignature: ' a/1 ', folderTitle: '  UMOWY   SPÓŁKI  ', boxNumber: '99' };
+  assert.deepEqual(scanContentDuplicateGroups([rows[0], rows[1], repeated]), [
+    { signature: 'A/1', title: 'Umowy Spółki', rows: [1, 3] },
+  ]);
+  assert.deepEqual(scanContentDuplicateGroups([rows[0], { ...repeated, folderTitle: '' }]), []);
+  assert.deepEqual(scanContentDuplicateGroups([rows[0], { ...repeated, dateRangeUnknown: true }]), []);
 });
 
 test('rejects invalid declared source item counts', () => {

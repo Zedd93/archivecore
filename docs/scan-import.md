@@ -30,3 +30,5 @@ Podgląd nie pozwala zapisać pozycji, w której „Data od” jest późniejsza
 Serwer sprawdza też, czy obie podane daty istnieją w kalendarzu. Na przykład 29 lutego w roku nieprzestępnym jest odrzucany przed utworzeniem spisu, zamiast zostać automatycznie przesunięty na marzec. Prawidłowy 29 lutego w roku przestępnym jest dozwolony.
 
 Zapis zatwierdzonego skanu jest całościowy: jeżeli choć jedna pozycja się nie powiedzie, nie zostaną zapisane spis, jego teczki ani kartony utworzone podczas tego importu. Komunikat wskazuje numer problematycznej pozycji. Zwykły import Excel/CSV nadal może zwracać błędy poszczególnych wierszy i nie korzysta z tego trybu.
+
+Podgląd ostrzega też przed pozycjami o takim samym znaku, tytule i zakresie dat (ignorując wielkość liter i nadmiar spacji). Pokazuje numery wierszy i stron do porównania z oryginałem. Takie pozycje mogą być prawidłowymi osobnymi tomami, dlatego można je zachować po osobnym potwierdzeniu; każda zmiana roboczych pozycji cofa to potwierdzenie.

@@ -72,6 +72,23 @@ export function scanBoxNumbers(rows: ScanRow[]): string[] {
   return [...new Set(rows.map((row) => row.boxNumber.trim()).filter(Boolean))];
 }
 
+export function scanContentDuplicateGroups(rows: ScanRow[]): { signature: string; title: string; rows: number[] }[] {
+  const groups = new Map<string, { signature: string; title: string; rows: number[] }>();
+  const normalize = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl');
+
+  rows.forEach((row, index) => {
+    const signature = normalize(row.folderSignature);
+    const title = normalize(row.folderTitle);
+    if (!signature || !title) return;
+    const key = JSON.stringify([signature, title, row.dateFrom, row.dateTo, row.dateRangeUnknown]);
+    const group = groups.get(key);
+    if (group) group.rows.push(index + 1);
+    else groups.set(key, { signature: row.folderSignature.trim(), title: row.folderTitle.trim(), rows: [index + 1] });
+  });
+
+  return [...groups.values()].filter((group) => group.rows.length > 1);
+}
+
 export function scanOrdinalIssues(rows: ScanRow[]) {
   const gaps: { from: number; to: number }[] = [];
   const duplicates = new Set<number>();
