@@ -106,8 +106,12 @@ async function main() {
   for (const [table, expected] of Object.entries(expectedColumns)) {
     for (const [name, [type, required, defaultValue]] of Object.entries(expected)) {
       const actual = actualColumns.get(`${table}.${name}`);
-      check(`Kolumna ${table}.${name}`, actual?.type === type
-        && actual.required === required && actual.defaultValue === defaultValue);
+      const matches = actual?.type === type
+        && actual.required === required && actual.defaultValue === defaultValue;
+      check(`Kolumna ${table}.${name}`, matches);
+      if (!matches && actual) {
+        console.log(`  Odczytano: ${actual.type}, required=${actual.required}, default=${actual.defaultValue}`);
+      }
     }
   }
 
