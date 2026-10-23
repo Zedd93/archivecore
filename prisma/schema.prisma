@@ -1337,6 +1337,7 @@ model RefreshToken {
 model TransferList {
   id               String             @id @default(uuid()) @db.Uuid
   tenantId         String             @db.Uuid
+  reviewedScanFingerprint String?      @db.VarChar(64)
   listNumber       String             @db.VarChar(50)
   title            String             @db.VarChar(500)
   transferringUnit String?            @db.VarChar(255) // Komórka przekazująca
@@ -1356,6 +1357,7 @@ model TransferList {
   items     TransferListItem[]
 
   @@index([tenantId])
+  @@unique([tenantId, reviewedScanFingerprint])
   @@index([listNumber])
   @@index([status])
   @@map("transfer_lists")

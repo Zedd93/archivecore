@@ -54,6 +54,7 @@ function isCalendarDate(value: string): boolean {
 const reviewedScanSchema = z.object({
   title: z.string().trim().min(1).max(500),
   confirmed: z.literal(true),
+  allowDuplicate: z.boolean().optional().default(false),
   items: z.array(createTransferListItemSchema).min(1).max(500),
 }).strict().superRefine((data, ctx) => {
   data.items.forEach((item, index) => {
@@ -199,7 +200,7 @@ export class ImportService {
       throw Object.assign(new Error(`${row ? `Pozycja ${row}: ` : ''}${issue.message}`), { statusCode: 400 });
     }
 
-    const result = await transferListService.createFromReviewedScan(parsed.data.title, tenantId, userId, parsed.data.items);
+    const result = await transferListService.createFromReviewedScan(parsed.data.title, tenantId, userId, parsed.data.items, parsed.data.allowDuplicate);
     return {
       totalRows: parsed.data.items.length,
       imported: result.imported,

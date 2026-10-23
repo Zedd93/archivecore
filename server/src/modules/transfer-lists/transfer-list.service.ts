@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { prisma } from '../../config/database';
 import { generateQrData, normalizeOptionalText } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
@@ -20,6 +21,17 @@ function reviewedScanRowError(error: unknown, index: number): Error {
     code: details.code,
     meta: details.meta,
     cause: original,
+  });
+}
+
+function reviewedScanFingerprint(items: any[]): string {
+  return createHash('sha256').update(`reviewed-scan-v1:${JSON.stringify(items)}`).digest('hex');
+}
+
+function reviewedScanDuplicateError(list: { id: string; listNumber: string; title: string }): Error {
+  return Object.assign(new Error(`Ten spis został już zaimportowany jako ${list.listNumber}.`), {
+    statusCode: 409,
+    duplicateImport: { listId: list.id, listNumber: list.listNumber, title: list.title },
   });
 }
 
@@ -200,6 +212,7 @@ export class TransferListService {
         receivingUnit: normalizeOptionalText(data.receivingUnit),
         transferDate: data.transferDate ? new Date(data.transferDate) : undefined,
         notes: normalizeOptionalText(data.notes),
+        reviewedScanFingerprint: data.reviewedScanFingerprint ?? null,
         createdById: userId,
         status: 'draft',
       },
@@ -346,7 +359,8 @@ export class TransferListService {
     return { boxId, sourceBoxNumber };
   }
 
-  async createFromReviewedScan(title: string, tenantId: string, userId: string, items: any[]) {
+  async createFromReviewedScan(title: string, tenantId: string, userId: string, items: any[], allowDuplicate = false) {
+    const fingerprint = reviewedScanFingerprint(items);
     for (const [index, item] of items.entries()) {
       try {
         await jrwaSuggestionService.validateSelection(tenantId, item.retentionPolicyId, item.categoryCode);
@@ -355,21 +369,42 @@ export class TransferListService {
       }
     }
 
-    return prisma.$transaction(async (tx) => {
-      const list = await this.create({
-        title,
-        notes: 'Import z zeskanowanego spisu, po weryfikacji przez użytkownika',
-      }, tenantId, userId, tx);
-      for (const [index, item] of items.entries()) {
-        try {
-          const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, item, tx);
-          await this.createItemWithCanonicalFolder(tx, list, item, boxId, sourceBoxNumber, index + 1);
-        } catch (error) {
-          throw reviewedScanRowError(error, index);
+    try {
+      return await prisma.$transaction(async (tx) => {
+        if (!allowDuplicate) {
+          const existing = await tx.transferList.findFirst({
+            where: { tenantId, reviewedScanFingerprint: fingerprint },
+            select: { id: true, listNumber: true, title: true },
+          });
+          if (existing) throw reviewedScanDuplicateError(existing);
         }
+        const list = await this.create({
+          title,
+          notes: 'Import z zeskanowanego spisu, po weryfikacji przez użytkownika',
+          reviewedScanFingerprint: allowDuplicate ? null : fingerprint,
+        }, tenantId, userId, tx);
+        for (const [index, item] of items.entries()) {
+          try {
+            const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, item, tx);
+            await this.createItemWithCanonicalFolder(tx, list, item, boxId, sourceBoxNumber, index + 1);
+          } catch (error) {
+            throw reviewedScanRowError(error, index);
+          }
+        }
+        return { listId: list.id, listNumber: list.listNumber, title: list.title, imported: items.length };
+      }, { maxWait: 10_000, timeout: 120_000 });
+    } catch (error) {
+      const target = (error as { meta?: { target?: unknown } }).meta?.target;
+      if (!allowDuplicate && (error as { code?: string }).code === 'P2002' &&
+        Array.isArray(target) && target.includes('reviewedScanFingerprint')) {
+        const existing = await prisma.transferList.findFirst({
+          where: { tenantId, reviewedScanFingerprint: fingerprint },
+          select: { id: true, listNumber: true, title: true },
+        });
+        if (existing) throw reviewedScanDuplicateError(existing);
       }
-      return { listId: list.id, listNumber: list.listNumber, title: list.title, imported: items.length };
-    }, { maxWait: 10_000, timeout: 120_000 });
+      throw error;
+    }
   }
 
   // ─── Add item to list ──────────────────────────────────

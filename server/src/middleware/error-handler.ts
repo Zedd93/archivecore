@@ -71,6 +71,7 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
   res.status(statusCode).json({
     success: false,
     error: message,
+    ...(statusCode === 409 && (err as any).duplicateImport ? { duplicateImport: (err as any).duplicateImport } : {}),
     ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}),
   });
 }

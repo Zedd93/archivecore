@@ -206,6 +206,81 @@ test('rolls back a failed reviewed scan and saves a complete retry with one sour
   }
 });
 
+test('blocks a repeated reviewed scan within a tenant and permits an explicit second import', async () => {
+  const lists = [];
+  let nextId = 1;
+  const tx = {
+    transferList: {
+      findFirst: async ({ where }) => where.reviewedScanFingerprint
+        ? lists.find((list) => list.tenantId === where.tenantId && list.reviewedScanFingerprint === where.reviewedScanFingerprint) || null
+        : lists.find((list) => list.tenantId === where.tenantId) || null,
+      create: async ({ data }) => {
+        const list = { id: `list-${nextId++}`, ...data };
+        lists.push(list);
+        return list;
+      },
+    },
+    folder: { create: async () => ({ id: `folder-${nextId++}` }) },
+    transferListItem: { create: async ({ data }) => ({ id: `item-${nextId++}`, ...data }) },
+  };
+  const transaction = mock.method(prisma, '$transaction', async (callback) => callback(tx));
+  const input = { title: 'Spis pierwszy', confirmed: true, items: [{ folderSignature: 'A/1', folderTitle: 'Umowy', categoryCode: 'B10' }] };
+  try {
+    const first = await importService.importReviewedScan(input, 'tenant-a', 'user');
+    assert.equal(lists[0].reviewedScanFingerprint.length, 64);
+    await assert.rejects(importService.importReviewedScan({ ...input, title: 'Inna nazwa' }, 'tenant-a', 'user'), (error) => {
+      assert.equal(error.statusCode, 409);
+      assert.deepEqual(error.duplicateImport, { listId: first.listId, listNumber: first.listNumber, title: input.title });
+      let response;
+      const res = {
+        status(statusCode) { response = { statusCode }; return this; },
+        json(body) { response.body = body; return this; },
+      };
+      errorHandler(error, { method: 'POST', path: '/api/import/transfer-lists/scan' }, res, () => {});
+      assert.equal(response.statusCode, 409);
+      assert.deepEqual(response.body.duplicateImport, error.duplicateImport);
+      return true;
+    });
+    assert.equal(lists.length, 1);
+    await importService.importReviewedScan({ ...input, allowDuplicate: true }, 'tenant-a', 'user');
+    assert.equal(lists.length, 2);
+    assert.equal(lists[1].reviewedScanFingerprint, null);
+    await assert.rejects(importService.importReviewedScan(input, 'tenant-a', 'user'), { statusCode: 409 });
+    await importService.importReviewedScan({ ...input, items: [{ ...input.items[0], folderTitle: 'Akta' }] }, 'tenant-a', 'user');
+    await importService.importReviewedScan(input, 'tenant-b', 'user');
+    assert.equal(lists.length, 4);
+  } finally {
+    transaction.mock.restore();
+  }
+});
+
+test('concurrent duplicate insert reports the existing list after a unique-index conflict', async () => {
+  const existing = { id: 'list-existing', listNumber: 'SZO-2026-0001', title: 'Wcześniejszy spis' };
+  const tx = {
+    transferList: {
+      findFirst: async () => null,
+      create: async () => { throw Object.assign(new Error('duplicate'), { code: 'P2002', meta: { target: ['tenantId', 'reviewedScanFingerprint'] } }); },
+    },
+  };
+  const transaction = mock.method(prisma, '$transaction', async (callback) => callback(tx));
+  const model = prisma.transferList;
+  const originalFindFirst = model.findFirst;
+  model.findFirst = async () => existing;
+  try {
+    await assert.rejects(importService.importReviewedScan({
+      title: 'Nowy spis', confirmed: true,
+      items: [{ folderSignature: 'A/1', folderTitle: 'Umowy', categoryCode: 'B10' }],
+    }, 'tenant-a', 'user'), (error) => {
+      assert.equal(error.statusCode, 409);
+      assert.deepEqual(error.duplicateImport, { listId: existing.id, listNumber: existing.listNumber, title: existing.title });
+      return true;
+    });
+  } finally {
+    transaction.mock.restore();
+    model.findFirst = originalFindFirst;
+  }
+});
+
 test('requires explicit acknowledgement for empty pages and never truncates the 501st item', () => {
   const first = 'A/1; Umowy; B10';
   assert.deepEqual(draftScanPages([first, ''], []).missingPage, 2);

@@ -14,6 +14,12 @@ interface ScanResult {
   listNumber: string;
 }
 
+interface DuplicateImport {
+  listId: string;
+  listNumber: string;
+  title: string;
+}
+
 type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
 
 const ordinalIssueTranslation = {
@@ -38,6 +44,8 @@ export default function ScanImportPanel() {
   const [boxesConfirmed, setBoxesConfirmed] = useState(false);
   const [ordinalsConfirmed, setOrdinalsConfirmed] = useState(false);
   const [duplicatesConfirmed, setDuplicatesConfirmed] = useState(false);
+  const [duplicateConflict, setDuplicateConflict] = useState<DuplicateImport | null>(null);
+  const [duplicateImportConfirmed, setDuplicateImportConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
@@ -50,6 +58,11 @@ export default function ScanImportPanel() {
   const hasInvalidSourceOrdinal = rows.some((row) => row.sourceOrdinalInput !== undefined && row.sourceOrdinalInput.trim() !== '' && !validScanSourceOrdinal(row.sourceOrdinalInput));
   const expectedRowCountStatus = scanExpectedRowCountStatus(expectedRowCount, rows.length);
   const expectedRowCountBlocksSave = expectedRowCountStatus === 'invalid' || expectedRowCountStatus === 'mismatch';
+
+  const clearDuplicateConflict = () => {
+    setDuplicateConflict(null);
+    setDuplicateImportConfirmed(false);
+  };
 
   const selectFile = (next: File | null) => {
     setFile(next);
@@ -65,6 +78,7 @@ export default function ScanImportPanel() {
     setBoxesConfirmed(false);
     setOrdinalsConfirmed(false);
     setDuplicatesConfirmed(false);
+    clearDuplicateConflict();
     setResult(null);
   };
 
@@ -105,6 +119,7 @@ export default function ScanImportPanel() {
       setBoxesConfirmed(false);
       setOrdinalsConfirmed(false);
       setDuplicatesConfirmed(false);
+      clearDuplicateConflict();
     } catch (error) {
       toast.error(t('import.scanPageError', { page: currentPage, message: getApiErrorMessage(error, t('common.genericError')) }));
     } finally {
@@ -125,6 +140,7 @@ export default function ScanImportPanel() {
       setBoxesConfirmed(false);
       setOrdinalsConfirmed(false);
       setDuplicatesConfirmed(false);
+      clearDuplicateConflict();
       toast.error(t('import.scanTooManyRows'));
       return;
     }
@@ -133,6 +149,7 @@ export default function ScanImportPanel() {
     setBoxesConfirmed(false);
     setOrdinalsConfirmed(false);
     setDuplicatesConfirmed(false);
+    clearDuplicateConflict();
     if (!next.length) toast.error(t('import.scanNoRows'));
   };
 
@@ -147,6 +164,7 @@ export default function ScanImportPanel() {
     setBoxesConfirmed(false);
     setOrdinalsConfirmed(false);
     setDuplicatesConfirmed(false);
+    clearDuplicateConflict();
   };
 
   const updateSourceOrdinal = (index: number, value: string) => {
@@ -155,6 +173,7 @@ export default function ScanImportPanel() {
     setBoxesConfirmed(false);
     setOrdinalsConfirmed(false);
     setDuplicatesConfirmed(false);
+    clearDuplicateConflict();
   };
 
   const save = async () => {
@@ -195,6 +214,7 @@ export default function ScanImportPanel() {
       toast.error(t('import.scanConfirmDuplicates'));
       return;
     }
+    if (duplicateConflict && !duplicateImportConfirmed) return;
     setSaving(true);
     try {
       const items = rows.map((row) => ({
@@ -208,11 +228,19 @@ export default function ScanImportPanel() {
         notes: row.notes.trim() || null,
         folderCount: Number(row.folderCount),
       }));
-      const response = await api.post('/import/transfer-lists/scan', { title: title.trim(), confirmed: true, items });
+      const response = await api.post('/import/transfer-lists/scan', {
+        title: title.trim(), confirmed: true, allowDuplicate: duplicateImportConfirmed, items,
+      });
       setResult(response.data.data);
       toast.success(t('import.successMsg', { count: response.data.data.imported, total: rows.length }));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, t('common.genericError')));
+      const conflict = (error as { response?: { status?: number; data?: { duplicateImport?: DuplicateImport } } })?.response;
+      if (conflict?.status === 409 && conflict.data?.duplicateImport?.listId) {
+        setDuplicateConflict(conflict.data.duplicateImport);
+        setDuplicateImportConfirmed(false);
+      } else {
+        toast.error(getApiErrorMessage(error, t('common.genericError')));
+      }
     } finally {
       setSaving(false);
     }
@@ -274,6 +302,7 @@ export default function ScanImportPanel() {
                     setBoxesConfirmed(false);
                     setOrdinalsConfirmed(false);
                     setDuplicatesConfirmed(false);
+                    clearDuplicateConflict();
                   }} />
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-700">
@@ -285,6 +314,7 @@ export default function ScanImportPanel() {
                     setBoxesConfirmed(false);
                     setOrdinalsConfirmed(false);
                     setDuplicatesConfirmed(false);
+                    clearDuplicateConflict();
                   }} />
                 {t('import.scanPageNoItems')}
               </label>
@@ -298,14 +328,14 @@ export default function ScanImportPanel() {
           <label className="block text-sm font-medium text-gray-700">
             {t('import.scanListTitle')}
             <input className="input-field mt-1" maxLength={500} value={title}
-              onChange={(event) => { setTitle(event.target.value); setConfirmed(false); }} />
+              onChange={(event) => { setTitle(event.target.value); setConfirmed(false); clearDuplicateConflict(); }} />
           </label>
           <p className="text-sm text-gray-600">{t('import.scanRowCount', { count: rows.length })}</p>
           <label className="block max-w-sm text-sm font-medium text-gray-700">
             {t('import.scanExpectedRowCount')}
             <input className="input-field mt-1" type="text" inputMode="numeric" value={expectedRowCount}
               aria-invalid={expectedRowCountBlocksSave}
-              onChange={(event) => { setExpectedRowCount(event.target.value); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); setDuplicatesConfirmed(false); }} />
+              onChange={(event) => { setExpectedRowCount(event.target.value); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); setDuplicatesConfirmed(false); clearDuplicateConflict(); }} />
           </label>
           <p className="text-xs text-gray-600">{t('import.scanExpectedRowCountHint')}</p>
           {expectedRowCountStatus === 'invalid' && <p role="alert" className="text-sm text-red-700">{t('import.scanExpectedRowCountInvalid')}</p>}
@@ -369,7 +399,7 @@ export default function ScanImportPanel() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold">{t('import.mappingRow', { number: index + 1 })}{row.sourcePage ? ` - ${t('import.scanPage', { page: row.sourcePage, pages })}` : ''}{row.sourceOrdinal !== undefined ? ` - ${t('import.scanSourceOrdinal', { number: row.sourceOrdinal })}` : row.sourceOrdinalExpected ? ` - ${t('import.scanSourceOrdinalUnreadable')}` : ''}</span>
                   <button type="button" aria-label={t('import.scanRemoveRow', { number: index + 1 })} className="text-red-600"
-                    onClick={() => { setRows((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); setDuplicatesConfirmed(false); }}>
+                    onClick={() => { setRows((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); setDuplicatesConfirmed(false); clearDuplicateConflict(); }}>
                     <Trash2 size={17} />
                   </button>
                 </div>
@@ -442,7 +472,7 @@ export default function ScanImportPanel() {
             ))}
           </div>
           <button type="button" className="btn-secondary inline-flex items-center gap-2" disabled={rows.length >= 500}
-            onClick={() => { setRows((previous) => [...previous, { ...emptyScanRow(), ...(hasSourceOrdinals ? { sourceOrdinalExpected: true } : {}) }]); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); setDuplicatesConfirmed(false); }}>
+            onClick={() => { setRows((previous) => [...previous, { ...emptyScanRow(), ...(hasSourceOrdinals ? { sourceOrdinalExpected: true } : {}) }]); setConfirmed(false); setBoxesConfirmed(false); setOrdinalsConfirmed(false); setDuplicatesConfirmed(false); clearDuplicateConflict(); }}>
             <Plus size={16} />{t('import.scanAddRow')}
           </button>
           <p className="text-xs text-amber-800">{t('import.scanBoxWarning')}</p>
@@ -457,12 +487,24 @@ export default function ScanImportPanel() {
             </div>
           )}
           {rows.some(needsScanDateReview) && <p className="text-sm text-red-700">{t('import.scanDateUnresolved')}</p>}
+          {duplicateConflict && (
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2 text-sm text-amber-900">
+              <p className="font-medium">{t('import.scanAlreadyImported', { number: duplicateConflict.listNumber })}</p>
+              <Link to={`/transfer-lists/${duplicateConflict.listId}`} className="inline-block underline hover:text-amber-700">
+                {t('import.scanOpenExisting', { title: duplicateConflict.title })}
+              </Link>
+              <label className="flex items-start gap-2">
+                <input type="checkbox" className="mt-1" checked={duplicateImportConfirmed} onChange={(event) => setDuplicateImportConfirmed(event.target.checked)} />
+                {t('import.scanImportAgain')}
+              </label>
+            </div>
+          )}
           <label className="flex items-start gap-2 text-sm text-gray-700">
             <input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
             {t('import.scanConfirm')}
           </label>
           <button type="button" className="btn-primary inline-flex items-center gap-2"
-            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || (duplicateGroups.length > 0 && !duplicatesConfirmed) || hasInvalidSourceOrdinal || expectedRowCountBlocksSave || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row) || invalidScanDateRange(row))}
+            disabled={saving || !confirmed || (boxNumbers.length > 0 && !boxesConfirmed) || (hasOrdinalIssues && !ordinalsConfirmed) || (duplicateGroups.length > 0 && !duplicatesConfirmed) || (duplicateConflict !== null && !duplicateImportConfirmed) || hasInvalidSourceOrdinal || expectedRowCountBlocksSave || !title.trim() || rows.some((row) => !row.folderSignature.trim() || !row.folderTitle.trim() || !row.categoryCode.trim() || !validFolderCount(row.folderCount) || !validScanBoxNumber(row.boxNumber) || needsScanDateReview(row) || invalidScanDateRange(row))}
             onClick={save}>
             {saving && <Loader2 size={16} className="animate-spin" />}{t('import.scanSave')}
           </button>

@@ -11,7 +11,7 @@ PDF zawierający warstwę tekstową jest odczytywany przez aplikację bez dodatk
 3. Katalogi tych programów w `PATH` procesu `archivecore-server` w PM2 lub oba programy w katalogu wskazanym przez `OCR_BIN_DIR`. Na serwerze Doxart domyślnie wykrywany jest `C:\Apps\ocr-tools\runtime\Library\bin`; ustawienie `OCR_BIN_DIR` pozwala wskazać inną instalację. Modele językowe są domyślnie pobierane z `C:\Apps\ocr-tools\runtime\share\tessdata`; przy innej instalacji wskaż je przez `OCR_TESSDATA_DIR`. Samo `tesseract --list-langs` nie potwierdza, że program potrafi użyć modeli przy odczycie obrazu. Na liście języków muszą być `pol` i `eng`.
 4. Ponowne uruchomienie procesu PM2 po instalacji lub zmianie konfiguracji OCR. Sam `npm install` tych programów nie instaluje.
 
-Nie trzeba nowej migracji bazy danych. Aktualizację aplikacji wykonaj istniejącym `C:\Apps\update.ps1`. Programy zewnętrzne są konieczne tylko dla OCR obrazów.
+Przed uruchomieniem nowej wersji serwera zastosuj migrację Prisma `20261023100000_add_reviewed_scan_fingerprint`, a następnie wygeneruj klienta Prisma i zbuduj serwer oraz frontend. Istniejące spisy pozostają bez zmian. Programy zewnętrzne są konieczne tylko dla OCR obrazów.
 
 ## Użycie i ograniczenia
 
@@ -32,3 +32,5 @@ Serwer sprawdza też, czy obie podane daty istnieją w kalendarzu. Na przykład 
 Zapis zatwierdzonego skanu jest całościowy: jeżeli choć jedna pozycja się nie powiedzie, nie zostaną zapisane spis, jego teczki ani kartony utworzone podczas tego importu. Komunikat wskazuje numer problematycznej pozycji. Zwykły import Excel/CSV nadal może zwracać błędy poszczególnych wierszy i nie korzysta z tego trybu.
 
 Podgląd ostrzega też przed pozycjami o takim samym znaku, tytule i zakresie dat (ignorując wielkość liter i nadmiar spacji). Pokazuje numery wierszy i stron do porównania z oryginałem. Takie pozycje mogą być prawidłowymi osobnymi tomami, dlatego można je zachować po osobnym potwierdzeniu; każda zmiana roboczych pozycji cofa to potwierdzenie.
+
+Przy zapisie serwer sprawdza odcisk zatwierdzonych pozycji spisu w obrębie tenanta. Powtórzenie tego samego zestawu pozycji, nawet pod innym tytułem, zatrzymuje import i pokazuje odnośnik do istniejącego spisu. Po świadomym potwierdzeniu można utworzyć drugą kopię; ten wyjątek nie usuwa ochrony przed kolejnym przypadkowym importem. Odcisk powstaje tylko dla nowych importów skanowanych spisów po tej migracji: starsze spisy i import Excel/CSV nie są nim objęte. Zmiana treści lub kolejności zatwierdzonych pozycji daje inny odcisk, więc kontrola nie zastępuje sprawdzenia merytorycznego.
