@@ -150,8 +150,9 @@ async function main() {
     const defaultMatches = expectedDefault
       ? expectedDefault.test(column?.defaultValue ?? '')
       : column?.defaultValue == null;
-    check(`Domyslna wartosc ${name}`, defaultMatches);
-    if (!defaultMatches) console.log(`  Faktyczna wartosc: ${column?.defaultValue ?? '(brak)'}`);
+    const defaultLabel = `Domyslna wartosc ${name}`;
+    check(defaultMatches ? defaultLabel
+      : `${defaultLabel} (faktyczna: ${column?.defaultValue ?? '(brak)'})`, defaultMatches);
   }
 
   const actualIndexes = new Map(indexes.map((row) => [row.name, row]));
