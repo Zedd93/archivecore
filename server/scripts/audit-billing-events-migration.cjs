@@ -26,6 +26,37 @@ const expectedForeignKeys = [
   'billing_events_orderId_fkey',
   'billing_events_orderItemId_fkey',
 ];
+const expectedTypes = {
+  id: 'uuid', tenantId: 'uuid', priceListId: 'uuid', priceListItemId: 'uuid',
+  orderId: 'uuid', orderItemId: 'uuid', serviceCode: 'character varying(50)',
+  serviceName: 'character varying(255)', unit: 'character varying(30)',
+  quantity: 'numeric(12,2)', unitPrice: 'numeric(12,2)',
+  netAmount: 'numeric(12,2)', vatRate: 'numeric(5,2)',
+  currency: 'character varying(3)', sourceType: 'character varying(50)',
+  sourceId: 'uuid', description: 'character varying(500)',
+  occurredAt: 'timestamp(3) without time zone', billingPeriod: 'date',
+  status: '"BillingEventStatus"', excludedReason: 'character varying(500)',
+  createdAt: 'timestamp(3) without time zone',
+  updatedAt: 'timestamp(3) without time zone',
+};
+const nullableColumns = new Set([
+  'priceListId', 'priceListItemId', 'orderId', 'orderItemId',
+  'unitPrice', 'netAmount', 'description', 'excludedReason',
+]);
+const expectedIndexColumns = {
+  billing_events_pkey: ['id'],
+  billing_events_sourceType_sourceId_serviceCode_key: ['sourceType', 'sourceId', 'serviceCode'],
+  billing_events_tenantId_billingPeriod_status_idx: ['tenantId', 'billingPeriod', 'status'],
+  billing_events_tenantId_occurredAt_idx: ['tenantId', 'occurredAt'],
+  billing_events_orderId_idx: ['orderId'],
+};
+const expectedForeignKeyTargets = {
+  billing_events_tenantId_fkey: ['tenantId', 'tenants', 'r'],
+  billing_events_priceListId_fkey: ['priceListId', 'price_lists', 'r'],
+  billing_events_priceListItemId_fkey: ['priceListItemId', 'price_list_items', 'r'],
+  billing_events_orderId_fkey: ['orderId', 'orders', 'n'],
+  billing_events_orderItemId_fkey: ['orderItemId', 'order_items', 'n'],
+};
 
 async function main() {
   const [history, catalog] = await Promise.all([
@@ -45,16 +76,31 @@ async function main() {
 
   const [columns, indexes, foreignKeys, enumValues] = await Promise.all([
     prisma.$queryRaw`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'billing_events'
+      SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type,
+             a.attnotnull AS required
+      FROM pg_attribute a
+      WHERE a.attrelid = to_regclass('billing_events')
+        AND a.attnum > 0 AND NOT a.attisdropped
     `,
     prisma.$queryRaw`
-      SELECT indexname FROM pg_indexes
-      WHERE schemaname = current_schema() AND tablename = 'billing_events'
+      SELECT c.relname AS name, i.indisunique AS "unique",
+             array_agg(a.attname ORDER BY keys.ordinality) AS columns
+      FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indexrelid
+      JOIN pg_attribute a ON a.attrelid = i.indrelid
+      JOIN unnest(i.indkey) WITH ORDINALITY AS keys(attnum, ordinality)
+        ON a.attnum = keys.attnum
+      WHERE i.indrelid = to_regclass('billing_events')
+      GROUP BY c.relname, i.indisunique
     `,
     prisma.$queryRaw`
-      SELECT conname FROM pg_constraint
-      WHERE conrelid = to_regclass('billing_events') AND contype = 'f'
+      SELECT c.conname AS name, a.attname AS column,
+             target.relname AS target, c.confdeltype AS "onDelete"
+      FROM pg_constraint c
+      JOIN pg_class target ON target.oid = c.confrelid
+      JOIN pg_attribute a ON a.attrelid = c.conrelid
+        AND a.attnum = c.conkey[1]
+      WHERE c.conrelid = to_regclass('billing_events') AND c.contype = 'f'
     `,
     prisma.$queryRaw`
       SELECT enumlabel FROM pg_enum
@@ -77,14 +123,28 @@ async function main() {
     'unpriced', 'pending', 'excluded', 'invoiced',
   ]));
 
-  const columnNames = new Set(columns.map((row) => row.column_name));
-  for (const name of expectedColumns) check(`Kolumna ${name}`, columnNames.has(name));
+  const actualColumns = new Map(columns.map((row) => [row.name, row]));
+  for (const name of expectedColumns) {
+    const column = actualColumns.get(name);
+    check(`Kolumna ${name}`, column?.type === expectedTypes[name]
+      && column.required === !nullableColumns.has(name));
+  }
 
-  const indexNames = new Set(indexes.map((row) => row.indexname));
-  for (const name of expectedIndexes) check(`Indeks ${name}`, indexNames.has(name));
+  const actualIndexes = new Map(indexes.map((row) => [row.name, row]));
+  for (const name of expectedIndexes) {
+    const index = actualIndexes.get(name);
+    const expectedUnique = name.endsWith('_key') || name === 'billing_events_pkey';
+    check(`Indeks ${name}`, index?.unique === expectedUnique
+      && JSON.stringify(index?.columns) === JSON.stringify(expectedIndexColumns[name]));
+  }
 
-  const constraintNames = new Set(foreignKeys.map((row) => row.conname));
-  for (const name of expectedForeignKeys) check(`Relacja ${name}`, constraintNames.has(name));
+  const actualForeignKeys = new Map(foreignKeys.map((row) => [row.name, row]));
+  for (const name of expectedForeignKeys) {
+    const key = actualForeignKeys.get(name);
+    const [column, target, onDelete] = expectedForeignKeyTargets[name];
+    check(`Relacja ${name}`, key?.column === column && key?.target === target
+      && key?.onDelete === onDelete);
+  }
 
   const latest = history[0];
   const status = !latest ? 'brak wpisu'
