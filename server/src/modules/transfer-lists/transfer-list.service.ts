@@ -11,6 +11,18 @@ const TRANSFER_LIST_ITEM_BOX_SELECT = {
   location: { select: { id: true, code: true, name: true, fullPath: true } },
 } satisfies Prisma.BoxSelect;
 
+function reviewedScanRowError(error: unknown, index: number): Error {
+  const original = error instanceof Error ? error : new Error(String(error));
+  const details = original as Error & { statusCode?: number; code?: string; meta?: unknown };
+  return Object.assign(new Error(`Pozycja ${index + 1}: ${original.message}`), {
+    importRow: index + 1,
+    statusCode: details.statusCode,
+    code: details.code,
+    meta: details.meta,
+    cause: original,
+  });
+}
+
 export class TransferListService {
   private ensureDraftStatus(list: { status: string }, message = 'Można edytować pozycje tylko w spisie o statusie roboczym') {
     if (list.status !== 'draft') {
@@ -169,17 +181,17 @@ export class TransferListService {
   }
 
   // ─── Create new transfer list ──────────────────────────
-  async create(data: any, tenantId: string, userId: string) {
+  async create(data: any, tenantId: string, userId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
     // Generate list number
     const year = new Date().getFullYear();
-    const lastList = await prisma.transferList.findFirst({
+    const lastList = await db.transferList.findFirst({
       where: { tenantId, listNumber: { startsWith: `SZO-${year}-` } },
       orderBy: { listNumber: 'desc' },
     });
     const seq = lastList ? parseInt(lastList.listNumber.split('-')[2]) + 1 : 1;
     const listNumber = `SZO-${year}-${seq.toString().padStart(4, '0')}`;
 
-    return prisma.transferList.create({
+    return db.transferList.create({
       data: {
         tenantId,
         listNumber,
@@ -257,9 +269,9 @@ export class TransferListService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  private async generateSystemBoxNumber(tenantId: string) {
+  private async generateSystemBoxNumber(tenantId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
     const year = new Date().getFullYear();
-    const lastBox = await prisma.box.findFirst({
+    const lastBox = await db.box.findFirst({
       where: { tenantId, boxNumber: { startsWith: `K-${year}-` } },
       orderBy: { boxNumber: 'desc' },
       select: { boxNumber: true },
@@ -271,15 +283,16 @@ export class TransferListService {
   private async createBoxForSourceNumber(
     list: { id: string; tenantId: string; listNumber: string },
     userId: string,
-    sourceBoxNumber: string
+    sourceBoxNumber: string,
+    db: Prisma.TransactionClient | typeof prisma = prisma
   ) {
-    const tenant = await prisma.tenant.findUnique({ where: { id: list.tenantId } });
+    const tenant = await db.tenant.findUnique({ where: { id: list.tenantId } });
     if (!tenant) return null;
 
-    const boxNumber = await this.generateSystemBoxNumber(list.tenantId);
+    const boxNumber = await this.generateSystemBoxNumber(list.tenantId, db);
     const qrCode = generateQrData(tenant.shortCode, boxNumber);
 
-    const newBox = await prisma.box.create({
+    const newBox = await db.box.create({
       data: {
         tenantId: list.tenantId,
         title: `Karton ${sourceBoxNumber} (${list.listNumber})`,
@@ -297,10 +310,11 @@ export class TransferListService {
   private async resolveTransferListBox(
     list: { id: string; tenantId: string; listNumber: string },
     userId: string,
-    data: any
+    data: any,
+    db: Prisma.TransactionClient | typeof prisma = prisma
   ): Promise<{ boxId: string | null; sourceBoxNumber: string | null }> {
     if (data.boxId) {
-      const box = await prisma.box.findFirst({
+      const box = await db.box.findFirst({
         where: { id: data.boxId, tenantId: list.tenantId, deletedAt: null },
         select: { id: true },
       });
@@ -316,7 +330,7 @@ export class TransferListService {
     const sourceBoxNumber = normalizeOptionalText(data.sourceBoxNumber ?? data.boxNumber) ?? null;
     if (!sourceBoxNumber) return { boxId: null, sourceBoxNumber: null };
 
-    const existingInList = await prisma.transferListItem.findFirst({
+    const existingInList = await db.transferListItem.findFirst({
       where: {
         transferListId: list.id,
         sourceBoxNumber: { equals: sourceBoxNumber, mode: 'insensitive' },
@@ -328,8 +342,34 @@ export class TransferListService {
       return { boxId: existingInList.boxId, sourceBoxNumber };
     }
 
-    const boxId = await this.createBoxForSourceNumber(list, userId, sourceBoxNumber);
+    const boxId = await this.createBoxForSourceNumber(list, userId, sourceBoxNumber, db);
     return { boxId, sourceBoxNumber };
+  }
+
+  async createFromReviewedScan(title: string, tenantId: string, userId: string, items: any[]) {
+    for (const [index, item] of items.entries()) {
+      try {
+        await jrwaSuggestionService.validateSelection(tenantId, item.retentionPolicyId, item.categoryCode);
+      } catch (error) {
+        throw reviewedScanRowError(error, index);
+      }
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const list = await this.create({
+        title,
+        notes: 'Import z zeskanowanego spisu, po weryfikacji przez użytkownika',
+      }, tenantId, userId, tx);
+      for (const [index, item] of items.entries()) {
+        try {
+          const { boxId, sourceBoxNumber } = await this.resolveTransferListBox(list, userId, item, tx);
+          await this.createItemWithCanonicalFolder(tx, list, item, boxId, sourceBoxNumber, index + 1);
+        } catch (error) {
+          throw reviewedScanRowError(error, index);
+        }
+      }
+      return { listId: list.id, listNumber: list.listNumber, title: list.title, imported: items.length };
+    }, { maxWait: 10_000, timeout: 120_000 });
   }
 
   // ─── Add item to list ──────────────────────────────────

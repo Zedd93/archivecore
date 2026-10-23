@@ -28,3 +28,5 @@ Opcjonalnie wpisz liczbę pozycji widocznych na załączonych stronach oryginał
 Podgląd nie pozwala zapisać pozycji, w której „Data od” jest późniejsza od „Data do”. Tę samą chronologię sprawdza serwer przed utworzeniem spisu. Równe daty oraz podanie tylko jednej z nich są dozwolone.
 
 Serwer sprawdza też, czy obie podane daty istnieją w kalendarzu. Na przykład 29 lutego w roku nieprzestępnym jest odrzucany przed utworzeniem spisu, zamiast zostać automatycznie przesunięty na marzec. Prawidłowy 29 lutego w roku przestępnym jest dozwolony.
+
+Zapis zatwierdzonego skanu jest całościowy: jeżeli choć jedna pozycja się nie powiedzie, nie zostaną zapisane spis, jego teczki ani kartony utworzone podczas tego importu. Komunikat wskazuje numer problematycznej pozycji. Zwykły import Excel/CSV nadal może zwracać błędy poszczególnych wierszy i nie korzysta z tego trybu.

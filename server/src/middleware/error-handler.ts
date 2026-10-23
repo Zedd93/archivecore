@@ -63,6 +63,10 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     statusCode = 400;
     message = `Błąd bazy danych (${prismaCode}). Szczegóły zapisano w logach serwera.`;
   }
+  const importRow = (err as any).importRow;
+  if (Number.isSafeInteger(importRow) && importRow > 0 && !message.startsWith(`Pozycja ${importRow}:`)) {
+    message = `Pozycja ${importRow}: ${message}`;
+  }
 
   res.status(statusCode).json({
     success: false,

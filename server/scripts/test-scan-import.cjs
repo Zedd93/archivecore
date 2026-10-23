@@ -5,6 +5,8 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const { recognizeScan, scanKind } = require('../dist/modules/import-export/scan-ocr.service');
 const { importService } = require('../dist/modules/import-export/import.service');
 const { transferListService } = require('../dist/modules/transfer-lists/transfer-list.service');
+const { prisma } = require('../dist/config/database');
+const { errorHandler } = require('../dist/middleware/error-handler');
 const { correctScanSourceOrdinal, draftScanRows, draftScanPages, invalidScanDateRange, needsScanDateReview, scanBoxNumbers, scanExpectedRowCountStatus, scanOrdinalIssueLocations, scanOrdinalIssues, validFolderCount, validScanBoxNumber, validScanSourceOrdinal } = require('../../client/src/pages/scan-import.util.ts');
 
 test('rejects missing, oversized and unsupported scans before starting OCR', async () => {
@@ -90,10 +92,9 @@ test('drafts explicit missing dates only from a separate OCR cell before the cat
 
 test('passes reviewed missing-date markers to the transfer list import', async () => {
   let importedItems;
-  const create = mock.method(transferListService, 'create', async () => ({ id: 'list-1', listNumber: 'SZO-1', title: 'Spis testowy' }));
-  const importItems = mock.method(transferListService, 'importItems', async (_listId, _tenantId, _userId, items) => {
+  const createFromReviewedScan = mock.method(transferListService, 'createFromReviewedScan', async (_title, _tenantId, _userId, items) => {
     importedItems = items;
-    return { imported: items.length, errorDetails: [] };
+    return { listId: 'list-1', listNumber: 'SZO-1', title: 'Spis testowy', imported: items.length };
   });
   try {
     const result = await importService.importReviewedScan({
@@ -111,8 +112,97 @@ test('passes reviewed missing-date markers to the transfer list import', async (
     assert.equal(importedItems[1].dateRangeUnknown, undefined);
     assert.equal(importedItems[2].dateFrom, '2024-02-29');
   } finally {
-    create.mock.restore();
-    importItems.mock.restore();
+    createFromReviewedScan.mock.restore();
+  }
+});
+
+test('rolls back a failed reviewed scan and saves a complete retry with one source box', async () => {
+  const staged = { lists: [], boxes: [], folders: [], items: [] };
+  const persisted = { lists: [], boxes: [], folders: [], items: [] };
+  let failSecond = true;
+  const tx = {
+    transferList: {
+      findFirst: async () => null,
+      create: async ({ data }) => {
+        const list = { id: 'list-1', ...data };
+        staged.lists.push(list);
+        return list;
+      },
+    },
+    tenant: { findUnique: async () => ({ shortCode: 'TEST' }) },
+    box: {
+      findFirst: async () => staged.boxes.at(-1) || null,
+      create: async ({ data }) => {
+        const box = { id: `box-${staged.boxes.length + 1}`, ...data };
+        staged.boxes.push(box);
+        return box;
+      },
+    },
+    folder: {
+      create: async ({ data }) => {
+        const folder = { id: `folder-${staged.folders.length + 1}`, ...data };
+        staged.folders.push(folder);
+        return folder;
+      },
+    },
+    transferListItem: {
+      findFirst: async () => staged.items.at(-1) || null,
+      create: async ({ data }) => {
+        if (failSecond && data.ordinalNumber === 2) {
+          throw Object.assign(new Error('Błąd drugiej pozycji'), { code: 'P2002', meta: { target: ['folderId'] } });
+        }
+        const item = { id: `item-${staged.items.length + 1}`, ...data };
+        staged.items.push(item);
+        return item;
+      },
+    },
+  };
+  const transaction = mock.method(prisma, '$transaction', async (callback) => {
+    const result = await callback(tx);
+    for (const key of Object.keys(persisted)) persisted[key].push(...staged[key]);
+    return result;
+  });
+  try {
+    const input = {
+      title: 'Spis testowy', confirmed: true,
+      items: [
+        { folderSignature: 'A/1', folderTitle: 'Umowy', categoryCode: 'B10', boxNumber: '7' },
+        { folderSignature: 'A/2', folderTitle: 'Akta', categoryCode: 'B10', boxNumber: '7' },
+      ],
+    };
+    await assert.rejects(importService.importReviewedScan(input, 'tenant', 'user'), (error) => {
+      assert.match(error.message, /Pozycja 2: Błąd drugiej pozycji/);
+      assert.equal(error.code, 'P2002');
+      assert.deepEqual(error.meta, { target: ['folderId'] });
+      assert.equal(error.importRow, 2);
+      let response;
+      const res = {
+        status(statusCode) { response = { statusCode }; return this; },
+        json(body) { response.body = body; return this; },
+      };
+      errorHandler(error, { method: 'POST', path: '/api/import/transfer-lists/scan' }, res, () => {});
+      assert.equal(response.statusCode, 409);
+      assert.match(response.body.error, /^Pozycja 2: Konflikt unikalności danych w bazie/);
+      return true;
+    });
+    assert.deepEqual(Object.fromEntries(Object.entries(staged).map(([key, value]) => [key, value.length])), {
+      lists: 1, boxes: 1, folders: 2, items: 1,
+    });
+    assert.deepEqual(persisted, { lists: [], boxes: [], folders: [], items: [] });
+    for (const values of Object.values(staged)) values.length = 0;
+    failSecond = false;
+    const result = await importService.importReviewedScan(input, 'tenant', 'user');
+    assert.equal(result.imported, 2);
+    assert.deepEqual(result.errors, []);
+    assert.equal(staged.boxes.length, 1);
+    assert.equal(staged.items.length, 2);
+    assert.equal(staged.items[0].boxId, staged.items[1].boxId);
+    assert.deepEqual(Object.fromEntries(Object.entries(persisted).map(([key, value]) => [key, value.length])), {
+      lists: 1, boxes: 1, folders: 2, items: 2,
+    });
+    assert.equal(transaction.mock.callCount(), 2);
+  } finally {
+    transaction.mock.restore();
   }
 });
 

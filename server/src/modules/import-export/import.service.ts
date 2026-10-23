@@ -199,18 +199,14 @@ export class ImportService {
       throw Object.assign(new Error(`${row ? `Pozycja ${row}: ` : ''}${issue.message}`), { statusCode: 400 });
     }
 
-    const list = await transferListService.create({
-      title: parsed.data.title,
-      notes: 'Import z zeskanowanego spisu, po weryfikacji przez użytkownika',
-    }, tenantId, userId);
-    const result = await transferListService.importItems(list.id, tenantId, userId, parsed.data.items);
+    const result = await transferListService.createFromReviewedScan(parsed.data.title, tenantId, userId, parsed.data.items);
     return {
       totalRows: parsed.data.items.length,
       imported: result.imported,
-      errors: result.errorDetails.map(({ itemIndex, message }) => ({ row: itemIndex + 1, message })),
-      listId: list.id,
-      listNumber: list.listNumber,
-      title: list.title,
+      errors: [],
+      listId: result.listId,
+      listNumber: result.listNumber,
+      title: result.title,
     };
   }
 
