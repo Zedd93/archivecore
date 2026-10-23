@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 const migrationName = '20261008090000_add_tenant_price_lists';
 
 async function main() {
-  const [history, objects, roles] = await Promise.all([
+  const [history, objects, roles, conflictingActiveLists] = await Promise.all([
     prisma.$queryRaw`
       SELECT migration_name, finished_at, rolled_back_at
       FROM "_prisma_migrations"
@@ -66,6 +66,14 @@ async function main() {
       FROM "roles"
       WHERE "code" = 'DA' AND "tenantId" IS NULL
     `,
+    prisma.$queryRaw`
+      SELECT "tenantId", COUNT(*)::int AS count
+      FROM "price_lists"
+      WHERE "status" = 'active'
+      GROUP BY "tenantId"
+      HAVING COUNT(*) > 1
+      LIMIT 20
+    `,
   ]);
 
   const labels = {
@@ -94,6 +102,8 @@ async function main() {
   const grantedCount = Number(roles[0].granted);
   if (roleCount > grantedCount) missing += roleCount - grantedCount;
   console.log(`Uprawnienie pricing.manage dla roli DA: ${grantedCount}/${roleCount}`);
+  console.log(`Tenanci z wieloma aktywnymi cennikami: ${conflictingActiveLists.length}${conflictingActiveLists.length === 20 ? ' (pierwsze 20)' : ''}`);
+  if (conflictingActiveLists.length > 0) missing += conflictingActiveLists.length;
 
   const latest = history[0];
   const status = !latest ? 'brak wpisu'
