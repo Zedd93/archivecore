@@ -57,6 +57,15 @@ const expectedForeignKeyTargets = {
   billing_events_orderId_fkey: ['orderId', 'orders', 'n'],
   billing_events_orderItemId_fkey: ['orderItemId', 'order_items', 'n'],
 };
+const expectedDefaults = {
+  id: /^gen_random_uuid\(\)$/i,
+  quantity: /^1(?:::numeric)?$/i,
+  vatRate: /^23(?:::numeric)?$/i,
+  currency: /^'PLN'(?:::character varying)?$/i,
+  occurredAt: /^(?:CURRENT_TIMESTAMP|now\(\))$/i,
+  status: /^'unpriced'::"BillingEventStatus"$/,
+  createdAt: /^(?:CURRENT_TIMESTAMP|now\(\))$/i,
+};
 
 async function main() {
   const [history, catalog] = await Promise.all([
@@ -77,13 +86,17 @@ async function main() {
   const [columns, indexes, foreignKeys, enumValues] = await Promise.all([
     prisma.$queryRaw`
       SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type,
-             a.attnotnull AS required
+             a.attnotnull AS required,
+             pg_get_expr(d.adbin, d.adrelid) AS "defaultValue"
       FROM pg_attribute a
+      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
       WHERE a.attrelid = to_regclass('billing_events')
         AND a.attnum > 0 AND NOT a.attisdropped
     `,
     prisma.$queryRaw`
       SELECT c.relname AS name, i.indisunique AS "unique",
+             i.indisprimary AS "primary", i.indisvalid AS valid,
+             i.indpred IS NULL AS "notPartial",
              array_agg(a.attname ORDER BY keys.ordinality) AS columns
       FROM pg_index i
       JOIN pg_class c ON c.oid = i.indexrelid
@@ -91,15 +104,20 @@ async function main() {
       JOIN unnest(i.indkey) WITH ORDINALITY AS keys(attnum, ordinality)
         ON a.attnum = keys.attnum
       WHERE i.indrelid = to_regclass('billing_events')
-      GROUP BY c.relname, i.indisunique
+      GROUP BY c.relname, i.indisunique, i.indisprimary, i.indisvalid,
+               (i.indpred IS NULL)
     `,
     prisma.$queryRaw`
       SELECT c.conname AS name, a.attname AS column,
-             target.relname AS target, c.confdeltype AS "onDelete"
+             target.relname AS target, referenced.attname AS "targetColumn",
+             c.confdeltype AS "onDelete", c.confupdtype AS "onUpdate",
+             c.convalidated AS valid
       FROM pg_constraint c
       JOIN pg_class target ON target.oid = c.confrelid
       JOIN pg_attribute a ON a.attrelid = c.conrelid
         AND a.attnum = c.conkey[1]
+      JOIN pg_attribute referenced ON referenced.attrelid = c.confrelid
+        AND referenced.attnum = c.confkey[1]
       WHERE c.conrelid = to_regclass('billing_events') AND c.contype = 'f'
     `,
     prisma.$queryRaw`
@@ -128,6 +146,10 @@ async function main() {
     const column = actualColumns.get(name);
     check(`Kolumna ${name}`, column?.type === expectedTypes[name]
       && column.required === !nullableColumns.has(name));
+    const expectedDefault = expectedDefaults[name];
+    check(`Domyslna wartosc ${name}`, expectedDefault
+      ? expectedDefault.test(column?.defaultValue ?? '')
+      : column?.defaultValue == null);
   }
 
   const actualIndexes = new Map(indexes.map((row) => [row.name, row]));
@@ -135,6 +157,8 @@ async function main() {
     const index = actualIndexes.get(name);
     const expectedUnique = name.endsWith('_key') || name === 'billing_events_pkey';
     check(`Indeks ${name}`, index?.unique === expectedUnique
+      && index?.primary === (name === 'billing_events_pkey')
+      && index?.valid === true && index?.notPartial === true
       && JSON.stringify(index?.columns) === JSON.stringify(expectedIndexColumns[name]));
   }
 
@@ -143,7 +167,8 @@ async function main() {
     const key = actualForeignKeys.get(name);
     const [column, target, onDelete] = expectedForeignKeyTargets[name];
     check(`Relacja ${name}`, key?.column === column && key?.target === target
-      && key?.onDelete === onDelete);
+      && key?.targetColumn === 'id' && key?.onDelete === onDelete
+      && key?.onUpdate === 'c' && key?.valid === true);
   }
 
   const latest = history[0];
