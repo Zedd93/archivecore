@@ -127,10 +127,10 @@ async function main() {
     `,
   ]);
 
-  let missing = 0;
+  const mismatches = [];
   function check(label, condition) {
     console.log(`${condition ? '[OK]' : '[BRAK]'} ${label}`);
-    if (!condition) missing += 1;
+    if (!condition) mismatches.push(label);
   }
 
   console.log(`Audyt migracji ${migrationName} (tylko odczyt):`);
@@ -177,9 +177,10 @@ async function main() {
     : latest.rolled_back_at ? 'wycofana'
     : 'nieudana / w toku';
   console.log(`Historia Prisma: ${status}`);
-  console.log(`Rozbieznosci schematu: ${missing}`);
+  console.log(`Rozbieznosci schematu: ${mismatches.length}`);
+  if (mismatches.length > 0) console.log(`Do sprawdzenia: ${mismatches.join(', ')}`);
   console.log('Dane nie zostaly zmienione.');
-  if (missing > 0) process.exitCode = 1;
+  if (mismatches.length > 0) process.exitCode = 1;
 }
 
 main()
