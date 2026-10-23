@@ -147,9 +147,11 @@ async function main() {
     check(`Kolumna ${name}`, column?.type === expectedTypes[name]
       && column.required === !nullableColumns.has(name));
     const expectedDefault = expectedDefaults[name];
-    check(`Domyslna wartosc ${name}`, expectedDefault
+    const defaultMatches = expectedDefault
       ? expectedDefault.test(column?.defaultValue ?? '')
-      : column?.defaultValue == null);
+      : column?.defaultValue == null;
+    check(`Domyslna wartosc ${name}`, defaultMatches);
+    if (!defaultMatches) console.log(`  Faktyczna wartosc: ${column?.defaultValue ?? '(brak)'}`);
   }
 
   const actualIndexes = new Map(indexes.map((row) => [row.name, row]));
