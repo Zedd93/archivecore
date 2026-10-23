@@ -20,6 +20,7 @@
     "db:migrate": "npx prisma migrate deploy",
     "db:migrate:dev": "npx prisma migrate dev",
     "db:check-integrity": "node server/scripts/check-data-integrity.cjs",
+    "db:audit-price-list-migration": "node server/scripts/audit-price-list-migration.cjs",
     "db:audit-box-loans": "node server/scripts/audit-box-loan-status.cjs",
     "db:audit-billing-amounts": "node server/scripts/audit-billing-amounts.cjs",
     "db:audit-hr-retention": "node server/scripts/audit-hr-retention.cjs",
