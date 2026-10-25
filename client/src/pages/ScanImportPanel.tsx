@@ -20,7 +20,7 @@ interface DuplicateImport {
   title: string;
 }
 
-type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
+type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null; containsPesel?: boolean };
 
 const ordinalIssueTranslation = {
   gap: 'import.scanOrdinalGaps',
@@ -289,6 +289,11 @@ export default function ScanImportPanel() {
               {pageDiagnostics[index]?.reviewFlag && (
                 <p role="alert" className="text-sm text-red-800 rounded-lg bg-red-50 p-3">
                   {t(`import.scanReviewFlag.${pageDiagnostics[index].reviewFlag}`)}
+                </p>
+              )}
+              {pageDiagnostics[index]?.containsPesel && (
+                <p role="alert" className="text-sm text-amber-900 rounded-lg bg-amber-50 p-3">
+                  {t('import.scanPossiblePesel')}
                 </p>
               )}
               <label className="block text-sm font-medium text-gray-700">

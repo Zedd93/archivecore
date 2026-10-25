@@ -1446,6 +1446,7 @@
     "scanReviewWarning": "Read {{pages}} pages. OCR can misread characters, columns and dates. Compare with the original; nothing has been saved yet.",
     "scanTextLayer": "Read from the PDF text layer",
     "scanLocalOcr": "Read using local OCR",
+    "scanPossiblePesel": "The text may contain a PESEL number. Review this page before sharing the data. This warning does not anonymize the document.",
     "scanReviewFlag": {
       "empty": "OCR found no text on this page. Check the image; do not mark the page empty without comparing it with the original.",
       "short": "OCR found very little text. Check whether list items were missed.",

@@ -34,7 +34,7 @@ test('reads a selected PDF page without silently skipping other pages', async ()
     const pdf = await blankPdf(5);
     const selected = await recognizeScan(pdf, 4);
     assert.deepEqual(selected, { text: 'OCR page 4', pages: 5, pageDiagnostics: [
-      { page: 4, source: 'ocr', reviewFlag: 'short' },
+      { page: 4, source: 'ocr', reviewFlag: 'short', containsPesel: false },
     ] });
     await assert.rejects(recognizeScan(pdf), { statusCode: 400 });
     assert.deepEqual(calls.filter((call) => call.binary === 'pdftoppm').map((call) => call.args.slice(0, 4)), [
@@ -45,17 +45,21 @@ test('reads a selected PDF page without silently skipping other pages', async ()
 
     emptyPage = 2;
     assert.deepEqual(await recognizeScan(pdf, 2), { text: '', pages: 5, pageDiagnostics: [
-      { page: 2, source: 'ocr', reviewFlag: 'empty' },
+      { page: 2, source: 'ocr', reviewFlag: 'empty', containsPesel: false },
     ] });
     emptyPage = null;
 
     ocrOverride = 'Nieczytelny znak \uFFFD w rozpoznanym tekscie';
     assert.deepEqual((await recognizeScan(pdf, 1)).pageDiagnostics, [
-      { page: 1, source: 'ocr', reviewFlag: 'replacement' },
+      { page: 1, source: 'ocr', reviewFlag: 'replacement', containsPesel: false },
     ]);
     ocrOverride = 'Poprawnie odczytany tekst ze skanu spisu zdawczo odbiorczego, z wystarczajaca liczba znakow do podgladu pozycji.';
     assert.deepEqual((await recognizeScan(pdf, 1)).pageDiagnostics, [
-      { page: 1, source: 'ocr', reviewFlag: null },
+      { page: 1, source: 'ocr', reviewFlag: null, containsPesel: false },
+    ]);
+    ocrOverride = 'Przykladowy numer 44051401359 w zeskanowanym spisie';
+    assert.deepEqual((await recognizeScan(pdf, 1)).pageDiagnostics, [
+      { page: 1, source: 'ocr', reviewFlag: 'short', containsPesel: true },
     ]);
     ocrOverride = null;
 
@@ -65,9 +69,9 @@ test('reads a selected PDF page without silently skipping other pages', async ()
 
     const legacy = await recognizeScan(await blankPdf(3));
     assert.deepEqual(legacy, { text: 'OCR page 1\n\nOCR page 2\n\nOCR page 3', pages: 3, pageDiagnostics: [
-      { page: 1, source: 'ocr', reviewFlag: 'short' },
-      { page: 2, source: 'ocr', reviewFlag: 'short' },
-      { page: 3, source: 'ocr', reviewFlag: 'short' },
+      { page: 1, source: 'ocr', reviewFlag: 'short', containsPesel: false },
+      { page: 2, source: 'ocr', reviewFlag: 'short', containsPesel: false },
+      { page: 3, source: 'ocr', reviewFlag: 'short', containsPesel: false },
     ] });
 
     emptyPage = 1;
@@ -75,4 +79,11 @@ test('reads a selected PDF page without silently skipping other pages', async ()
   } finally {
     childProcess.execFile = originalExecFile;
   }
+});
+
+test('PESEL review flag requires a checksum-valid standalone number', () => {
+  const { containsPesel } = require('../dist/modules/import-export/scan-ocr.service');
+  assert.equal(containsPesel('PESEL: 44051401359'), true);
+  assert.equal(containsPesel('PESEL: 44051401358'), false);
+  assert.equal(containsPesel('Nr 1440514013592'), false);
 });

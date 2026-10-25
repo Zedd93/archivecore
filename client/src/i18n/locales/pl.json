@@ -1446,6 +1446,7 @@
     "scanReviewWarning": "Odczytano {{pages}} stron. OCR może mylić znaki, kolumny i daty. Sprawdź skan z oryginałem; nic nie zostało jeszcze zapisane.",
     "scanTextLayer": "Odczyt z warstwy tekstowej PDF",
     "scanLocalOcr": "Odczyt przez lokalny OCR",
+    "scanPossiblePesel": "W tekście może znajdować się numer PESEL. Sprawdź tę stronę przed dalszym udostępnianiem danych. To ostrzeżenie nie anonimizuje dokumentu.",
     "scanReviewFlag": {
       "empty": "OCR nie odczytał tekstu z tej strony. Sprawdź obraz; nie oznaczaj strony jako pustej bez porównania z oryginałem.",
       "short": "OCR odczytał bardzo mało tekstu. Sprawdź, czy nie pominął pozycji spisu.",

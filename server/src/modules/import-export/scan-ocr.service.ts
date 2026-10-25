@@ -12,7 +12,7 @@ const WINDOWS_OCR_DIR = 'C:\\Apps\\ocr-tools\\runtime\\Library\\bin';
 const WINDOWS_TESSDATA_DIR = 'C:\\Apps\\ocr-tools\\runtime\\share\\tessdata';
 
 type ScanKind = 'pdf' | 'png' | 'jpeg' | 'tiff';
-type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null };
+type PageDiagnostic = { page: number; source: 'embedded' | 'ocr'; reviewFlag: 'empty' | 'short' | 'replacement' | null; containsPesel: boolean };
 
 type PdfTextItem = { str: string; transform: number[] };
 
@@ -79,6 +79,16 @@ function scanReviewFlag(text: string): PageDiagnostic['reviewFlag'] {
   return null;
 }
 
+export function containsPesel(text: string): boolean {
+  const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+  for (const match of text.matchAll(/(?<!\d)\d{11}(?!\d)/g)) {
+    const digits = [...match[0]].map(Number);
+    const checksum = (10 - weights.reduce((sum, weight, index) => sum + weight * digits[index], 0) % 10) % 10;
+    if (checksum === digits[10]) return true;
+  }
+  return false;
+}
+
 export async function recognizeScan(buffer: Buffer, requestedPage?: number): Promise<{ text: string; pages: number; pageDiagnostics: PageDiagnostic[] }> {
   if (!buffer.length || buffer.length > MAX_SCAN_BYTES) {
     throw Object.assign(new Error('Skan musi mieć od 1 B do 10 MB'), { statusCode: 400 });
@@ -120,7 +130,7 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
         pdfPage.cleanup();
         if (embeddedText.trim().length >= 40) {
           parts.push(embeddedText);
-          pageDiagnostics.push({ page, source: 'embedded', reviewFlag: null });
+          pageDiagnostics.push({ page, source: 'embedded', reviewFlag: null, containsPesel: containsPesel(embeddedText) });
           continue;
         }
       }
@@ -141,7 +151,7 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
         ...(tessdataDir ? ['--tessdata-dir', tessdataDir] : []),
         '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 20000);
       parts.push(text.trim());
-      pageDiagnostics.push({ page, source: 'ocr', reviewFlag: scanReviewFlag(text) });
+      pageDiagnostics.push({ page, source: 'ocr', reviewFlag: scanReviewFlag(text), containsPesel: containsPesel(text) });
       if (kind === 'pdf') await rm(image, { force: true });
     }
     const text = parts.join('\n\n');
