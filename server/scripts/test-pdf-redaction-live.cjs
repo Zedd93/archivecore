@@ -1,8 +1,9 @@
 const assert = require('node:assert/strict');
-const { mkdtemp, writeFile, rm } = require('node:fs/promises');
+const { mkdtemp, readFile, writeFile, rm } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { PDFDocument, StandardFonts } = require('pdf-lib');
+const { PNG } = require('pngjs');
 const { createPeselRedactedCopy, peselBoxesFromTsv } = require('../dist/modules/attachments/pdf-redaction.service');
 const { containsPesel, execute, ocrTessdataArgs } = require('../dist/modules/import-export/scan-ocr.service');
 
@@ -30,9 +31,16 @@ async function main() {
     const originalPrefix = path.join(directory, 'original');
     await writeFile(originalFile, original);
     await execute('pdftoppm', ['-f', '1', '-l', '1', '-singlefile', '-r', '140', '-scale-to', '3500', '-png', originalFile, originalPrefix], 30000);
-    const originalTsv = await execute('tesseract', [`${originalPrefix}.png`, 'stdout', ...ocrTessdataArgs(), '-l', 'pol+eng', '--psm', '6', 'tsv'], 30000);
+    const originalImage = PNG.sync.read(await readFile(`${originalPrefix}.png`));
+    let darkPixels = 0;
+    for (let index = 0; index < originalImage.data.length; index += 4) {
+      if (originalImage.data[index] < 128) darkPixels += 1;
+    }
+    const ocrArgs = [`${originalPrefix}.png`, 'stdout', ...ocrTessdataArgs(), '-l', 'pol+eng', '--psm', '6'];
+    const originalText = await execute('tesseract', ocrArgs, 30000);
+    const originalTsv = await execute('tesseract', [...ocrArgs, 'tsv'], 30000);
     const recognizedWords = originalTsv.split(/\r?\n/).slice(1).map((line) => line.split('\t').slice(11).join('\t')).filter(Boolean);
-    assert.equal(peselBoxesFromTsv(originalTsv).length, 1, `OCR pliku źródłowego: ${recognizedWords.join(' | ')}`);
+    assert.equal(peselBoxesFromTsv(originalTsv).length, 1, `Obraz: ${originalImage.width}x${originalImage.height}, ciemnych pikseli: ${darkPixels}, tekst: ${originalText.trim()}, OCR TSV: ${recognizedWords.join(' | ')}`);
 
     const { buffer, redactedCount } = await createPeselRedactedCopy(original);
     assert.equal(redactedCount, 1, 'OCR musi wykryć numer w pliku źródłowym');
