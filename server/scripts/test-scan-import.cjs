@@ -36,8 +36,8 @@ test('reads a text-based PDF without external Poppler or OCR programs', async ()
   const pageTwo = await recognizeScan(buffer, 2);
   assert.equal(pageOne.pages, 2);
   assert.equal(pageTwo.pages, 2);
-  assert.deepEqual(pageOne.pageDiagnostics, [{ page: 1, source: 'embedded', reviewFlag: null }]);
-  assert.deepEqual(pageTwo.pageDiagnostics, [{ page: 2, source: 'embedded', reviewFlag: null }]);
+  assert.deepEqual(pageOne.pageDiagnostics, [{ page: 1, source: 'embedded', reviewFlag: null, containsPesel: false }]);
+  assert.deepEqual(pageTwo.pageDiagnostics, [{ page: 2, source: 'embedded', reviewFlag: null, containsPesel: false }]);
   const preview = draftScanPages([pageOne.text, pageTwo.text], [2]);
   assert.equal(preview.rows.length, 1);
   assert.equal(preview.rows[0].folderSignature, 'TEST/1');
