@@ -75,7 +75,7 @@ export async function createPeselRedactedCopy(source: Buffer): Promise<{ buffer:
       const imagePath = `${prefix}.png`;
       await execute('pdftoppm', ['-f', String(page), '-l', String(page), '-singlefile', '-r', String(RENDER_DPI), '-scale-to', String(MAX_RENDER_DIMENSION), '-png', input, prefix], 30000);
       const image = await readFile(imagePath);
-      const tsv = await execute('tesseract', [imagePath, 'stdout', ...ocrTessdataArgs(), '-l', 'pol+eng', '--psm', '6', 'tsv'], 30000);
+      const tsv = await execute('tesseract', [imagePath, 'stdout', ...ocrTessdataArgs(), '-l', 'pol+eng', '--psm', '6', '-c', 'tessedit_create_tsv=1'], 30000);
       const boxes = peselBoxesFromTsv(tsv);
       redactedCount += boxes.length;
       const flattened = await output.embedPng(blackOutPng(image, boxes));

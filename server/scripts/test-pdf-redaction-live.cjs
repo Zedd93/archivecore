@@ -38,7 +38,7 @@ async function main() {
     }
     const ocrArgs = [`${originalPrefix}.png`, 'stdout', ...ocrTessdataArgs(), '-l', 'pol+eng', '--psm', '6'];
     const originalText = await execute('tesseract', ocrArgs, 30000);
-    const originalTsv = await execute('tesseract', [...ocrArgs, 'tsv'], 30000);
+    const originalTsv = await execute('tesseract', [...ocrArgs, '-c', 'tessedit_create_tsv=1'], 30000);
     const recognizedWords = originalTsv.split(/\r?\n/).slice(1).map((line) => line.split('\t').slice(11).join('\t')).filter(Boolean);
     assert.equal(peselBoxesFromTsv(originalTsv).length, 1, `Obraz: ${originalImage.width}x${originalImage.height}, ciemnych pikseli: ${darkPixels}, tekst: ${originalText.trim()}, OCR TSV (${originalTsv.length}): ${JSON.stringify(originalTsv.slice(0, 700))}, słowa: ${recognizedWords.join(' | ')}`);
 
