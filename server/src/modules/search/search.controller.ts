@@ -1,9 +1,45 @@
 import { Request, Response, NextFunction } from 'express';
-import { searchService } from './search.service';
+import { searchService, SearchResult } from './search.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions } from '@archivecore/shared';
 
 export class SearchController {
+  async evidence(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const query = req.query.q as string;
+      const { results } = await searchService.search(req.tenantId, query, {
+        types: ['box', 'folder', 'document'],
+        canViewHr: false,
+        limit: 10,
+        offset: 0,
+      }, req.accessDepartment || undefined);
+
+      const sources = results.flatMap((result: SearchResult) => {
+        if (result.type === 'hr_folder' || result.metadata.source === 'hr_document') return [];
+        const isAttachment = result.metadata.source === 'attachment';
+        const path = isAttachment
+          ? result.metadata.documentId ? `/documents/${result.metadata.documentId}`
+            : result.metadata.folderId ? `/folders/${result.metadata.folderId}`
+              : result.metadata.boxId ? `/boxes/${result.metadata.boxId}` : null
+          : result.type === 'box' ? `/boxes/${result.id}`
+            : result.type === 'folder' ? `/folders/${result.id}`
+              : result.type === 'document' ? `/documents/${result.id}` : null;
+        if (!path) return [];
+        return [{
+          id: result.id,
+          type: isAttachment ? 'attachment' : result.type,
+          title: result.title,
+          subtitle: result.subtitle,
+          href: path,
+        }];
+      });
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, { sources });
+    } catch (err) { next(err); }
+  }
+
   async search(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

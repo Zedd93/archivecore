@@ -55,6 +55,7 @@
     "test:scan-ocr-pages": "node --import tsx --test server/scripts/test-scan-ocr-pages.cjs",
     "test:pdf-redaction": "node --import tsx --test server/scripts/test-pdf-redaction.cjs",
     "test:pdf-redaction-live": "node server/scripts/test-pdf-redaction-live.cjs",
+    "test:search-evidence": "node --import tsx --test server/scripts/test-search-evidence.cjs",
     "test:scan-batch": "node --import tsx --test server/scripts/test-scan-batch.mjs",
     "test:offline-shell": "node --test client/scripts/test-offline-shell.cjs",
     "test:order-draft": "node --import tsx --test client/scripts/test-order-draft.mjs",
