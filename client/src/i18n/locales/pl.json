@@ -2285,6 +2285,12 @@
     }
   },
 
+  "redaction": {
+    "downloadCopy": "Zakryj wykryty PESEL",
+    "explanation": "Automatycznie zakrywamy wykryte numery PESEL na kopii PDF. Oryginał pozostaje bez zmian; przed udostępnieniem sprawdź każdą stronę kopii.",
+    "reviewCopy": "Sprawdź każdą stronę pobranej kopii przed udostępnieniem. Inne dane osobowe nie są zakrywane."
+  },
+
   "shortcuts": {
     "focusSearch": "Fokus na wyszukiwarkę",
     "dashboard": "Dashboard",

@@ -73,6 +73,28 @@ export class AttachmentController {
     } catch (err) { next(err); }
   }
 
+  async downloadPeselRedactedCopy(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const { attachment, buffer, redactedCount } = await attachmentService.downloadPeselRedactedCopy(
+        req.params.id, req.tenantId, req.accessDepartment || undefined,
+      );
+      await recordContentAccess(req, 'attachment.redacted_copy.download', 'attachment', attachment.id, {
+        redactedCount: String(redactedCount),
+        ...(attachment.documentId ? { documentId: attachment.documentId } : {}),
+        ...(attachment.folderId ? { folderId: attachment.folderId } : {}),
+        ...(attachment.boxId ? { boxId: attachment.boxId } : {}),
+      });
+      const baseName = attachment.fileName.replace(/\.pdf$/i, '');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${baseName}-pesel-zakryty.pdf`)}`);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(buffer);
+    } catch (err) { next(err); }
+  }
+
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

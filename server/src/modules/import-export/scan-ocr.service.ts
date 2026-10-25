@@ -48,7 +48,7 @@ export function scanKind(buffer: Buffer): ScanKind {
   throw Object.assign(new Error('Obsługiwane skany: PDF, PNG, JPG lub TIFF'), { statusCode: 400 });
 }
 
-async function execute(binary: string, args: string[], timeout: number): Promise<string> {
+export async function execute(binary: string, args: string[], timeout: number): Promise<string> {
   const configuredDir = process.env.OCR_BIN_DIR;
   const installedDir = process.platform === 'win32' ? WINDOWS_OCR_DIR : undefined;
   const candidate = configuredDir || installedDir;
@@ -69,6 +69,12 @@ async function execute(binary: string, args: string[], timeout: number): Promise
     }
     throw Object.assign(new Error(`Nie udało się odczytać skanu (${binary}). Sprawdź format pliku i instalację OCR.`), { statusCode: 422 });
   }
+}
+
+export function ocrTessdataArgs(): string[] {
+  const tessdataDir = process.env.OCR_TESSDATA_DIR
+    || (process.platform === 'win32' && existsSync(WINDOWS_TESSDATA_DIR) ? WINDOWS_TESSDATA_DIR : undefined);
+  return tessdataDir ? ['--tessdata-dir', tessdataDir] : [];
 }
 
 function scanReviewFlag(text: string): PageDiagnostic['reviewFlag'] {
@@ -145,10 +151,8 @@ export async function recognizeScan(buffer: Buffer, requestedPage?: number): Pro
           throw Object.assign(new Error(`Nie udało się przygotować strony ${page} PDF do odczytu`), { statusCode: 422 });
         }
       }
-      const tessdataDir = process.env.OCR_TESSDATA_DIR
-        || (process.platform === 'win32' && existsSync(WINDOWS_TESSDATA_DIR) ? WINDOWS_TESSDATA_DIR : undefined);
       const text = await execute('tesseract', [image, 'stdout',
-        ...(tessdataDir ? ['--tessdata-dir', tessdataDir] : []),
+        ...ocrTessdataArgs(),
         '-l', 'pol+eng', '--psm', '6', '-c', 'preserve_interword_spaces=1'], 20000);
       parts.push(text.trim());
       pageDiagnostics.push({ page, source: 'ocr', reviewFlag: scanReviewFlag(text), containsPesel: containsPesel(text) });

@@ -2285,6 +2285,12 @@
     }
   },
 
+  "redaction": {
+    "downloadCopy": "Cover detected PESEL",
+    "explanation": "Detected PESEL numbers are covered in a PDF copy. The original is unchanged; review every page before sharing the copy.",
+    "reviewCopy": "Review every page of the downloaded copy before sharing. Other personal data is not covered."
+  },
+
   "shortcuts": {
     "focusSearch": "Focus search bar",
     "dashboard": "Dashboard",

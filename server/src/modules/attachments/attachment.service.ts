@@ -3,6 +3,7 @@ import { uploadFile, downloadFile, deleteFile } from '../../config/minio';
 import crypto from 'crypto';
 import path from 'path';
 import { Prisma } from '@prisma/client';
+import { createPeselRedactedCopy } from './pdf-redaction.service';
 
 export class AttachmentService {
   private accessWhere(tenantId: string, department?: string): Prisma.AttachmentWhereInput {
@@ -75,6 +76,14 @@ export class AttachmentService {
     const attachment = await this.getById(id, tenantId, department);
     const buffer = await downloadFile(attachment.filePath);
     return { attachment, buffer };
+  }
+
+  async downloadPeselRedactedCopy(id: string, tenantId: string, department?: string) {
+    const { attachment, buffer } = await this.download(id, tenantId, department);
+    if (attachment.mimeType !== 'application/pdf' || buffer.subarray(0, 5).toString() !== '%PDF-') {
+      throw Object.assign(new Error('Kopia z zakrytym PESEL jest dostępna tylko dla plików PDF'), { statusCode: 400 });
+    }
+    return { attachment, ...await createPeselRedactedCopy(buffer) };
   }
 
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {

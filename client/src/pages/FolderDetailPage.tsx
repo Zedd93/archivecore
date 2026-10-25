@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Box, Download, FileSpreadsheet, Loader2, Printer } from 'lucide-react';
+import { Box, Download, FileSpreadsheet, Loader2, Printer, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { normalizeDisplayText } from '@archivecore/shared';
 import api from '@/services/api';
@@ -48,6 +48,7 @@ export default function FolderDetailPage() {
   const { hasPermission, user } = useAuth();
   const tenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const [printing, setPrinting] = useState(false);
+  const [redactingId, setRedactingId] = useState<string | null>(null);
   const [attachmentPage, setAttachmentPage] = useState(1);
   const { data: folder, isLoading, error, refetch } = useQuery({
     queryKey: ['folder', tenantId, id],
@@ -62,7 +63,7 @@ export default function FolderDetailPage() {
     queryKey: ['folder-attachments', tenantId, id, attachmentPage],
     queryFn: async () => {
       const { data } = await api.get('/attachments', { params: { folderId: id, page: attachmentPage, limit: 20 } });
-      return data as { data: Array<{ id: string; fileName: string; uploadedAt: string }>; pagination: { total: number } };
+      return data as { data: Array<{ id: string; fileName: string; mimeType: string; uploadedAt: string }>; pagination: { total: number } };
     },
     enabled: Boolean(id) && Boolean(folder?._count.attachments) && hasPermission('attachment.read'),
   });
@@ -87,6 +88,26 @@ export default function FolderDetailPage() {
     } catch (err) {
       tab.close();
       toast.error(getApiErrorMessage(err, t('common.genericError')));
+    }
+  };
+
+  const downloadRedactedCopy = async (attachmentId: string, fileName: string) => {
+    setRedactingId(attachmentId);
+    try {
+      const { data } = await api.get(`/attachments/${attachmentId}/redacted-copy`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${fileName.replace(/\.pdf$/i, '')}-pesel-zakryty.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      toast(t('redaction.reviewCopy'));
+    } catch (err) {
+      toast.error(await getApiErrorMessageAsync(err, t('common.genericError')));
+    } finally {
+      setRedactingId(null);
     }
   };
 
@@ -182,12 +203,19 @@ export default function FolderDetailPage() {
       </div>}
       {hasPermission('attachment.read') && folder._count.attachments > 0 && <div className="card space-y-3">
         <h2 className="text-lg font-semibold">{t('boxes.attachments')} ({folder._count.attachments})</h2>
+        <p className="text-sm text-gray-600">{t('redaction.explanation')}</p>
         {loadingAttachments ? <Loader2 size={20} className="animate-spin" /> : attachmentsError ? <div className="text-sm text-red-700">
           {getApiErrorMessage(attachmentsError, t('common.genericError'))}
           <button type="button" className="btn-secondary ml-3" onClick={() => void refetchAttachments()}>{t('common.tryAgain')}</button>
-        </div> : <ul className="divide-y divide-gray-100">{attachments?.data.map((attachment) => <li key={attachment.id} className="flex items-center justify-between gap-3 py-2">
+        </div> : <ul className="divide-y divide-gray-100">{attachments?.data.map((attachment) => <li key={attachment.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
           <span className="min-w-0 break-words text-sm">{attachment.fileName}</span>
-          <button type="button" onClick={() => void openAttachment(attachment.id)} className="btn-secondary shrink-0" aria-label={`${t('common.download')}: ${attachment.fileName}`}><Download size={16} /></button>
+          <span className="flex flex-wrap items-center gap-2">
+            {attachment.mimeType === 'application/pdf' && <button type="button" onClick={() => void downloadRedactedCopy(attachment.id, attachment.fileName)} disabled={redactingId !== null} className="btn-secondary inline-flex items-center gap-2 text-sm">
+              {redactingId === attachment.id ? <Loader2 size={16} className="animate-spin" /> : <Shield size={16} />}
+              {t('redaction.downloadCopy')}
+            </button>}
+            <button type="button" onClick={() => void openAttachment(attachment.id)} className="btn-secondary shrink-0" aria-label={`${t('common.download')}: ${attachment.fileName}`}><Download size={16} /></button>
+          </span>
         </li>)}</ul>}
         {(attachments?.pagination.total || 0) > 20 && <div className="flex items-center gap-3 text-sm">
           <button type="button" className="btn-secondary" disabled={attachmentPage === 1} onClick={() => setAttachmentPage((page) => page - 1)}>{t('common.previous')}</button>
