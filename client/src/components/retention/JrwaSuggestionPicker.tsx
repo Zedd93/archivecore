@@ -12,6 +12,7 @@ export interface JrwaSuggestion {
   retentionYears: number | null;
   isPermanent: boolean;
   jrwaVersion: { label: string; validFrom: string; validTo: string | null } | null;
+  matchType?: 'exactCode' | 'codePrefix' | 'name';
 }
 
 function codeFromSignature(signature: string) {
@@ -92,6 +93,7 @@ export default function JrwaSuggestionPicker({ signature, value, existingPolicy,
                 onClick={() => { setChosen(policy); onChoose(policy); }}
               >
                 <span className="font-mono font-medium">{policy.jrwaCode}</span> · {policy.name}
+                {policy.matchType && <span className="block text-xs text-blue-800">{t(`transferLists.retentionSuggestion.match.${policy.matchType}`)}</span>}
                 <span className="block text-xs text-gray-600">{policy.archivalCategory} · {periodLabel(policy)} · {policy.jrwaVersion?.label || t('transferLists.retentionSuggestion.legacy')}</span>
               </button>
             </li>

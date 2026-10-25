@@ -1,5 +1,15 @@
 import { prisma } from '../../config/database';
 
+type JrwaMatch = 'exactCode' | 'codePrefix' | 'name';
+
+function matchType(policy: { jrwaCode: string | null; name: string }, query: string): JrwaMatch {
+  const code = policy.jrwaCode?.toLocaleLowerCase('pl-PL') ?? '';
+  const normalized = query.toLocaleLowerCase('pl-PL');
+  if (code === normalized) return 'exactCode';
+  if (/^\d{2,}$/.test(query) && code.startsWith(normalized)) return 'codePrefix';
+  return 'name';
+}
+
 function todayInWarsaw(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -27,7 +37,7 @@ export class JrwaSuggestionService {
     const query = rawQuery.trim();
     if ((query.length < 2 && !/^\d$/.test(query)) || query.length > 100) return [];
     const jrwaVersionId = await this.currentVersionId(tenantId);
-    return prisma.retentionPolicy.findMany({
+    const policies = await prisma.retentionPolicy.findMany({
       where: {
         tenantId,
         jrwaVersionId,
@@ -37,6 +47,7 @@ export class JrwaSuggestionService {
           ? [{ jrwaCode: { equals: query, mode: 'insensitive' } }]
           : [
             { jrwaCode: { equals: query, mode: 'insensitive' } },
+            ...(/^\d{2,}$/.test(query) ? [{ jrwaCode: { startsWith: query, mode: 'insensitive' as const } }] : []),
             { name: { contains: query, mode: 'insensitive' } },
           ],
       },
@@ -50,8 +61,15 @@ export class JrwaSuggestionService {
         jrwaVersion: { select: { label: true, validFrom: true, validTo: true } },
       },
       orderBy: [{ jrwaCode: 'asc' }, { name: 'asc' }],
-      take: 30,
+      take: 100,
     });
+    const priority: Record<JrwaMatch, number> = { exactCode: 0, codePrefix: 1, name: 2 };
+    return policies
+      .map((policy) => ({ ...policy, matchType: matchType(policy, query) }))
+      .sort((a, b) => priority[a.matchType] - priority[b.matchType]
+        || (a.jrwaCode ?? '').localeCompare(b.jrwaCode ?? '', 'pl', { numeric: true })
+        || a.name.localeCompare(b.name, 'pl'))
+      .slice(0, 30);
   }
 
   async validateSelection(tenantId: string, policyId: string | null | undefined, categoryCode: string, existingPolicyId?: string | null) {

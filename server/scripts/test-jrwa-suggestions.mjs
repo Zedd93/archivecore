@@ -19,11 +19,11 @@ test('suggestions are scoped to the tenant and its current JRWA version', async 
     assert.equal(where.jrwaVersionId, 'current-version');
     assert.equal(where.isActive, true);
     assert.equal(where.OR[0].jrwaCode.equals, '1234');
-    assert.equal(take, 30);
-    return [{ id: policyId, jrwaCode: '1234' }];
+    assert.equal(take, 100);
+    return [{ id: policyId, jrwaCode: '1234', name: 'Umowy' }];
   };
   try {
-    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, '1234'), [{ id: policyId, jrwaCode: '1234' }]);
+    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, '1234'), [{ id: policyId, jrwaCode: '1234', name: 'Umowy', matchType: 'exactCode' }]);
     assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, ''), []);
   } finally {
     prisma.jrwaVersion.findFirst = originalVersion;
@@ -38,10 +38,33 @@ test('legacy JRWA entries remain searchable until a dated version becomes effect
   prisma.retentionPolicy.findMany = async ({ where }) => {
     assert.equal(where.tenantId, tenantId);
     assert.equal(where.jrwaVersionId, null);
-    return [{ id: policyId }];
+    return [{ id: policyId, jrwaCode: '1234', name: 'Akta' }];
   };
   try {
-    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, 'Akta'), [{ id: policyId }]);
+    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, 'Akta'), [{ id: policyId, jrwaCode: '1234', name: 'Akta', matchType: 'name' }]);
+  } finally {
+    prisma.jrwaVersion.findFirst = originalVersion;
+    prisma.retentionPolicy.findMany = originalPolicies;
+  }
+});
+
+test('suggestions explain exact, prefix and name matches without making a selection', async () => {
+  const originalVersion = prisma.jrwaVersion.findFirst;
+  const originalPolicies = prisma.retentionPolicy.findMany;
+  prisma.jrwaVersion.findFirst = async () => ({ id: 'current-version' });
+  prisma.retentionPolicy.findMany = async ({ where }) => {
+    assert.equal(where.tenantId, tenantId);
+    assert.equal(where.OR[1].jrwaCode.startsWith, '12');
+    return [
+      { id: 'by-name', jrwaCode: '9', name: 'Klasa 12' },
+      { id: 'by-prefix', jrwaCode: '123', name: 'Sprawy' },
+      { id: 'exact', jrwaCode: '12', name: 'Umowy' },
+    ];
+  };
+  try {
+    assert.deepEqual((await jrwaSuggestionService.suggest(tenantId, '12')).map(({ id, matchType }) => [id, matchType]), [
+      ['exact', 'exactCode'], ['by-prefix', 'codePrefix'], ['by-name', 'name'],
+    ]);
   } finally {
     prisma.jrwaVersion.findFirst = originalVersion;
     prisma.retentionPolicy.findMany = originalPolicies;

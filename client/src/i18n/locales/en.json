@@ -629,7 +629,12 @@
       "review": "period needs review",
       "clear": "Clear selection",
       "none": "No matching entries in the current JRWA version",
-      "loadError": "Could not load JRWA suggestions"
+      "loadError": "Could not load JRWA suggestions",
+      "match": {
+        "exactCode": "Exact JRWA code",
+        "codePrefix": "JRWA code prefix",
+        "name": "Class name match"
+      }
     },
     "itemsCount": "Items count",
     "empty": "No transfer lists",

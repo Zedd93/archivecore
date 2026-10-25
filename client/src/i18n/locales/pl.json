@@ -629,7 +629,12 @@
       "review": "okres do weryfikacji",
       "clear": "Usuń wybór",
       "none": "Brak pasujących pozycji w bieżącej wersji JRWA",
-      "loadError": "Nie udało się pobrać podpowiedzi JRWA"
+      "loadError": "Nie udało się pobrać podpowiedzi JRWA",
+      "match": {
+        "exactCode": "Dokładny symbol JRWA",
+        "codePrefix": "Początek symbolu JRWA",
+        "name": "Dopasowanie nazwy klasy"
+      }
     },
     "itemsCount": "Liczba pozycji",
     "empty": "Brak spisów zdawczo-odbiorczych",
