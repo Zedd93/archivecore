@@ -295,13 +295,22 @@ test('scopes every evidence query to the tenant and employee department', async 
     assert.deepEqual(queries.get('box').department, { equals: 'Księgowość', mode: 'insensitive' });
     assert.deepEqual(queries.get('folder').box.is.department, { equals: 'Księgowość', mode: 'insensitive' });
     assert.equal(queries.get('document').OR.length, 2);
-    assert.equal(queries.get('document').OR[0].box.department.equals, 'Księgowość');
-    assert.equal(queries.get('document').OR[1].folder.box.department.equals, 'Księgowość');
+    assert.deepEqual(queries.get('document').OR[0].folderId, { not: null });
+    assert.equal(queries.get('document').OR[0].folder.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('document').OR[1].folderId, null);
+    assert.equal(queries.get('document').OR[1].box.department.equals, 'Księgowość');
     assert.equal(queries.get('attachment').OR.length, 4);
-    assert.equal(queries.get('attachment').OR[0].box.department.equals, 'Księgowość');
-    assert.equal(queries.get('attachment').OR[1].folder.box.department.equals, 'Księgowość');
-    assert.equal(queries.get('attachment').OR[2].document.box.department.equals, 'Księgowość');
-    assert.equal(queries.get('attachment').OR[3].document.folder.box.department.equals, 'Księgowość');
+    assert.deepEqual(queries.get('attachment').OR[0].documentId, { not: null });
+    assert.deepEqual(queries.get('attachment').OR[0].document.folderId, { not: null });
+    assert.equal(queries.get('attachment').OR[0].document.folder.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR[1].document.folderId, null);
+    assert.equal(queries.get('attachment').OR[1].document.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR[2].documentId, null);
+    assert.deepEqual(queries.get('attachment').OR[2].folderId, { not: null });
+    assert.equal(queries.get('attachment').OR[2].folder.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR[3].documentId, null);
+    assert.equal(queries.get('attachment').OR[3].folderId, null);
+    assert.equal(queries.get('attachment').OR[3].box.department.equals, 'Księgowość');
   } finally {
     for (const model of models) prisma[model].findMany = originals.get(model);
   }
@@ -417,6 +426,83 @@ test('does not claim a shelf for a checked-out box', async () => {
     assert.doesNotMatch(results[0].subtitle, /Półka 3/);
   } finally {
     prisma.box.findMany = original;
+  }
+});
+
+test('shows a document current shelf through its folder instead of a stale direct box', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    prisma.document.findMany = async ({ include }) => {
+      assert.equal(include.custodyEvents.take, 1);
+      assert.equal(include.folder.select.custodyEvents.take, 1);
+      return [{
+        id: 'document-1', title: 'Umowa', description: null, docType: null, docDate: null,
+        boxId: 'old-box', custodyEvents: [], attachments: [],
+        box: { id: 'old-box', boxNumber: 'K-OLD', department: 'Księgowość', status: 'active', deletedAt: null, location: { fullPath: 'Dawna półka' } },
+        folder: {
+          folderNumber: 'SMG/1473', status: 'active', custodyEvents: [],
+          box: { id: 'box-1', boxNumber: 'K-2026-000731', department: 'Księgowość', status: 'active', deletedAt: null, location: { fullPath: 'Magazyn A / Półka 3' } },
+        },
+      }];
+    };
+    prisma.attachment.findMany = async () => [];
+    const { results } = await searchService.search('tenant-a', 'Umowa', { types: ['document'] });
+    assert.match(results[0].subtitle, /Karton: K-2026-000731 \| Lokalizacja: Magazyn A \/ Półka 3/);
+    assert.doesNotMatch(results[0].subtitle, /Dawna półka/);
+    assert.equal(results[0].metadata.boxId, 'box-1');
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
+test('does not claim a shelf for a handed-over document', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    prisma.document.findMany = async () => [{
+      id: 'document-1', title: 'Umowa', description: null, docType: null, docDate: null,
+      custodyEvents: [{ eventType: 'handover' }], attachments: [], folder: null,
+      box: { id: 'box-1', boxNumber: 'K-2026-000731', status: 'active', deletedAt: null, location: { fullPath: 'Magazyn A / Półka 3' } },
+    }];
+    prisma.attachment.findMany = async () => [];
+    const { results } = await searchService.search('tenant-a', 'Umowa', { types: ['document'] });
+    assert.match(results[0].subtitle, /Lokalizacja: Dokument wydany poza archiwum/);
+    assert.doesNotMatch(results[0].subtitle, /Półka 3/);
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
+test('locates a scan through its linked document and folder, not a stale direct box', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async ({ include }) => {
+      assert.equal(include.document.select.custodyEvents.take, 1);
+      return [{
+        id: 'attachment-1', fileName: 'skan.pdf', ocrText: null, mimeType: 'application/pdf',
+        box: { id: 'old-box', boxNumber: 'K-OLD', title: 'Stary karton', location: { fullPath: 'Dawna półka' } },
+        folder: null,
+        document: {
+          id: 'document-1', title: 'Umowa', custodyEvents: [], box: null,
+          folder: {
+            status: 'active', custodyEvents: [],
+            box: { id: 'box-1', boxNumber: 'K-2026-000731', status: 'active', deletedAt: null, location: { fullPath: 'Magazyn A / Półka 3' } },
+          },
+        },
+      }];
+    };
+    const { results } = await searchService.search('tenant-a', 'skan.pdf', { types: ['document'] });
+    assert.match(results[0].subtitle, /Karton: K-2026-000731 \| Lokalizacja: Magazyn A \/ Półka 3/);
+    assert.doesNotMatch(results[0].subtitle, /Dawna półka/);
+    assert.equal(results[0].metadata.boxId, 'box-1');
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
   }
 });
 

@@ -18,6 +18,12 @@ type LocatedBox = {
   location: { fullPath: string } | null;
 };
 
+type LocatedFolder = {
+  status: string;
+  custodyEvents: { eventType: string }[];
+  box: LocatedBox | null;
+};
+
 function currentBoxLocation(box: LocatedBox | null): string {
   if (!box || box.deletedAt || box.status === 'disposed' || box.status === 'lost') return 'Brak potwierdzonej lokalizacji';
   if (box.status === 'checked_out') return 'Karton wydany poza archiwum';
@@ -30,6 +36,12 @@ function currentFolderLocation(folderStatus: string, lastCustodyEventType: strin
   if (folderStatus === 'checked_out' && lastCustodyEventType !== 'return_event' && lastCustodyEventType !== 'receipt') {
     return 'Teczka wydana poza archiwum';
   }
+  return currentBoxLocation(box);
+}
+
+function currentDocumentLocation(lastCustodyEventType: string | undefined, folder: LocatedFolder | null, box: LocatedBox | null): string {
+  if (lastCustodyEventType === 'handover') return 'Dokument wydany poza archiwum';
+  if (folder) return currentFolderLocation(folder.status, folder.custodyEvents[0]?.eventType, folder.box);
   return currentBoxLocation(box);
 }
 
@@ -219,12 +231,13 @@ export class SearchService {
   }
 
   private async searchDocuments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+    const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const documents = await prisma.document.findMany({
       where: {
         tenantId,
         ...(department ? { OR: [
-          { box: { department: { equals: department, mode: 'insensitive' } } },
-          { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
+          { folderId: { not: null }, folder: { box: { department: departmentFilter } } },
+          { folderId: null, box: { department: departmentFilter } },
         ] } : {}),
         AND: [{ OR: [
           { title: { contains: query, mode: 'insensitive' } },
@@ -235,8 +248,13 @@ export class SearchService {
         ] }],
       },
       include: {
-        folder: { select: { folderNumber: true, box: { select: { id: true, boxNumber: true, department: true } } } },
-        box: { select: { id: true, boxNumber: true, department: true } },
+        folder: { select: {
+          folderNumber: true, status: true,
+          custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
+          box: { select: { id: true, boxNumber: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+        } },
+        box: { select: { id: true, boxNumber: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+        custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
         attachments: { select: { fileName: true, ocrText: true }, take: 3 },
       },
       take: limit,
@@ -248,8 +266,8 @@ export class SearchService {
       id: doc.id,
       title: doc.title,
       subtitle: doc.folder
-        ? `Teczka: ${doc.folder.folderNumber} | Karton: ${doc.folder.box?.boxNumber || '-'}`
-        : `Karton: ${doc.box?.boxNumber || '-'}`,
+        ? `Teczka: ${doc.folder.folderNumber} | Karton: ${doc.folder.box?.boxNumber || '-'} | Lokalizacja: ${currentDocumentLocation(doc.custodyEvents[0]?.eventType, doc.folder, doc.folder.box)}`
+        : `Karton: ${doc.box?.boxNumber || '-'} | Lokalizacja: ${currentDocumentLocation(doc.custodyEvents[0]?.eventType, null, doc.box)}`,
       relevance: this.calculateRelevance(query, [
         doc.title,
         doc.description || '',
@@ -259,9 +277,9 @@ export class SearchService {
       metadata: {
         docType: doc.docType,
         docDate: doc.docDate,
-        boxId: doc.boxId || doc.folder?.box?.id,
-        boxNumber: doc.box?.boxNumber || doc.folder?.box?.boxNumber,
-        department: doc.box?.department || doc.folder?.box?.department,
+        boxId: doc.folder ? doc.folder.box?.id : doc.box?.id,
+        boxNumber: doc.folder ? doc.folder.box?.boxNumber : doc.box?.boxNumber,
+        department: doc.folder ? doc.folder.box?.department : doc.box?.department,
       },
     }));
   }
@@ -330,15 +348,16 @@ export class SearchService {
   }
 
   private async searchAttachments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+    const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const attachments = await prisma.attachment.findMany({
       where: {
         tenantId,
         ...(department ? {
           OR: [
-            { box: { department: { equals: department, mode: 'insensitive' } } },
-            { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
-            { document: { box: { department: { equals: department, mode: 'insensitive' } } } },
-            { document: { folder: { box: { department: { equals: department, mode: 'insensitive' } } } } },
+            { documentId: { not: null }, document: { folderId: { not: null }, folder: { box: { department: departmentFilter } } } },
+            { documentId: { not: null }, document: { folderId: null, box: { department: departmentFilter } } },
+            { documentId: null, folderId: { not: null }, folder: { box: { department: departmentFilter } } },
+            { documentId: null, folderId: null, box: { department: departmentFilter } },
           ],
         } : {}),
         AND: [
@@ -355,22 +374,39 @@ export class SearchService {
         ],
       },
       include: {
-        box: { select: { id: true, boxNumber: true, title: true, department: true } },
-        folder: { select: { id: true, folderNumber: true, title: true, box: { select: { id: true, boxNumber: true, department: true } } } },
-        document: { select: { id: true, title: true, box: { select: { id: true, boxNumber: true, department: true } }, folder: { select: { box: { select: { id: true, boxNumber: true, department: true } } } } } },
+        box: { select: { id: true, boxNumber: true, title: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+        folder: { select: {
+          id: true, folderNumber: true, title: true, status: true,
+          custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
+          box: { select: { id: true, boxNumber: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+        } },
+        document: { select: {
+          id: true, title: true,
+          custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
+          box: { select: { id: true, boxNumber: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+          folder: { select: {
+            status: true, custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
+            box: { select: { id: true, boxNumber: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+          } },
+        } },
       },
       take: limit,
       orderBy: { uploadedAt: 'desc' },
     });
 
     return attachments.map(attachment => {
-      const box = attachment.box || attachment.folder?.box || attachment.document?.box || attachment.document?.folder?.box;
+      const document = attachment.document;
+      const folder = document ? document.folder : attachment.folder;
+      const box = document ? (folder ? folder.box : document.box) : attachment.folder ? attachment.folder.box : attachment.box;
       const relatedTitle = attachment.document?.title || attachment.folder?.title || attachment.box?.title || attachment.fileName;
+      const location = document
+        ? currentDocumentLocation(document.custodyEvents[0]?.eventType, folder, box)
+        : folder ? currentFolderLocation(folder.status, folder.custodyEvents[0]?.eventType, box) : currentBoxLocation(box);
       return {
         type: 'document' as const,
         id: attachment.id,
         title: attachment.fileName,
-        subtitle: `${relatedTitle} | Karton: ${box?.boxNumber || '—'}`,
+        subtitle: `${relatedTitle} | Karton: ${box?.boxNumber || '—'} | Lokalizacja: ${location}`,
         relevance: this.calculateRelevance(query, [
           attachment.fileName,
           attachment.ocrText || '',
