@@ -184,11 +184,15 @@ export default function SearchPage() {
               <>
                 <p className="text-sm text-gray-800">
                   {t('search.evidenceCount', { count: evidenceSources.length })}{' '}
-                  {t('search.evidenceLead')}{' '}
-                  {evidenceSources[0].title}
-                  {evidenceSources[0].subtitle && ` — ${evidenceSources[0].subtitle}`}{' '}
-                  <Link to={evidenceSources[0].href} className="font-medium text-primary-700 underline hover:text-primary-900" aria-label={t('search.evidenceCitation', { number: 1, title: evidenceSources[0].title })}>[1]</Link>
+                  {evidenceSources.length === 1 ? (
+                    <>
+                      {t('search.evidenceSingle')}{' '}
+                      <Link to={evidenceSources[0].href} className="font-medium text-primary-700 underline hover:text-primary-900" aria-label={t('search.evidenceCitation', { number: 1, title: evidenceSources[0].title })}>{evidenceSources[0].title}</Link>
+                      {evidenceSources[0].subtitle && ` — ${evidenceSources[0].subtitle}`}
+                    </>
+                  ) : t('search.evidenceMultiple')}
                 </p>
+                {evidenceSources.length === 10 && <p className="mt-2 text-sm text-gray-600">{t('search.evidenceLimit')}</p>}
                 <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-500">{t('search.evidenceSources')}</p>
                 <ol className="mt-2 space-y-2">
                   {evidenceSources.map((source, index) => (
