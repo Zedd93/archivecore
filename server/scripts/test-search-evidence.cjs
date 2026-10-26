@@ -80,6 +80,115 @@ test('finds an exact box number inside a natural-language question', async () =>
   }
 });
 
+test('finds a folder number in a question without mistaking its box prefix for a box', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (tenantId, query, options, department) => {
+      assert.equal(tenantId, 'tenant-a');
+      assert.equal(query, 'K-2026-000030/T-001');
+      assert.equal(department, 'Księgowość');
+      assert.ok(options.types.includes('folder'));
+      return { total: 1, results: [{ id: 'folder-1', type: 'folder', title: 'Teczka', subtitle: 'Karton', metadata: {} }] };
+    };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'Gdzie jest teczka k-2026-000030/t-001?' } }, res, (err) => { throw err; });
+    assert.deepEqual(res.body.data.sources.map(({ href }) => href), ['/folders/folder-1']);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('ordinary results resolve the same folder number question', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (_tenantId, query, options) => {
+      assert.equal(query, 'K-2026-000030/T-001');
+      assert.deepEqual(options.types, ['folder']);
+      return { total: 1, results: [] };
+    };
+    const res = response();
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: 'Pokaż teczkę K-2026-000030/T-001', types: 'folder' } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('finds a quoted document title in a question while retaining the user scope', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (tenantId, query, options, department) => {
+      assert.equal(tenantId, 'tenant-a');
+      assert.equal(query, 'Umowa dzierżawy 2024');
+      assert.equal(department, 'Księgowość');
+      assert.equal(options.canViewHr, false);
+      return { total: 1, results: [{ id: 'document-1', type: 'document', title: 'Umowa dzierżawy 2024', subtitle: 'Karton', metadata: {} }] };
+    };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'Pokaż dokument „Umowa dzierżawy 2024”' } }, res, (err) => { throw err; });
+    assert.deepEqual(res.body.data.sources.map(({ href }) => href), ['/documents/document-1']);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('ordinary document-only results use a quoted title without searching boxes', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (_tenantId, query, options) => {
+      assert.equal(query, 'Umowa dzierżawy 2024');
+      assert.deepEqual(options.types, ['document']);
+      return { total: 0, results: [] };
+    };
+    const res = response();
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: 'Pokaż dokument "Umowa dzierżawy 2024"', types: 'document' } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('does not choose between two quoted titles or a title and a box number', async () => {
+  const oldSearch = searchService.search;
+  try {
+    const questions = [
+      'Szukaj "Umowa 2024" albo "Umowa 2025"',
+      'Szukaj "X" albo "Umowa 2024"',
+      'Szukaj "Umowa 2024" w kartonie K-2026-000030',
+    ];
+    let index = 0;
+    searchService.search = async (_tenantId, query) => {
+      assert.equal(query, questions[index++]);
+      return { total: 0, results: [] };
+    };
+    for (const q of questions) {
+      const res = response();
+      await searchController.evidence({ tenantId: 'tenant-a', query: { q } }, res, (err) => { throw err; });
+      assert.equal(res.statusCode, 200);
+    }
+    assert.equal(index, questions.length);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('a document-only filter does not resolve a folder number to a folder', async () => {
+  const oldSearch = searchService.search;
+  try {
+    const question = 'Gdzie jest teczka K-2026-000030/T-001?';
+    searchService.search = async (_tenantId, query, options) => {
+      assert.equal(query, question);
+      assert.deepEqual(options.types, ['document']);
+      return { total: 0, results: [] };
+    };
+    const res = response();
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: question, types: 'document' } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
 test('does not guess between two different box numbers', async () => {
   const oldSearch = searchService.search;
   try {

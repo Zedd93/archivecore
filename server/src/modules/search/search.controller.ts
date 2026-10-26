@@ -3,11 +3,19 @@ import { searchService, SearchResult } from './search.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions } from '@archivecore/shared';
 
-function searchTerm(query: string): string {
-  const boxNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9-])(K-\d{4}-\d+)(?![A-Za-z0-9-])/gi)]
+function searchTerm(query: string, types: string[]): string {
+  const folderNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9/-])(K-\d{4}-\d+\/T-\d+)(?![A-Za-z0-9/-])/gi)]
     .map((match) => match[1].toUpperCase());
-  const uniqueNumbers = new Set(boxNumbers);
-  return uniqueNumbers.size === 1 ? boxNumbers[0] : query;
+  const boxNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9/-])(K-\d{4}-\d+)(?![A-Za-z0-9/-])/gi)]
+    .map((match) => match[1].toUpperCase());
+  const quotedTerms = [...query.matchAll(/"([^"]+)"|„([^”]+)”/g)]
+    .map((match) => (match[1] || match[2]).trim());
+
+  const distinct = [...new Set([...folderNumbers, ...boxNumbers, ...quotedTerms])];
+  if (distinct.length !== 1 || distinct[0].length < 3) return query;
+  if (folderNumbers.length > 0) return types.includes('folder') ? distinct[0] : query;
+  if (boxNumbers.length > 0) return types.includes('box') ? distinct[0] : query;
+  return types.includes('folder') || types.includes('document') ? distinct[0] : query;
 }
 
 export class SearchController {
@@ -15,7 +23,7 @@ export class SearchController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const query = req.query.q as string;
-      const { results } = await searchService.search(req.tenantId, searchTerm(query), {
+      const { results } = await searchService.search(req.tenantId, searchTerm(query, ['box', 'folder', 'document']), {
         types: ['box', 'folder', 'document'],
         canViewHr: false,
         limit: 10,
@@ -60,7 +68,7 @@ export class SearchController {
       const typeArray = req.user!.permissions.includes(Permissions.HR_VIEW)
         ? requestedTypes
         : requestedTypes.filter((type) => type !== 'hr_folder');
-      const results = await searchService.search(req.tenantId, typeArray.includes('box') ? searchTerm(q as string) : q as string, {
+      const results = await searchService.search(req.tenantId, searchTerm(q as string, typeArray), {
         types: typeArray,
         canViewHr: req.user!.permissions.includes(Permissions.HR_VIEW),
         limit: limit ? parseInt(limit as string) : 20,
