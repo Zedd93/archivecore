@@ -65,6 +65,37 @@ test('refuses to retrieve sources without tenant context', async () => {
   }
 });
 
+test('finds an exact box number inside a natural-language question', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (_tenantId, query) => {
+      assert.equal(query, 'K-2026-000030');
+      return { total: 0, results: [] };
+    };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', query: { q: 'Gdzie jest karton k-2026-000030?' } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('does not guess between two different box numbers', async () => {
+  const oldSearch = searchService.search;
+  try {
+    const question = 'Gdzie są K-2026-000030 i K-2026-000031?';
+    searchService.search = async (_tenantId, query) => {
+      assert.equal(query, question);
+      return { total: 0, results: [] };
+    };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', query: { q: question } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
 test('scopes every evidence query to the tenant and employee department', async () => {
   const models = ['box', 'folder', 'document', 'attachment'];
   const originals = new Map();
