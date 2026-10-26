@@ -11,6 +11,28 @@ export interface SearchResult {
   metadata: Record<string, any>;
 }
 
+type LocatedBox = {
+  boxNumber: string;
+  status: string;
+  deletedAt: Date | null;
+  location: { fullPath: string } | null;
+};
+
+function currentBoxLocation(box: LocatedBox | null): string {
+  if (!box || box.deletedAt || box.status === 'disposed' || box.status === 'lost') return 'Brak potwierdzonej lokalizacji';
+  if (box.status === 'checked_out') return 'Karton wydany poza archiwum';
+  return box.location?.fullPath || 'Brak przypisanej lokalizacji';
+}
+
+function currentFolderLocation(folderStatus: string, lastCustodyEventType: string | undefined, box: LocatedBox | null): string {
+  if (folderStatus === 'disposed') return 'Teczka wybrakowana';
+  if (lastCustodyEventType === 'handover') return 'Teczka wydana poza archiwum';
+  if (folderStatus === 'checked_out' && lastCustodyEventType !== 'return_event' && lastCustodyEventType !== 'receipt') {
+    return 'Teczka wydana poza archiwum';
+  }
+  return currentBoxLocation(box);
+}
+
 export class SearchService {
   /**
    * Unified search across all entities using pg_trgm similarity
@@ -53,7 +75,7 @@ export class SearchService {
           type: 'box',
           id: box.id,
           title: `${box.boxNumber} — ${box.title}`,
-          subtitle: box.location?.fullPath || 'Brak lokalizacji',
+          subtitle: `Lokalizacja: ${currentBoxLocation(box)}`,
           relevance: 1.0,
           metadata: { boxNumber: box.boxNumber, status: box.status, qrCode: box.qrCode },
         });
@@ -120,7 +142,7 @@ export class SearchService {
       type: 'box' as const,
       id: box.id,
       title: `${box.boxNumber} — ${box.title}`,
-      subtitle: `${box.location?.fullPath || 'Brak lokalizacji'} | ${box.docType ? DOC_TYPE_LABELS[box.docType] || box.docType : '-'}`,
+      subtitle: `Lokalizacja: ${currentBoxLocation(box)} | ${box.docType ? DOC_TYPE_LABELS[box.docType] || box.docType : '-'}`,
       relevance: this.calculateRelevance(query, [box.title, box.boxNumber, box.description || '', box.notes || '', box.docType || '']),
       metadata: { boxNumber: box.boxNumber, status: box.status, docType: box.docType },
     }));
@@ -144,7 +166,8 @@ export class SearchService {
         ],
       },
       include: {
-        box: { select: { boxNumber: true } },
+        box: { select: { boxNumber: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
+        custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
         transferListItem: {
           include: {
             transferList: { select: { id: true, listNumber: true, title: true } },
@@ -157,13 +180,19 @@ export class SearchService {
 
     return folders.map(folder => {
       const sourceItem = folder.transferListItem;
+      const boxNumber = folder.box?.boxNumber || '—';
+      const subtitleParts = [
+        ...(sourceItem ? [`Spis ZO: ${sourceItem.transferList.listNumber}`] : []),
+        `Karton: ${boxNumber}`,
+        ...(sourceItem?.sourceBoxNumber && sourceItem.sourceBoxNumber !== boxNumber
+          ? [`Karton w spisie: ${sourceItem.sourceBoxNumber}`] : []),
+        `Lokalizacja: ${currentFolderLocation(folder.status, folder.custodyEvents[0]?.eventType, folder.box)}`,
+      ];
       return {
         type: 'folder' as const,
         id: folder.id,
         title: `${folder.folderNumber} — ${folder.title}`,
-        subtitle: sourceItem
-          ? `Spis ZO: ${sourceItem.transferList.listNumber} | Karton: ${sourceItem.sourceBoxNumber || folder.box?.boxNumber || '—'}`
-          : `Karton: ${folder.box?.boxNumber || '—'}`,
+        subtitle: subtitleParts.join(' | '),
         relevance: this.calculateRelevance(query, [
           folder.title,
           folder.folderNumber,

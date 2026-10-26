@@ -325,6 +325,101 @@ test('scopes exact box numbers to the tenant and employee department', async () 
   }
 });
 
+test('shows the current box shelf for a folder, separately from its transfer-list box number', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    prisma.folder.findMany = async ({ where, include }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(include.box.select.location.select, { fullPath: true });
+      assert.equal(include.custodyEvents.take, 1);
+      return [{
+        id: 'folder-1', folderNumber: 'SMG/1473', title: 'Regulaminy', description: null,
+        docType: null, status: 'active', boxId: 'box-1', custodyEvents: [],
+        box: { boxNumber: 'K-2026-000731', status: 'active', deletedAt: null, location: { fullPath: 'Magazyn A / Regał 2 / Półka 3' } },
+        transferListItem: {
+          id: 'item-1', categoryCode: null, storageLocation: 'Dawna półka', sourceBoxNumber: 'SMG/K/1',
+          transferList: { id: 'list-1', listNumber: 'SZO-2026-0003', title: 'Spis' },
+        },
+      }];
+    };
+    const { results } = await searchService.search('tenant-a', 'SMG/1473', { types: ['folder'] });
+    assert.match(results[0].subtitle, /Karton: K-2026-000731/);
+    assert.match(results[0].subtitle, /Karton w spisie: SMG\/K\/1/);
+    assert.match(results[0].subtitle, /Lokalizacja: Magazyn A \/ Regał 2 \/ Półka 3/);
+    assert.doesNotMatch(results[0].subtitle, /Dawna półka/);
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
+test('does not present a box shelf as the current location of a handed-over folder', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    prisma.folder.findMany = async () => [{
+      id: 'folder-1', folderNumber: 'SMG/1473', title: 'Regulaminy', description: null,
+      docType: null, status: 'active', boxId: 'box-1',
+      box: { boxNumber: 'K-2026-000731', status: 'active', deletedAt: null, location: { fullPath: 'Magazyn A / Półka 3' } },
+      custodyEvents: [{ eventType: 'handover' }], transferListItem: null,
+    }];
+    const { results } = await searchService.search('tenant-a', 'SMG/1473', { types: ['folder'] });
+    assert.match(results[0].subtitle, /Lokalizacja: Teczka wydana poza archiwum/);
+    assert.doesNotMatch(results[0].subtitle, /Półka 3/);
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
+test('does not use historical transfer-list storage as the current location of an unboxed folder', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    prisma.folder.findMany = async () => [{
+      id: 'folder-1', folderNumber: 'SMG/1473', title: 'Regulaminy', description: null,
+      docType: null, status: 'active', boxId: null, box: null, custodyEvents: [],
+      transferListItem: {
+        id: 'item-1', categoryCode: null, storageLocation: 'Dawna półka', sourceBoxNumber: 'SMG/K/1',
+        transferList: { id: 'list-1', listNumber: 'SZO-2026-0003', title: 'Spis' },
+      },
+    }];
+    const { results } = await searchService.search('tenant-a', 'SMG/1473', { types: ['folder'] });
+    assert.match(results[0].subtitle, /Karton: —/);
+    assert.match(results[0].subtitle, /Lokalizacja: Brak potwierdzonej lokalizacji/);
+    assert.doesNotMatch(results[0].subtitle, /Dawna półka/);
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
+test('uses the current box shelf after a folder return even if its status was not reset', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    prisma.folder.findMany = async () => [{
+      id: 'folder-1', folderNumber: 'SMG/1473', title: 'Regulaminy', description: null,
+      docType: null, status: 'checked_out', boxId: 'box-1',
+      box: { boxNumber: 'K-2026-000731', status: 'active', deletedAt: null, location: { fullPath: 'Magazyn A / Półka 3' } },
+      custodyEvents: [{ eventType: 'return_event' }], transferListItem: null,
+    }];
+    const { results } = await searchService.search('tenant-a', 'SMG/1473', { types: ['folder'] });
+    assert.match(results[0].subtitle, /Lokalizacja: Magazyn A \/ Półka 3/);
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
+test('does not claim a shelf for a checked-out box', async () => {
+  const original = prisma.box.findMany;
+  try {
+    prisma.box.findMany = async () => [{
+      id: 'box-1', boxNumber: 'K-2026-000731', title: 'Karton', status: 'checked_out', deletedAt: null,
+      location: { fullPath: 'Magazyn A / Półka 3' },
+    }];
+    const { results } = await searchService.search('tenant-a', 'K-2026-000731', { types: ['box'] });
+    assert.match(results[0].subtitle, /Lokalizacja: Karton wydany poza archiwum/);
+    assert.doesNotMatch(results[0].subtitle, /Półka 3/);
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
 test('an exact box number does not bypass a document-only filter', async () => {
   const originalBox = prisma.box.findMany;
   const originalDocument = prisma.document.findMany;
