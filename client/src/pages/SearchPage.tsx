@@ -1,11 +1,21 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useMutation } from '@tanstack/react-query';
 import { useSearch } from '@/hooks/useApi';
+import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { OrderDraftItem, toOrderDraftItem } from '@/utils/orderDraft';
 import { Permissions } from '@archivecore/shared';
-import { Search, Box, FileText, UserCircle, FolderOpen, Loader2, ClipboardList } from 'lucide-react';
+import { Search, Box, FileText, UserCircle, FolderOpen, Loader2, ClipboardList, BookOpen } from 'lucide-react';
+
+type EvidenceSource = {
+  id: string;
+  type: 'box' | 'folder' | 'document' | 'attachment';
+  title: string;
+  subtitle: string;
+  href: string;
+};
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   box: <Box size={18} className="text-blue-500" />,
@@ -45,6 +55,13 @@ export default function SearchPage() {
   }, [query, setSearchParams]);
 
   const { data: results, isLoading } = useSearch(debouncedQuery, selectedTypes.length > 0 ? selectedTypes : undefined);
+  const evidence = useMutation({
+    mutationFn: async (term: string) => {
+      const response = await api.get<{ data: { sources: EvidenceSource[] } }>('/search/evidence', { params: { q: term } });
+      return { term, sources: response.data.data.sources };
+    },
+  });
+  const evidenceSources = evidence.data?.term === query.trim() ? evidence.data.sources : undefined;
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
@@ -137,6 +154,58 @@ export default function SearchPage() {
           ))}
         </div>
       </div>
+
+      <section className="card" aria-labelledby="evidence-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="evidence-heading" className="flex items-center gap-2 font-semibold text-gray-900">
+              <BookOpen size={18} aria-hidden="true" /> {t('search.evidenceTitle')}
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">{t('search.evidenceHint')}</p>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => evidence.mutate(query.trim())}
+            disabled={query.trim().length < 2 || query.trim().length > 200 || evidence.isPending}
+          >
+            {evidence.isPending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Search size={16} aria-hidden="true" />}
+            {evidence.isPending ? t('search.evidenceLoading') : t('search.evidenceAction')}
+          </button>
+        </div>
+        {evidence.isError && evidence.variables === query.trim() && (
+          <p role="alert" className="mt-3 text-sm text-red-700">{t('search.evidenceError')}</p>
+        )}
+        {evidenceSources && (
+          <div className="mt-4 border-t border-gray-200 pt-4" aria-live="polite">
+            {evidenceSources.length === 0 ? (
+              <p className="text-sm text-gray-700">{t('search.evidenceEmpty')}</p>
+            ) : (
+              <>
+                <p className="text-sm text-gray-800">
+                  {t('search.evidenceCount', { count: evidenceSources.length })}{' '}
+                  {t('search.evidenceLead')}{' '}
+                  {evidenceSources[0].title}
+                  {evidenceSources[0].subtitle && ` — ${evidenceSources[0].subtitle}`}{' '}
+                  <Link to={evidenceSources[0].href} className="font-medium text-primary-700 underline hover:text-primary-900" aria-label={t('search.evidenceCitation', { number: 1, title: evidenceSources[0].title })}>[1]</Link>
+                </p>
+                <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-500">{t('search.evidenceSources')}</p>
+                <ol className="mt-2 space-y-2">
+                  {evidenceSources.map((source, index) => (
+                    <li key={`${source.type}-${source.id}`} className="text-sm">
+                      <Link to={source.href} className="text-primary-700 underline hover:text-primary-900">
+                        [{index + 1}] {source.title}
+                      </Link>
+                      <span className="ml-2 text-gray-500">{source.subtitle}</span>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+            <p className="mt-4 text-xs text-gray-500">{t('search.evidenceScope')}</p>
+          </div>
+        )}
+      </section>
 
       {/* Results */}
       {isLoading && debouncedQuery.length >= 2 && (

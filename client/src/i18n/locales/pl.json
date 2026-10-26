@@ -1419,7 +1419,18 @@
     "removeFromOrder": "Usuń z wyboru",
     "orderSelected": "Wybrano do zlecenia: {{count}}",
     "clearSelection": "Wyczyść wybór",
-    "createOrder": "Utwórz zlecenie"
+    "createOrder": "Utwórz zlecenie",
+    "evidenceTitle": "Odpowiedź ze źródeł",
+    "evidenceHint": "Sprawdź dopasowane rekordy i przejdź bezpośrednio do źródła. To nie jest interpretacja treści dokumentów.",
+    "evidenceAction": "Sprawdź źródła",
+    "evidenceLoading": "Sprawdzanie...",
+    "evidenceError": "Nie udało się sprawdzić źródeł. Spróbuj ponownie.",
+    "evidenceEmpty": "Nie mogę odpowiedzieć na podstawie dostępnych źródeł. Zmień zapytanie lub sprawdź uprawnienia.",
+    "evidenceCount": "Znaleziono źródła: {{count}}.",
+    "evidenceLead": "Najtrafniejsze dopasowanie:",
+    "evidenceSources": "Źródła",
+    "evidenceCitation": "Źródło {{number}}: {{title}}",
+    "evidenceScope": "Uwzględniono dostępne kartony, teczki i dokumenty. Akta osobowe są wyłączone; filtry listy wyników nie mają tu zastosowania."
   },
 
   "import": {
