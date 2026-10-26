@@ -114,6 +114,39 @@ test('ordinary results resolve the same folder number question', async () => {
   }
 });
 
+test('finds an imported transfer-list folder number in a natural question', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (tenantId, query, options) => {
+      assert.equal(tenantId, 'tenant-a');
+      assert.equal(query, 'SMG/1473');
+      assert.ok(options.types.includes('folder'));
+      return { total: 1, results: [{ id: 'folder-1', type: 'folder', title: 'SMG/1473 — Regulaminy', subtitle: 'Spis ZO', metadata: {} }] };
+    };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', query: { q: 'Gdzie jest teczka smg/1473?' } }, res, (err) => { throw err; });
+    assert.deepEqual(res.body.data.sources.map(({ href }) => href), ['/folders/folder-1']);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('does not choose between two imported folder numbers', async () => {
+  const oldSearch = searchService.search;
+  try {
+    const question = 'Gdzie są teczki SMG/1473 i SMG/1474?';
+    searchService.search = async (_tenantId, query) => {
+      assert.equal(query, question);
+      return { total: 0, results: [] };
+    };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', query: { q: question } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
 test('finds a quoted document title in a question while retaining the user scope', async () => {
   const oldSearch = searchService.search;
   try {

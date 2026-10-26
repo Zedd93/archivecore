@@ -6,14 +6,16 @@ import { Permissions } from '@archivecore/shared';
 function searchTerm(query: string, types: string[]): string {
   const folderNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9/-])(K-\d{4}-\d+\/T-\d+)(?![A-Za-z0-9/-])/gi)]
     .map((match) => match[1].toUpperCase());
+  const importedFolderNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9/-])([A-Za-z]{2,12}\/\d{1,8}[A-Za-z]?)(?![A-Za-z0-9/-])/gi)]
+    .map((match) => match[1].toUpperCase());
   const boxNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9/-])(K-\d{4}-\d+)(?![A-Za-z0-9/-])/gi)]
     .map((match) => match[1].toUpperCase());
   const quotedTerms = [...query.matchAll(/"([^"]+)"|„([^”]+)”/g)]
     .map((match) => (match[1] || match[2]).trim());
 
-  const distinct = [...new Set([...folderNumbers, ...boxNumbers, ...quotedTerms])];
+  const distinct = [...new Set([...folderNumbers, ...importedFolderNumbers, ...boxNumbers, ...quotedTerms])];
   if (distinct.length !== 1 || distinct[0].length < 3) return query;
-  if (folderNumbers.length > 0) return types.includes('folder') ? distinct[0] : query;
+  if (folderNumbers.length > 0 || importedFolderNumbers.length > 0) return types.includes('folder') ? distinct[0] : query;
   if (boxNumbers.length > 0) return types.includes('box') ? distinct[0] : query;
   return types.includes('folder') || types.includes('document') ? distinct[0] : query;
 }
