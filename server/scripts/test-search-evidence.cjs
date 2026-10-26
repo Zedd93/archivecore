@@ -2,6 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { searchController } = require('../dist/modules/search/search.controller');
 const { searchService } = require('../dist/modules/search/search.service');
+const { prisma } = require('../dist/config/database');
+const { tenantContext } = require('../dist/middleware/tenant');
+const { RoleCode } = require('@archivecore/shared');
 
 function response() {
   return {
@@ -60,4 +63,72 @@ test('refuses to retrieve sources without tenant context', async () => {
   } finally {
     searchService.search = oldSearch;
   }
+});
+
+test('scopes every evidence query to the tenant and employee department', async () => {
+  const models = ['box', 'folder', 'document', 'attachment'];
+  const originals = new Map();
+  const queries = new Map();
+  try {
+    for (const model of models) {
+      originals.set(model, prisma[model].findMany);
+      prisma[model].findMany = async (args) => {
+        queries.set(model, args.where);
+        return [];
+      };
+    }
+
+    const result = await searchService.search('tenant-a', 'umowa', {
+      types: ['box', 'folder', 'document'], canViewHr: false, limit: 10, offset: 0,
+    }, 'Księgowość');
+
+    assert.deepEqual(result, { results: [], total: 0 });
+    assert.deepEqual([...queries.keys()].sort(), models.sort());
+    for (const where of queries.values()) assert.equal(where.tenantId, 'tenant-a');
+    assert.equal(queries.get('box').deletedAt, null);
+    assert.deepEqual(queries.get('box').department, { equals: 'Księgowość', mode: 'insensitive' });
+    assert.deepEqual(queries.get('folder').box.is.department, { equals: 'Księgowość', mode: 'insensitive' });
+    assert.equal(queries.get('document').OR.length, 2);
+    assert.equal(queries.get('document').OR[0].box.department.equals, 'Księgowość');
+    assert.equal(queries.get('document').OR[1].folder.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR.length, 4);
+    assert.equal(queries.get('attachment').OR[0].box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR[1].folder.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR[2].document.box.department.equals, 'Księgowość');
+    assert.equal(queries.get('attachment').OR[3].document.folder.box.department.equals, 'Księgowość');
+  } finally {
+    for (const model of models) prisma[model].findMany = originals.get(model);
+  }
+});
+
+test('scopes exact box numbers to the tenant and employee department', async () => {
+  const original = prisma.box.findMany;
+  try {
+    prisma.box.findMany = async ({ where }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.deletedAt, null);
+      assert.deepEqual(where.department, { equals: 'Księgowość', mode: 'insensitive' });
+      return [{ id: 'box-1', boxNumber: 'K-2026-000030', title: 'Karton', location: null }];
+    };
+    const result = await searchService.search('tenant-a', 'K-2026-000030', {
+      types: ['box', 'folder', 'document'], canViewHr: false, limit: 10, offset: 0,
+    }, 'Księgowość');
+    assert.equal(result.results[0].id, 'box-1');
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
+test('employee context ignores a requested tenant switch and carries its department', () => {
+  const req = {
+    user: {
+      tenantId: 'tenant-a', department: 'Księgowość', roles: [RoleCode.TENANT_EMPLOYEE], permissions: [],
+    },
+    headers: { 'x-tenant-id': 'tenant-b' },
+  };
+  let nextCalled = false;
+  tenantContext(req, response(), () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+  assert.equal(req.tenantId, 'tenant-a');
+  assert.equal(req.accessDepartment, 'Księgowość');
 });
