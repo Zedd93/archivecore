@@ -3,7 +3,7 @@ import { searchService, SearchResult } from './search.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions } from '@archivecore/shared';
 
-function evidenceSearchTerm(query: string): string {
+function searchTerm(query: string): string {
   const boxNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9-])(K-\d{4}-\d+)(?![A-Za-z0-9-])/gi)]
     .map((match) => match[1].toUpperCase());
   const uniqueNumbers = new Set(boxNumbers);
@@ -15,7 +15,7 @@ export class SearchController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const query = req.query.q as string;
-      const { results } = await searchService.search(req.tenantId, evidenceSearchTerm(query), {
+      const { results } = await searchService.search(req.tenantId, searchTerm(query), {
         types: ['box', 'folder', 'document'],
         canViewHr: false,
         limit: 10,
@@ -60,7 +60,7 @@ export class SearchController {
       const typeArray = req.user!.permissions.includes(Permissions.HR_VIEW)
         ? requestedTypes
         : requestedTypes.filter((type) => type !== 'hr_folder');
-      const results = await searchService.search(req.tenantId, q as string, {
+      const results = await searchService.search(req.tenantId, typeArray.includes('box') ? searchTerm(q as string) : q as string, {
         types: typeArray,
         canViewHr: req.user!.permissions.includes(Permissions.HR_VIEW),
         limit: limit ? parseInt(limit as string) : 20,

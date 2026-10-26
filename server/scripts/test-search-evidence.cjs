@@ -96,6 +96,39 @@ test('does not guess between two different box numbers', async () => {
   }
 });
 
+test('ordinary results resolve the same box question when boxes are included', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (_tenantId, query, options) => {
+      assert.equal(query, 'K-2026-000030');
+      assert.ok(options.types.includes('box'));
+      return { total: 1, results: [] };
+    };
+    const res = response();
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: 'Gdzie jest karton K-2026-000030?' } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('a document-only filter does not resolve a box question to a box', async () => {
+  const oldSearch = searchService.search;
+  try {
+    const question = 'Gdzie jest karton K-2026-000030?';
+    searchService.search = async (_tenantId, query, options) => {
+      assert.equal(query, question);
+      assert.deepEqual(options.types, ['document']);
+      return { total: 0, results: [] };
+    };
+    const res = response();
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: question, types: 'document' } }, res, (err) => { throw err; });
+    assert.equal(res.statusCode, 200);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
 test('scopes every evidence query to the tenant and employee department', async () => {
   const models = ['box', 'folder', 'document', 'attachment'];
   const originals = new Map();
@@ -147,6 +180,25 @@ test('scopes exact box numbers to the tenant and employee department', async () 
     assert.equal(result.results[0].id, 'box-1');
   } finally {
     prisma.box.findMany = original;
+  }
+});
+
+test('an exact box number does not bypass a document-only filter', async () => {
+  const originalBox = prisma.box.findMany;
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    prisma.box.findMany = async () => { throw new Error('box search must not run'); };
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async () => [];
+    const result = await searchService.search('tenant-a', 'K-2026-000030', {
+      types: ['document'], canViewHr: false, limit: 10, offset: 0,
+    });
+    assert.deepEqual(result, { results: [], total: 0 });
+  } finally {
+    prisma.box.findMany = originalBox;
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
   }
 });
 

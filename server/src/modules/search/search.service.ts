@@ -29,7 +29,7 @@ export class SearchService {
     const trimmedQuery = query.trim();
 
     // 1. Check if query is a QR code or exact box number
-    if (trimmedQuery.startsWith('AC:') || trimmedQuery.match(/^K-\d{4}-\d+$/)) {
+    if (types.includes('box') && (trimmedQuery.startsWith('AC:') || trimmedQuery.match(/^K-\d{4}-\d+$/))) {
       const boxes = await prisma.box.findMany({
         where: {
           tenantId,
