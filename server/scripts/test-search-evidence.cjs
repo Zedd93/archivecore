@@ -390,6 +390,7 @@ test('ranks an older exact attachment filename ahead of newer partial matches wi
       assert.equal(where.OR.length, 4);
       assert.equal(where.OR[3].box.department.equals, 'Księgowość');
       assert.equal(take, 10);
+      if (where.AND[0].OR[0].ocrText?.contains) return [];
       if (where.AND[0].OR[0].fileName.equals) {
         assert.equal(where.AND[0].OR[0].fileName.equals, 'Skan.pdf');
         return [attachment('exact-scan', 'Skan.pdf')];
@@ -418,6 +419,38 @@ test('deduplicates an attachment found by both exact and partial searches', asyn
     const result = await searchService.search('tenant-a', 'Skan.pdf', { types: ['document'] });
     assert.equal(result.total, 1);
     assert.equal(result.results.length, 1);
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
+test('keeps an older OCR match ahead of newer indirect matches within the department', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    const attachment = (id, ocrText, boxTitle) => ({
+      id, fileName: `scan-${id}.pdf`, ocrText, mimeType: 'application/pdf',
+      document: null, folder: null,
+      box: { id: `box-${id}`, boxNumber: `BOX-${id}`, title: boxTitle,
+        department: 'Księgowość', status: 'active', deletedAt: null, location: null },
+    });
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.OR[3].box.department.equals, 'Księgowość');
+      assert.equal(take, 10);
+      if (where.AND[0].OR[0].fileName?.equals) return [];
+      if (where.AND[0].OR[0].ocrText?.contains) {
+        assert.equal(where.AND[0].OR[0].ocrText.contains, 'UMOWA');
+        return [attachment('older-ocr', 'Treść skanu: umowa zawarta w 2024 r.', 'Inne dokumenty')];
+      }
+      return Array.from({ length: 10 }, (_, index) =>
+        attachment(`newer-${index}`, null, 'Korespondencja - umowa klienta'));
+    };
+    const result = await searchService.search('tenant-a', 'UMOWA', { types: ['document'], limit: 10 }, 'Księgowość');
+    assert.equal(result.results[0].id, 'older-ocr');
+    assert.equal(result.total, 11);
   } finally {
     prisma.document.findMany = originalDocument;
     prisma.attachment.findMany = originalAttachment;

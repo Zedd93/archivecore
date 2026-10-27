@@ -113,7 +113,8 @@ export class SearchService {
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
       if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department, 'filename').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department, 'ocr').then(r => { results.push(...r); }));
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
@@ -362,7 +363,7 @@ export class SearchService {
     });
   }
 
-  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
+  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, match: 'all' | 'filename' | 'ocr' = 'all'): Promise<SearchResult[]> {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const attachments = await prisma.attachment.findMany({
       where: {
@@ -377,8 +378,10 @@ export class SearchService {
         } : {}),
         AND: [
           {
-            OR: exact ? [
+            OR: match === 'filename' ? [
               { fileName: { equals: query, mode: 'insensitive' } },
+            ] : match === 'ocr' ? [
+              { ocrText: { contains: query, mode: 'insensitive' } },
             ] : [
               { fileName: { contains: query, mode: 'insensitive' } },
               { ocrText: { contains: query, mode: 'insensitive' } },
@@ -424,14 +427,14 @@ export class SearchService {
         id: attachment.id,
         title: attachment.fileName,
         subtitle: `${relatedTitle} | Karton: ${box?.boxNumber || '—'} | Lokalizacja: ${location}`,
-        relevance: this.calculateRelevance(query, [
+        relevance: Math.max(this.calculateRelevance(query, [
           attachment.fileName,
           attachment.ocrText || '',
           attachment.document?.title || '',
           attachment.folder?.title || '',
           attachment.box?.title || '',
           box?.boxNumber || '',
-        ]),
+        ]), attachment.ocrText?.toLowerCase().includes(query.toLowerCase()) ? 0.8 : 0),
         metadata: {
           documentId: attachment.document?.id,
           folderId: attachment.folder?.id,
