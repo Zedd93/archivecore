@@ -334,6 +334,47 @@ test('scopes exact box numbers to the tenant and employee department', async () 
   }
 });
 
+test('ranks an older exact box title ahead of newer partial matches within the department', async () => {
+  const original = prisma.box.findMany;
+  try {
+    const box = (id, title) => ({
+      id, boxNumber: `BOX-${id}`, title, description: null, notes: null,
+      docType: null, status: 'active', location: null,
+    });
+    prisma.box.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.deletedAt, null);
+      assert.deepEqual(where.department, { equals: 'Księgowość', mode: 'insensitive' });
+      assert.equal(take, 10);
+      if (where.OR[0].title?.equals) {
+        assert.equal(where.OR[0].title.equals, 'Karton 1');
+        return [box('exact', 'Karton 1')];
+      }
+      return Array.from({ length: 10 }, (_, index) => box(`newer-${index}`, `Karton 1${index}`));
+    };
+    const result = await searchService.search('tenant-a', 'Karton 1', { types: ['box'], limit: 10 }, 'Księgowość');
+    assert.equal(result.results[0].id, 'exact');
+    assert.equal(result.total, 11);
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
+test('deduplicates a box found by both exact and partial searches', async () => {
+  const original = prisma.box.findMany;
+  try {
+    prisma.box.findMany = async () => [{
+      id: 'box-1', boxNumber: 'BOX-1', title: 'Karton 1', description: null,
+      notes: null, docType: null, status: 'active', location: null,
+    }];
+    const result = await searchService.search('tenant-a', 'Karton 1', { types: ['box'] });
+    assert.equal(result.total, 1);
+    assert.equal(result.results.length, 1);
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
 test('ranks an older exact folder number ahead of newer partial matches within the department', async () => {
   const original = prisma.folder.findMany;
   try {

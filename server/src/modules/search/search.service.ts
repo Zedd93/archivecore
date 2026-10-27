@@ -102,6 +102,7 @@ export class SearchService {
     const searchPromises: Promise<void>[] = [];
 
     if (types.includes('box')) {
+      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
       searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('folder')) {
@@ -132,14 +133,17 @@ export class SearchService {
     return { results: paginated, total };
   }
 
-  private async searchBoxes(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+  private async searchBoxes(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
     // Use pg_trgm similarity via raw query for better relevance scoring
     const boxes = await prisma.box.findMany({
       where: {
         tenantId,
         deletedAt: null,
         ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
-        OR: [
+        OR: exact ? [
+          { title: { equals: query, mode: 'insensitive' } },
+          { boxNumber: { equals: query, mode: 'insensitive' } },
+        ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { boxNumber: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
