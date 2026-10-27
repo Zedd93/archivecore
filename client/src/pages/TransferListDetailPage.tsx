@@ -96,7 +96,6 @@ export default function TransferListDetailPage() {
   const [bulkAction, setBulkAction] = useState<'none' | 'assignBox' | 'storageLocation' | 'disposalDate'>('none');
   const [bulkBoxNumber, setBulkBoxNumber] = useState('');
   const [bulkStorageLocationId, setBulkStorageLocationId] = useState('');
-  const [bulkStorageLocation, setBulkStorageLocation] = useState('');
   const [bulkDisposalDate, setBulkDisposalDate] = useState('');
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
@@ -136,7 +135,7 @@ export default function TransferListDetailPage() {
     'transfer-list-items',
     `/transfer-lists/${id}/items`,
     itemParams,
-    { enabled: !!id }
+    { enabled: !!id, staleTime: 0 }
   );
 
   const addItemMutation = useCreate(`/transfer-lists/${id}/items`, ['transfer-list-items', 'transfer-list'], t('transferLists.detail.itemAdded'));
@@ -144,7 +143,7 @@ export default function TransferListDetailPage() {
 
   const items = itemsResult?.data || [];
   const itemsPagination = (itemsResult as any)?.pagination;
-  const getItemStorageLocation = (item: any) => item.storageLocation || item.box?.location?.fullPath || '';
+  const getItemStorageLocation = (item: any) => item.boxId ? item.box?.location?.fullPath || '' : item.storageLocation || '';
   const getItemSourceBoxNumber = (item: any) => item.sourceBoxNumber || item.box?.boxNumber || '';
   const handlePageSizeChange = (limit: number) => {
     setPageSize(limit);
@@ -232,7 +231,7 @@ export default function TransferListDetailPage() {
       categoryCode: item.categoryCode || 'B10',
       retentionPolicyId: item.folder?.retentionPolicyId || '',
       folderCount: item.folderCount || 1,
-      storageLocation: item.storageLocation || '',
+      storageLocation: getItemStorageLocation(item),
       disposalOrTransferDate: item.disposalOrTransferDate ? item.disposalOrTransferDate.split('T')[0] : '',
       notes: item.notes || '',
       boxNumber: getItemSourceBoxNumber(item),
@@ -430,7 +429,7 @@ export default function TransferListDetailPage() {
   };
 
   const handleBulkUpdateStorageLocation = async () => {
-    if (!bulkStorageLocationId || !bulkStorageLocation.trim()) {
+    if (!bulkStorageLocationId) {
       toast.error(t('transferLists.detail.enterStorageLocation'));
       return;
     }
@@ -438,13 +437,12 @@ export default function TransferListDetailPage() {
     try {
       const { data } = await api.post(`/transfer-lists/${id}/items/bulk-storage-location`, {
         itemIds: Array.from(selectedItemIds),
-        storageLocation: bulkStorageLocation.trim(),
+        locationId: bulkStorageLocationId,
       });
       toast.success(t('transferLists.detail.storageLocationUpdated', { count: data.data.updated }));
       setSelectedItemIds(new Set());
       setBulkAction('none');
       setBulkStorageLocationId('');
-      setBulkStorageLocation('');
       refetchItems();
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, t('transferLists.detail.storageLocationError')));
@@ -694,13 +692,15 @@ export default function TransferListDetailPage() {
                 <Box size={14} />
                 {t('transferLists.detail.assignBox')}
               </button>
-              <button
-                onClick={() => { setBulkAction('storageLocation'); setBulkStorageLocationId(''); setBulkStorageLocation(''); }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors"
-              >
-                <MapPin size={14} />
-                {t('transferLists.detail.assignStorageLocation')}
-              </button>
+              {hasPermission('box.move') && (
+                <button
+                  onClick={() => { setBulkAction('storageLocation'); setBulkStorageLocationId(''); }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors"
+                >
+                  <MapPin size={14} />
+                  {t('transferLists.detail.assignStorageLocation')}
+                </button>
+              )}
               <button
                 onClick={() => { setBulkAction('disposalDate'); setBulkDisposalDate(''); }}
                 className="bg-sky-600 hover:bg-sky-700 text-white text-sm py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors"
@@ -755,27 +755,27 @@ export default function TransferListDetailPage() {
 
           {bulkAction === 'storageLocation' && (
             <div className="mt-3 pt-3 border-t border-indigo-200 flex flex-wrap items-end gap-3">
+              <p className="w-full text-xs text-indigo-700">{t('transferLists.detail.storageLocationMovesBoxes')}</p>
               <div className="flex-1 min-w-[240px] max-w-xl">
                 <label htmlFor="bulk-storage-location" className="text-xs font-medium text-indigo-700 mb-1 block">{t('transferLists.detail.storageLocation')}</label>
                 <LocationPicker
                   id="bulk-storage-location"
                   value={bulkStorageLocationId}
                   onChange={setBulkStorageLocationId}
-                  onLocationChange={(location) => setBulkStorageLocation(location?.fullPath || '')}
                   placeholder={t('transferLists.detail.storageLocationPlaceholder')}
                   excludeTypes={['warehouse', 'zone', 'rack']}
                 />
               </div>
               <button
                 onClick={handleBulkUpdateStorageLocation}
-                disabled={bulkProcessing || !bulkStorageLocationId || !bulkStorageLocation.trim()}
+                disabled={bulkProcessing || !bulkStorageLocationId}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
               >
                 {bulkProcessing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {t('transferLists.detail.assign')}
               </button>
               <button
-                onClick={() => { setBulkAction('none'); setBulkStorageLocationId(''); setBulkStorageLocation(''); }}
+                onClick={() => { setBulkAction('none'); setBulkStorageLocationId(''); }}
                 className="btn-secondary text-sm py-2 px-3"
               >
                 {t('common.cancel')}
@@ -1101,9 +1101,11 @@ export default function TransferListDetailPage() {
               type="text"
               value={form.storageLocation}
               onChange={(e) => updateFormField('storageLocation', e.target.value)}
+              disabled={Boolean(editingItem?.boxId)}
               className="input-field"
               placeholder={t('transferLists.detail.storageLocationPlaceholder')}
             />
+            {editingItem?.boxId && <p className="mt-1 text-xs text-gray-500">{t('transferLists.detail.storageLocationFromBox')}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

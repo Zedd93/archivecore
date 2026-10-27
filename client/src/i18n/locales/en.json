@@ -727,6 +727,8 @@
       "dateRangeMissing": "Dates not entered",
       "folderCount": "Number of folders",
       "storageLocation": "Archive storage location",
+      "storageLocationFromBox": "The folder's location comes from its box. Move the box to change it.",
+      "storageLocationMovesBoxes": "Entire boxes and all their folders will move. Assign a box to any unboxed items first.",
       "storageLocationPlaceholder": "e.g. Warehouse A, Rack 3, Shelf 2",
       "destructionDate": "Destruction / AP transfer date",
       "boxOptional": "Box in list (optional)",

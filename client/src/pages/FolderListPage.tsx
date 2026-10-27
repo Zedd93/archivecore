@@ -30,7 +30,7 @@ export default function FolderListPage() {
   if (source) params.source = source;
   if (dates) params.dates = dates;
 
-  const { data, isLoading } = useList('folders', '/folders', params);
+  const { data, isLoading } = useList('folders', '/folders', params, { staleTime: 0 });
   const folders = data?.data || [];
   const pagination = data?.meta;
 

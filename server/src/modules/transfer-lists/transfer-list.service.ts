@@ -3,6 +3,8 @@ import { prisma } from '../../config/database';
 import { generateQrData, normalizeOptionalText } from '@archivecore/shared';
 import { Prisma } from '@prisma/client';
 import { jrwaSuggestionService } from '../retention/jrwa-suggestion.service';
+import { boxService } from '../boxes/box.service';
+import { effectiveStorageLocation } from './storage-location';
 
 const TRANSFER_LIST_ITEM_BOX_SELECT = {
   id: true,
@@ -189,7 +191,13 @@ export class TransferListService {
       },
     });
     if (!list) throw Object.assign(new Error('Spis zdawczo-odbiorczy nie znaleziony'), { statusCode: 404 });
-    return list;
+    return {
+      ...list,
+      items: list.items.map((item) => ({
+        ...item,
+        storageLocation: effectiveStorageLocation(item),
+      })),
+    };
   }
 
   // ─── Create new transfer list ──────────────────────────
@@ -635,22 +643,23 @@ export class TransferListService {
   }
 
   // ─── Bulk update storage location ────────────────────
-  async bulkUpdateStorageLocation(listId: string, tenantId: string, itemIds: string[], storageLocation: string) {
+  async bulkUpdateStorageLocation(listId: string, tenantId: string, userId: string, itemIds: string[], locationId: string) {
     const list = await this.getById(listId, tenantId);
     this.ensureDraftStatus(list);
-
-    const normalizedLocation = storageLocation.trim();
-    const result = await prisma.transferListItem.updateMany({
-      where: {
-        id: { in: itemIds },
-        transferListId: listId,
-      },
-      data: {
-        storageLocation: normalizedLocation,
-      },
+    const uniqueItemIds = [...new Set(itemIds)];
+    const items = await prisma.transferListItem.findMany({
+      where: { id: { in: uniqueItemIds }, transferListId: listId },
+      select: { id: true, boxId: true },
     });
-
-    return { updated: result.count, storageLocation: normalizedLocation };
+    if (items.length !== uniqueItemIds.length) {
+      throw Object.assign(new Error('Nie znaleziono wszystkich wybranych pozycji spisu'), { statusCode: 404 });
+    }
+    if (items.some((item) => !item.boxId)) {
+      throw Object.assign(new Error('Najpierw przypisz karton do każdej wybranej teczki. Lokalizacja teczki wynika z lokalizacji kartonu.'), { statusCode: 409 });
+    }
+    const boxIds = [...new Set(items.map((item) => item.boxId!))];
+    await boxService.bulkMove(boxIds, tenantId, locationId, userId);
+    return { updated: items.length, movedBoxes: boxIds.length };
   }
 
   // ─── Bulk update destruction / AP transfer date ───────
@@ -710,7 +719,8 @@ export class TransferListService {
       where.OR = [
         { folderSignature: { contains: filters.search, mode: 'insensitive' } },
         { folderTitle: { contains: filters.search, mode: 'insensitive' } },
-        { storageLocation: { contains: filters.search, mode: 'insensitive' } },
+        { boxId: null, storageLocation: { contains: filters.search, mode: 'insensitive' } },
+        { box: { location: { is: { fullPath: { contains: filters.search, mode: 'insensitive' } } } } },
         { sourceBoxNumber: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
@@ -733,7 +743,10 @@ export class TransferListService {
       prisma.transferListItem.count({ where }),
     ]);
 
-    return { data, total };
+    return {
+      data: data.map((item) => ({ ...item, storageLocation: effectiveStorageLocation(item) })),
+      total,
+    };
   }
 }
 

@@ -123,6 +123,7 @@ router.post('/:id/items/bulk-assign-box',
 router.post('/:id/items/bulk-storage-location',
   ...auth,
   requirePermission(Permissions.TRANSFER_LIST_WRITE),
+  requirePermission(Permissions.BOX_MOVE),
   validate(bulkUpdateStorageLocationSchema),
   auditLog('transfer_list_item', 'transfer_list_item.bulk_storage_location'),
   (req, res, next) => transferListController.bulkUpdateStorageLocation(req, res, next)

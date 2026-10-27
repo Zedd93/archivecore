@@ -26,7 +26,7 @@ export class FolderService {
           { box: { is: { location: { is: { fullPath: { contains: search, mode: 'insensitive' } } } } } },
           { transferListItem: { is: { categoryCode: { contains: search, mode: 'insensitive' } } } },
           { transferListItem: { is: { sourceBoxNumber: { contains: search, mode: 'insensitive' } } } },
-          { transferListItem: { is: { storageLocation: { contains: search, mode: 'insensitive' } } } },
+          { boxId: null, transferListItem: { is: { storageLocation: { contains: search, mode: 'insensitive' } } } },
           { transferListItem: { is: { transferList: { listNumber: { contains: search, mode: 'insensitive' } } } } },
           { transferListItem: { is: { transferList: { title: { contains: search, mode: 'insensitive' } } } } },
         ],
@@ -74,7 +74,7 @@ export class FolderService {
         categoryCode: sourceItem?.categoryCode ?? null,
         box: folder.box,
         sourceBoxNumber: sourceItem?.sourceBoxNumber ?? null,
-        locationPath: folder.box?.location?.fullPath ?? sourceItem?.storageLocation ?? null,
+        locationPath: folder.boxId ? folder.box?.location?.fullPath ?? null : sourceItem?.storageLocation ?? null,
         transferList: sourceItem?.transferList ?? null,
         transferListItemId: sourceItem?.id ?? null,
         dateRangeUnknown: sourceItem?.dateRangeUnknown ?? false,
@@ -124,6 +124,7 @@ export class FolderService {
             id: true,
             categoryCode: true,
             sourceBoxNumber: true,
+            storageLocation: true,
             dateRangeUnknown: true,
             transferList: { select: { id: true, listNumber: true, title: true, status: true, legalHold: true } },
           },
@@ -139,7 +140,10 @@ export class FolderService {
       },
     });
     if (!folder) throw Object.assign(new Error('Teczka nie znaleziona'), { statusCode: 404 });
-    return folder;
+    return {
+      ...folder,
+      locationPath: folder.boxId ? folder.box?.location?.fullPath ?? null : folder.transferListItem?.storageLocation ?? null,
+    };
   }
 
   async create(data: any, tenantId: string) {

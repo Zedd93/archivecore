@@ -53,7 +53,7 @@ export const bulkAssignBoxSchema = z.object({
 
 export const bulkUpdateStorageLocationSchema = z.object({
   itemIds: z.array(z.string().uuid()).min(1, 'At least one item ID required'),
-  storageLocation: z.string().min(1, 'Lokalizacja jest wymagana').max(500),
+  locationId: z.string().uuid('Nieprawidłowa lokalizacja'),
 });
 
 export const bulkUpdateDisposalDateSchema = z.object({

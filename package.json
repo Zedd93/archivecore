@@ -49,6 +49,7 @@
     "test:content-access-audit": "node --import tsx --test server/scripts/test-content-access-audit.cjs",
     "test:required-mfa": "node --import tsx --test server/scripts/test-required-mfa.cjs",
     "test:transfer-list-mapping": "node --import tsx --test server/scripts/test-transfer-list-mapping.cjs",
+    "test:transfer-list-location": "node --import tsx --test server/scripts/test-transfer-list-location.mjs",
     "test:missing-date-filters": "node --import tsx --test server/scripts/test-missing-date-filters.cjs",
     "test:table-import-mapping": "node --import tsx --test server/scripts/test-table-import-mapping.cjs",
     "test:scan-import": "node --import tsx --test server/scripts/test-scan-import.cjs",

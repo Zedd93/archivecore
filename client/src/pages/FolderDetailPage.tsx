@@ -27,6 +27,7 @@ interface FolderDetail {
   dateTo: string | null;
   retentionPolicy: { jrwaCode: string | null; name: string; archivalCategory: string | null; retentionYears: number | null; seriesLegalHold: boolean; jrwaVersion: { label: string } | null } | null;
   box: { id: string; boxNumber: string; legalHold: boolean; location: { fullPath: string } | null } | null;
+  locationPath: string | null;
   transferListItem: {
     id: string;
     categoryCode: string | null;
@@ -57,6 +58,7 @@ export default function FolderDetailPage() {
       return data.data as FolderDetail;
     },
     enabled: Boolean(id),
+    staleTime: 0,
   });
   useEffect(() => setAttachmentPage(1), [id]);
   const { data: attachments, isLoading: loadingAttachments, error: attachmentsError, refetch: refetchAttachments } = useQuery({
@@ -186,7 +188,7 @@ export default function FolderDetailPage() {
               <Box size={18} className="mt-0.5 text-primary-600 shrink-0" />
               <span className="min-w-0"><strong className="block text-primary-700">{folder.box.boxNumber}</strong><span className="text-sm text-gray-600 break-words">{folder.box.location?.fullPath || t('folders.noLocation')}</span></span>
             </Link>
-          ) : <p className="text-sm text-gray-500">{t('folders.noBox')}</p>}
+          ) : <p className="text-sm text-gray-500">{t('folders.noBox')}{folder.locationPath && <span className="block mt-1 break-words">{t('transferLists.detail.storageLocation')}: {folder.locationPath}</span>}</p>}
           {transferList && (
             <Link to={`/transfer-lists/${transferList.id}`} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 hover:border-primary-300">
               <FileSpreadsheet size={18} className="mt-0.5 text-indigo-600 shrink-0" />

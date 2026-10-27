@@ -727,6 +727,8 @@
       "dateRangeMissing": "Daty nieuzupełnione",
       "folderCount": "Liczba teczek",
       "storageLocation": "Miejsce przechowywania akt w archiwum",
+      "storageLocationFromBox": "Lokalizacja teczki wynika z kartonu. Aby ją zmienić, przenieś karton.",
+      "storageLocationMovesBoxes": "Przeniesione zostaną całe kartony wraz ze wszystkimi teczkami. Pozycje bez kartonu trzeba najpierw przypisać do kartonu.",
       "storageLocationPlaceholder": "np. Magazyn A, Regał 3, Półka 2",
       "destructionDate": "Data zniszczenia / przekazania do AP",
       "boxOptional": "Karton w spisie (opcjonalne)",
