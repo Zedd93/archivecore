@@ -334,6 +334,75 @@ test('scopes exact box numbers to the tenant and employee department', async () 
   }
 });
 
+test('ranks an older exact folder number ahead of newer partial matches within the department', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    const folder = (id, folderNumber) => ({
+      id, folderNumber, title: 'Regulaminy', description: null, docType: null,
+      status: 'active', boxId: null, box: null, custodyEvents: [], transferListItem: null,
+    });
+    prisma.folder.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(where.box.is.department, { equals: 'Księgowość', mode: 'insensitive' });
+      assert.equal(take, 10);
+      if (where.OR[0].folderNumber?.equals) {
+        assert.equal(where.OR[0].folderNumber.equals, 'SMG/1473');
+        return [folder('exact-folder', 'SMG/1473')];
+      }
+      return Array.from({ length: 10 }, (_, index) => folder(`newer-${index}`, `SMG/14730${index}`));
+    };
+    const result = await searchService.search('tenant-a', 'SMG/1473', { types: ['folder'], limit: 10 }, 'Księgowość');
+    assert.equal(result.results[0].id, 'exact-folder');
+    assert.equal(result.total, 11);
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
+test('ranks an older exact document title ahead of newer partial matches within the department', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    const document = (id, title) => ({
+      id, title, description: null, docType: null, docDate: null,
+      folder: null, box: null, custodyEvents: [], attachments: [],
+    });
+    prisma.document.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.OR[0].folder.box.department.equals, 'Księgowość');
+      assert.equal(where.OR[1].box.department.equals, 'Księgowość');
+      assert.equal(take, 10);
+      if (where.AND[0].OR[0].title.equals) {
+        assert.equal(where.AND[0].OR[0].title.equals, 'Umowa dzierżawy 2024');
+        return [document('exact-document', 'Umowa dzierżawy 2024')];
+      }
+      return Array.from({ length: 10 }, (_, index) => document(`newer-${index}`, `Umowa dzierżawy 2024 - kopia ${index}`));
+    };
+    prisma.attachment.findMany = async () => [];
+    const result = await searchService.search('tenant-a', 'Umowa dzierżawy 2024', { types: ['document'], limit: 10 }, 'Księgowość');
+    assert.equal(result.results[0].id, 'exact-document');
+    assert.equal(result.total, 11);
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
+test('deduplicates records found by both exact and partial searches', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    prisma.folder.findMany = async () => [{
+      id: 'folder-1', folderNumber: 'SMG/1473', title: 'Regulaminy', description: null,
+      docType: null, status: 'active', boxId: null, box: null, custodyEvents: [], transferListItem: null,
+    }];
+    const result = await searchService.search('tenant-a', 'SMG/1473', { types: ['folder'] });
+    assert.equal(result.total, 1);
+    assert.equal(result.results.length, 1);
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
 test('shows the current box shelf for a folder, separately from its transfer-list box number', async () => {
   const original = prisma.folder.findMany;
   try {

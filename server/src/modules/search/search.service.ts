@@ -105,9 +105,11 @@ export class SearchService {
       searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('folder')) {
+      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
+      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
       if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
@@ -121,8 +123,11 @@ export class SearchService {
     // Sort by relevance
     results.sort((a, b) => b.relevance - a.relevance);
 
-    const total = results.length;
-    const paginated = results.slice(offset, offset + limit);
+    const uniqueResults = results.filter((result, index) => results.findIndex(candidate =>
+      candidate.type === result.type && candidate.id === result.id && candidate.metadata.source === result.metadata.source
+    ) === index);
+    const total = uniqueResults.length;
+    const paginated = uniqueResults.slice(offset, offset + limit);
 
     return { results: paginated, total };
   }
@@ -160,12 +165,15 @@ export class SearchService {
     }));
   }
 
-  private async searchFolders(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+  private async searchFolders(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
     const folders = await prisma.folder.findMany({
       where: {
         tenantId,
         ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}),
-        OR: [
+        OR: exact ? [
+          { folderNumber: { equals: query, mode: 'insensitive' } },
+          { title: { equals: query, mode: 'insensitive' } },
+        ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { folderNumber: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
@@ -230,7 +238,7 @@ export class SearchService {
     });
   }
 
-  private async searchDocuments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+  private async searchDocuments(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const documents = await prisma.document.findMany({
       where: {
@@ -239,7 +247,9 @@ export class SearchService {
           { folderId: { not: null }, folder: { box: { department: departmentFilter } } },
           { folderId: null, box: { department: departmentFilter } },
         ] } : {}),
-        AND: [{ OR: [
+        AND: [{ OR: exact ? [
+          { title: { equals: query, mode: 'insensitive' } },
+        ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
