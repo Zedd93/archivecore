@@ -405,6 +405,36 @@ test('continues ranked search beyond the first page without skipping scoped reco
   }
 });
 
+test('continues scoped search beyond the first hundred records with fixed page size', async () => {
+  const original = prisma.box.findMany;
+  try {
+    const boxes = Array.from({ length: 125 }, (_, index) => ({
+      id: `box-${String(index + 1).padStart(3, '0')}`,
+      boxNumber: `BOX-${index + 1}`,
+      title: `Karton testowy ${index + 1}`,
+      description: null, notes: null, docType: null, status: 'active', location: null,
+    }));
+    prisma.box.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(where.department, { equals: 'Księgowość', mode: 'insensitive' });
+      if (where.OR[0].title?.equals) return [];
+      return boxes.slice(0, take);
+    };
+    const pages = [];
+    for (let offset = 0; offset < 125; offset += 20) {
+      pages.push(await searchService.search('tenant-a', 'Karton testowy', {
+        types: ['box'], limit: 20, offset,
+      }, 'Księgowość'));
+    }
+    assert.deepEqual(pages.flatMap((page) => page.results.map((result) => result.id)), boxes.map((box) => box.id));
+    assert.equal(pages[4].hasMore, true);
+    assert.equal(pages[5].hasMore, true);
+    assert.equal(pages[6].hasMore, false);
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
 test('ranks an older exact attachment filename ahead of newer partial matches within the department', async () => {
   const originalDocument = prisma.document.findMany;
   const originalAttachment = prisma.attachment.findMany;

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { AxiosError } from 'axios';
@@ -143,16 +143,19 @@ export function useDelete(
 }
 
 // ─── Search hook ────────────────────────────────────────
-export function useSearch(query: string, types?: string[], limit = 20) {
-  return useQuery({
-    queryKey: ['search', query, types, limit],
-    queryFn: async () => {
-      const params: any = { q: query, limit };
+export function useSearch(query: string, types: string[] | undefined, userId: string | undefined, tenantId: string | null) {
+  const pageSize = 20;
+  return useInfiniteQuery({
+    queryKey: ['search', userId, tenantId, query, types],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const params: any = { q: query, limit: pageSize, offset: pageParam };
       if (types?.length) params.types = types.join(',');
       const { data } = await api.get('/search', { params });
       return data.data as { results: any[]; total: number; hasMore: boolean };
     },
-    enabled: query.length >= 2,
+    getNextPageParam: (lastPage, pages) => lastPage.hasMore ? pages.length * pageSize : undefined,
+    enabled: Boolean(userId && tenantId && query.trim().length >= 2),
   });
 }
 

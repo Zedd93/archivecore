@@ -37,13 +37,11 @@ export default function SearchPage() {
   const [orderItems, setOrderItems] = useState<OrderDraftItem[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
-  const [resultLimit, setResultLimit] = useState(20);
 
   useEffect(() => {
     const nextQuery = searchParams.get('q') || '';
     setQuery((current) => current === nextQuery ? current : nextQuery);
     setDebouncedQuery((current) => current === nextQuery ? current : nextQuery);
-    setResultLimit(20);
   }, [searchParams]);
 
   // Debounce search
@@ -56,7 +54,11 @@ export default function SearchPage() {
     return () => clearTimeout(timer);
   }, [query, setSearchParams]);
 
-  const { data: results, isLoading, isError } = useSearch(debouncedQuery, selectedTypes.length > 0 ? selectedTypes : undefined, resultLimit);
+  const { data: resultPages, isLoading, isError, hasNextPage, isFetchingNextPage, fetchNextPage } = useSearch(
+    debouncedQuery, selectedTypes.length > 0 ? selectedTypes : undefined,
+    user?.id, user?.tenantId || localStorage.getItem('tenantId'),
+  );
+  const results = resultPages?.pages.flatMap((page) => page.results);
   const evidence = useMutation({
     mutationFn: async (term: string) => {
       const response = await api.get<{ data: { sources: EvidenceSource[] } }>('/search/evidence', { params: { q: term } });
@@ -67,7 +69,6 @@ export default function SearchPage() {
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
-    setResultLimit(20);
   };
 
   const toggleOrderItem = (item: OrderDraftItem) => {
@@ -133,7 +134,7 @@ export default function SearchPage() {
           <input
             type="text"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setResultLimit(20); }}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder={t('search.placeholder')}
             className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white"
             autoFocus
@@ -239,9 +240,9 @@ export default function SearchPage() {
       {results && (
         <div className="space-y-2">
           <p className="text-sm text-gray-500">
-            {t('search.resultsShown', { count: results.results.length })}
+            {t('search.resultsShown', { count: results.length })}
           </p>
-          {results.results.map((result: any) => {
+          {results.map((result: any) => {
             const orderItem = toOrderDraftItem(result);
             const selected = orderItem && orderItems.some((item) => item.type === orderItem.type && item.id === orderItem.id);
             return <div key={`${result.type}-${result.id}`} className="card flex flex-col sm:flex-row sm:items-start gap-3 hover:border-primary-300 hover:shadow-md transition-all p-4">
@@ -285,13 +286,14 @@ export default function SearchPage() {
             </div>;
           })}
 
-          {results.hasMore && (
-            <button type="button" className="btn-secondary mx-auto" onClick={() => setResultLimit((current) => current + 20)}>
+          {hasNextPage && (
+            <button type="button" className="btn-secondary mx-auto" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              {isFetchingNextPage ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
               {t('search.showMore')}
             </button>
           )}
 
-          {results.results.length === 0 && debouncedQuery.length >= 2 && (
+          {results.length === 0 && debouncedQuery.length >= 2 && (
             <div className="text-center py-12 text-gray-500">
               <Search size={48} className="mx-auto mb-4 text-gray-300" />
               <p>{t('search.noResults', { query: debouncedQuery })}</p>
