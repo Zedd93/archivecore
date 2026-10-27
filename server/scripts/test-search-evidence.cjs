@@ -435,6 +435,86 @@ test('continues scoped search beyond the first hundred records with fixed page s
   }
 });
 
+test('keeps an older prefix box match on the first page without repeating it on the next', async () => {
+  const original = prisma.box.findMany;
+  try {
+    const box = (id, title) => ({
+      id, boxNumber: `BOX-${id}`, title, description: null, notes: null,
+      docType: null, status: 'active', location: null,
+    });
+    const partial = Array.from({ length: 35 }, (_, index) => box(`new-${String(index).padStart(2, '0')}`, `Archiwum Projekt ${index}`));
+    const strong = box('old-prefix', 'Projekt celny');
+    prisma.box.findMany = async ({ where, take, orderBy }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(where.department, { equals: 'Księgowość', mode: 'insensitive' });
+      assert.deepEqual(orderBy, { id: 'asc' });
+      if (where.OR[0].title?.equals) return [];
+      if (where.OR[0].title?.startsWith) return [strong];
+      return partial.slice(0, take);
+    };
+    const first = await searchService.search('tenant-a', 'Projekt', { types: ['box'], limit: 10 }, 'Księgowość');
+    const second = await searchService.search('tenant-a', 'Projekt', { types: ['box'], limit: 10, offset: 10 }, 'Księgowość');
+    assert.deepEqual(first.results.map((result) => result.id), ['old-prefix', ...partial.slice(0, 9).map((item) => item.id)]);
+    assert.deepEqual(second.results.map((result) => result.id), partial.slice(9, 19).map((item) => item.id));
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
+test('prioritizes an older prefix folder title over newer partial matches', async () => {
+  const original = prisma.folder.findMany;
+  try {
+    const folder = (id, title) => ({
+      id, title, folderNumber: `F-${id}`, description: null, docType: null,
+      status: 'active', boxId: null, box: null, custodyEvents: [], transferListItem: null,
+    });
+    const partial = Array.from({ length: 30 }, (_, index) => folder(`new-${String(index).padStart(2, '0')}`, `Archiwum Projekt ${index}`));
+    prisma.folder.findMany = async ({ where, take, orderBy }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(orderBy, { id: 'asc' });
+      if (where.OR[0].folderNumber?.equals) return [];
+      if (where.OR[0].title?.startsWith) return [folder('old-prefix', 'Projekt celny')];
+      return partial.slice(0, take);
+    };
+    const first = await searchService.search('tenant-a', 'Projekt', { types: ['folder'], limit: 10 });
+    const second = await searchService.search('tenant-a', 'Projekt', { types: ['folder'], limit: 10, offset: 10 });
+    assert.equal(first.results[0].id, 'old-prefix');
+    assert.deepEqual(second.results.map((result) => result.id), partial.slice(9, 19).map((item) => item.id));
+  } finally {
+    prisma.folder.findMany = original;
+  }
+});
+
+test('prioritizes an older prefix scan name without leaking another department', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    const scan = (id, fileName) => ({
+      id, fileName, ocrText: null, mimeType: 'application/pdf', document: null, folder: null,
+      box: { id: `box-${id}`, boxNumber: `BOX-${id}`, title: 'Karton',
+        department: 'Księgowość', status: 'active', deletedAt: null, location: null },
+    });
+    const partial = Array.from({ length: 30 }, (_, index) => scan(`new-${String(index).padStart(2, '0')}`, `Kopia plan.pdf ${index}`));
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async ({ where, take, orderBy }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.OR[3].box.department.equals, 'Księgowość');
+      assert.deepEqual(orderBy, { id: 'asc' });
+      if (where.AND[0].OR[0].fileName?.equals) return [];
+      if (where.AND[0].OR[0].fileName?.startsWith) return [scan('old-prefix', 'plan.pdf oryginal')];
+      if (where.AND[0].OR[0].ocrText?.contains) return [];
+      return partial.slice(0, take);
+    };
+    const first = await searchService.search('tenant-a', 'plan.pdf', { types: ['document'], limit: 10 }, 'Księgowość');
+    const second = await searchService.search('tenant-a', 'plan.pdf', { types: ['document'], limit: 10, offset: 10 }, 'Księgowość');
+    assert.equal(first.results[0].id, 'old-prefix');
+    assert.deepEqual(second.results.map((result) => result.id), partial.slice(9, 19).map((item) => item.id));
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
 test('ranks an older exact attachment filename ahead of newer partial matches within the department', async () => {
   const originalDocument = prisma.document.findMany;
   const originalAttachment = prisma.attachment.findMany;

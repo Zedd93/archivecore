@@ -99,27 +99,39 @@ export class SearchService {
       }
     }
 
-    // 2. Fuzzy text search using pg_trgm
+    // Fetch each relevance tier separately so older strong matches are not hidden by a newer batch.
     const searchPromises: Promise<void>[] = [];
 
     if (types.includes('box')) {
-      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
       searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('folder')) {
-      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
-      if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
+      if (options.canViewHr) {
+        searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit, 'exact').then(r => { results.push(...r); }));
+        searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit, 'prefix').then(r => { results.push(...r); }));
+        searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
+      }
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename_prefix').then(r => { results.push(...r); }));
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'ocr').then(r => { results.push(...r); }));
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
-      if (options.canViewHr) searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
+      if (options.canViewHr) {
+        searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, fetchLimit, 'exact').then(r => { results.push(...r); }));
+        searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, fetchLimit, 'prefix').then(r => { results.push(...r); }));
+        searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
+      }
     }
 
     await Promise.all(searchPromises);
@@ -130,25 +142,35 @@ export class SearchService {
       || a.id.localeCompare(b.id)
       || String(a.metadata.source || '').localeCompare(String(b.metadata.source || '')));
 
-    const uniqueResults = results.filter((result, index) => results.findIndex(candidate =>
-      candidate.type === result.type && candidate.id === result.id && candidate.metadata.source === result.metadata.source
-    ) === index);
+    const seen = new Set<string>();
+    const uniqueResults = results.filter((result) => {
+      const key = `${result.type}:${result.id}:${result.metadata.source || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     const total = uniqueResults.length;
     const paginated = uniqueResults.slice(offset, offset + limit);
 
     return { results: paginated, total, hasMore: total > offset + limit };
   }
 
-  private async searchBoxes(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
+  private async searchBoxes(tenantId: string, query: string, limit: number, department?: string, mode: 'exact' | 'prefix' | 'partial' = 'partial'): Promise<SearchResult[]> {
     // Use pg_trgm similarity via raw query for better relevance scoring
     const boxes = await prisma.box.findMany({
       where: {
         tenantId,
         deletedAt: null,
         ...(department ? { department: { equals: department, mode: 'insensitive' } } : {}),
-        OR: exact ? [
+        OR: mode === 'exact' ? [
           { title: { equals: query, mode: 'insensitive' } },
           { boxNumber: { equals: query, mode: 'insensitive' } },
+        ] : mode === 'prefix' ? [
+          { title: { startsWith: query, mode: 'insensitive' } },
+          { boxNumber: { startsWith: query, mode: 'insensitive' } },
+          { description: { startsWith: query, mode: 'insensitive' } },
+          { notes: { startsWith: query, mode: 'insensitive' } },
+          { docType: { startsWith: query, mode: 'insensitive' } },
         ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { boxNumber: { contains: query, mode: 'insensitive' } },
@@ -162,7 +184,7 @@ export class SearchService {
         location: { select: { fullPath: true } },
       },
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { id: 'asc' },
     });
 
     return boxes.map(box => ({
@@ -175,14 +197,19 @@ export class SearchService {
     }));
   }
 
-  private async searchFolders(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
+  private async searchFolders(tenantId: string, query: string, limit: number, department?: string, mode: 'exact' | 'prefix' | 'partial' = 'partial'): Promise<SearchResult[]> {
     const folders = await prisma.folder.findMany({
       where: {
         tenantId,
         ...(department ? { box: { is: { department: { equals: department, mode: 'insensitive' } } } } : {}),
-        OR: exact ? [
+        OR: mode === 'exact' ? [
           { folderNumber: { equals: query, mode: 'insensitive' } },
           { title: { equals: query, mode: 'insensitive' } },
+        ] : mode === 'prefix' ? [
+          { title: { startsWith: query, mode: 'insensitive' } },
+          { folderNumber: { startsWith: query, mode: 'insensitive' } },
+          { description: { startsWith: query, mode: 'insensitive' } },
+          { docType: { startsWith: query, mode: 'insensitive' } },
         ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { folderNumber: { contains: query, mode: 'insensitive' } },
@@ -206,7 +233,7 @@ export class SearchService {
         },
       },
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { id: 'asc' },
     });
 
     return folders.map(folder => {
@@ -249,7 +276,7 @@ export class SearchService {
     });
   }
 
-  private async searchDocuments(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
+  private async searchDocuments(tenantId: string, query: string, limit: number, department?: string, mode: 'exact' | 'prefix' | 'partial' = 'partial'): Promise<SearchResult[]> {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const documents = await prisma.document.findMany({
       where: {
@@ -258,8 +285,12 @@ export class SearchService {
           { folderId: { not: null }, folder: { box: { department: departmentFilter } } },
           { folderId: null, box: { department: departmentFilter } },
         ] } : {}),
-        AND: [{ OR: exact ? [
+        AND: [{ OR: mode === 'exact' ? [
           { title: { equals: query, mode: 'insensitive' } },
+        ] : mode === 'prefix' ? [
+          { title: { startsWith: query, mode: 'insensitive' } },
+          { description: { startsWith: query, mode: 'insensitive' } },
+          { docType: { startsWith: query, mode: 'insensitive' } },
         ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
@@ -279,7 +310,7 @@ export class SearchService {
         attachments: { select: { fileName: true, ocrText: true }, take: 3 },
       },
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { id: 'asc' },
     });
 
     return documents.map(doc => ({
@@ -305,11 +336,17 @@ export class SearchService {
     }));
   }
 
-  private async searchHRDocuments(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
+  private async searchHRDocuments(tenantId: string, query: string, limit: number, mode: 'exact' | 'prefix' | 'partial' = 'partial'): Promise<SearchResult[]> {
     const documents = await prisma.hRDocument.findMany({
       where: {
         tenantId,
-        OR: [
+        OR: mode === 'exact' ? [
+          { title: { equals: query, mode: 'insensitive' } },
+        ] : mode === 'prefix' ? [
+          { title: { startsWith: query, mode: 'insensitive' } },
+          { docType: { startsWith: query, mode: 'insensitive' } },
+          { notes: { startsWith: query, mode: 'insensitive' } },
+        ] : [
           { title: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
           { notes: { contains: query, mode: 'insensitive' } },
@@ -336,7 +373,7 @@ export class SearchService {
         },
       },
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { id: 'asc' },
     });
 
     return documents.map(doc => {
@@ -368,7 +405,7 @@ export class SearchService {
     });
   }
 
-  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, match: 'all' | 'filename' | 'ocr' = 'all'): Promise<SearchResult[]> {
+  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, match: 'all' | 'filename' | 'filename_prefix' | 'ocr' = 'all'): Promise<SearchResult[]> {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const attachments = await prisma.attachment.findMany({
       where: {
@@ -385,6 +422,8 @@ export class SearchService {
           {
             OR: match === 'filename' ? [
               { fileName: { equals: query, mode: 'insensitive' } },
+            ] : match === 'filename_prefix' ? [
+              { fileName: { startsWith: query, mode: 'insensitive' } },
             ] : match === 'ocr' ? [
               { ocrText: { contains: query, mode: 'insensitive' } },
             ] : [
@@ -416,7 +455,7 @@ export class SearchService {
         } },
       },
       take: limit,
-      orderBy: { uploadedAt: 'desc' },
+      orderBy: { id: 'asc' },
     });
 
     return attachments.map(attachment => {
@@ -453,11 +492,20 @@ export class SearchService {
     });
   }
 
-  private async searchHRFolders(tenantId: string, query: string, limit: number): Promise<SearchResult[]> {
+  private async searchHRFolders(tenantId: string, query: string, limit: number, mode: 'exact' | 'prefix' | 'partial' = 'partial'): Promise<SearchResult[]> {
     const folders = await prisma.hRFolder.findMany({
       where: {
         tenantId,
-        OR: [
+        OR: mode === 'exact' ? [
+          { employeeFirstName: { equals: query, mode: 'insensitive' } },
+          { employeeLastName: { equals: query, mode: 'insensitive' } },
+        ] : mode === 'prefix' ? [
+          { employeeFirstName: { startsWith: query, mode: 'insensitive' } },
+          { employeeLastName: { startsWith: query, mode: 'insensitive' } },
+          { department: { startsWith: query, mode: 'insensitive' } },
+          { position: { startsWith: query, mode: 'insensitive' } },
+          { notes: { startsWith: query, mode: 'insensitive' } },
+        ] : [
           { employeeFirstName: { contains: query, mode: 'insensitive' } },
           { employeeLastName: { contains: query, mode: 'insensitive' } },
           { department: { contains: query, mode: 'insensitive' } },
@@ -479,7 +527,7 @@ export class SearchService {
         parts: { select: { description: true }, take: 5 },
       },
       take: limit,
-      orderBy: { employeeLastName: 'asc' },
+      orderBy: { id: 'asc' },
     });
 
     return folders.map(folder => ({
