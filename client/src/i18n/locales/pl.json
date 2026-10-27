@@ -1766,6 +1766,7 @@
     "needsAttention": "Wymagają uwagi!",
     "allGood": "Wszystko w normie",
     "occupancy": "Zajętość: {{occupancy}}%",
+    "occupancyUnknown": "Zajętość: brak określonej pojemności",
     "activeUsers": "Aktywni użytkownicy",
     "quickActions": "Szybkie akcje",
     "newBox": "Nowy karton",

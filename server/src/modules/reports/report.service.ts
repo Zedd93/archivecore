@@ -7,6 +7,7 @@ import {
   ORDER_STATUS_LABELS,
 } from '@archivecore/shared';
 import { findTenantOverCapacityLocations } from './storage-health';
+import { summarizeDashboardLocations } from './dashboard-locations';
 
 interface SlaBreakdownRow {
   tenantId: string;
@@ -59,7 +60,7 @@ export interface DashboardKPIs {
   activeOrders: number;
   overdueOrders: number;
   totalLocations: number;
-  occupancyRate: number;
+  occupancyRate: number | null;
   pendingDisposal: number;
   totalUsers: number;
 }
@@ -95,6 +96,7 @@ export class ReportService {
       activeOrders,
       overdueOrders,
       locations,
+      boxesByLocation,
       pendingDisposal,
       totalUsers,
     ] = await Promise.all([
@@ -110,16 +112,22 @@ export class ReportService {
         where: { tenantId, status: { notIn: ['completed', 'cancelled'] }, slaDeadline: { lt: new Date() } },
       }),
       prisma.location.findMany({
-        where: { tenantId, type: 'slot' },
-        select: { capacity: true, currentCount: true },
+        where: { tenantId, isActive: true },
+        select: { id: true, parentId: true, capacity: true },
+      }),
+      prisma.box.groupBy({
+        by: ['locationId'],
+        where: { tenantId, locationId: { not: null }, deletedAt: null, status: { not: 'disposed' } },
+        _count: true,
       }),
       prisma.box.count({ where: { tenantId, status: { in: ['pending_disposal', 'approved_disposal'] }, deletedAt: null } }),
       prisma.user.count({ where: { tenantId, isActive: true } }),
     ]);
 
-    const totalCapacity = locations.reduce((sum, l) => sum + (l.capacity || 0), 0);
-    const totalOccupied = locations.reduce((sum, l) => sum + l.currentCount, 0);
-    const occupancyRate = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
+    const directCounts = new Map(boxesByLocation
+      .filter((row) => row.locationId)
+      .map((row) => [row.locationId!, row._count]));
+    const locationStats = summarizeDashboardLocations(locations, directCounts);
 
     return {
       totalBoxes,
@@ -129,8 +137,7 @@ export class ReportService {
       totalHRFolders,
       activeOrders,
       overdueOrders,
-      totalLocations: locations.length,
-      occupancyRate,
+      ...locationStats,
       pendingDisposal,
       totalUsers,
     };

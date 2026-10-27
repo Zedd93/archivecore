@@ -161,7 +161,9 @@ export default function DashboardPage() {
           value={kpis?.totalLocations ?? 0}
           icon={<MapPin size={24} />}
           color="blue"
-          change={t('dashboard.occupancy', { occupancy: kpis?.occupancyRate ?? 0 })}
+          change={kpis?.occupancyRate == null
+            ? t('dashboard.occupancyUnknown')
+            : t('dashboard.occupancy', { occupancy: kpis.occupancyRate })}
         />
         <KPICard
           title={t('boxes.statusForDestruction')}
