@@ -288,7 +288,7 @@ test('scopes every evidence query to the tenant and employee department', async 
       types: ['box', 'folder', 'document'], canViewHr: false, limit: 10, offset: 0,
     }, 'Księgowość');
 
-    assert.deepEqual(result, { results: [], total: 0 });
+    assert.deepEqual(result, { results: [], total: 0, hasMore: false });
     assert.deepEqual([...queries.keys()].sort(), models.sort());
     for (const where of queries.values()) assert.equal(where.tenantId, 'tenant-a');
     assert.equal(queries.get('box').deletedAt, null);
@@ -345,7 +345,7 @@ test('ranks an older exact box title ahead of newer partial matches within the d
       assert.equal(where.tenantId, 'tenant-a');
       assert.equal(where.deletedAt, null);
       assert.deepEqual(where.department, { equals: 'Księgowość', mode: 'insensitive' });
-      assert.equal(take, 10);
+      assert.equal(take, 11);
       if (where.OR[0].title?.equals) {
         assert.equal(where.OR[0].title.equals, 'Karton 1');
         return [box('exact', 'Karton 1')];
@@ -375,6 +375,36 @@ test('deduplicates a box found by both exact and partial searches', async () => 
   }
 });
 
+test('continues ranked search beyond the first page without skipping scoped records', async () => {
+  const original = prisma.box.findMany;
+  try {
+    const boxes = Array.from({ length: 35 }, (_, index) => ({
+      id: `box-${String(index + 1).padStart(2, '0')}`,
+      boxNumber: `BOX-${index + 1}`,
+      title: `Karton testowy ${index + 1}`,
+      description: null, notes: null, docType: null, status: 'active', location: null,
+    }));
+    prisma.box.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.deletedAt, null);
+      assert.deepEqual(where.department, { equals: 'Księgowość', mode: 'insensitive' });
+      if (where.OR[0].title?.equals) return [];
+      return boxes.slice(0, take);
+    };
+    const first = await searchService.search('tenant-a', 'Karton testowy', { types: ['box'], limit: 10 }, 'Księgowość');
+    const second = await searchService.search('tenant-a', 'Karton testowy', { types: ['box'], limit: 10, offset: 10 }, 'Księgowość');
+    const last = await searchService.search('tenant-a', 'Karton testowy', { types: ['box'], limit: 10, offset: 30 }, 'Księgowość');
+    assert.deepEqual(first.results.map((result) => result.id), boxes.slice(0, 10).map((box) => box.id));
+    assert.deepEqual(second.results.map((result) => result.id), boxes.slice(10, 20).map((box) => box.id));
+    assert.deepEqual(last.results.map((result) => result.id), boxes.slice(30).map((box) => box.id));
+    assert.equal(first.hasMore, true);
+    assert.equal(second.hasMore, true);
+    assert.equal(last.hasMore, false);
+  } finally {
+    prisma.box.findMany = original;
+  }
+});
+
 test('ranks an older exact attachment filename ahead of newer partial matches within the department', async () => {
   const originalDocument = prisma.document.findMany;
   const originalAttachment = prisma.attachment.findMany;
@@ -389,7 +419,7 @@ test('ranks an older exact attachment filename ahead of newer partial matches wi
       assert.equal(where.tenantId, 'tenant-a');
       assert.equal(where.OR.length, 4);
       assert.equal(where.OR[3].box.department.equals, 'Księgowość');
-      assert.equal(take, 10);
+      assert.equal(take, 11);
       if (where.AND[0].OR[0].ocrText?.contains) return [];
       if (where.AND[0].OR[0].fileName.equals) {
         assert.equal(where.AND[0].OR[0].fileName.equals, 'Skan.pdf');
@@ -439,7 +469,7 @@ test('keeps an older OCR match ahead of newer indirect matches within the depart
     prisma.attachment.findMany = async ({ where, take }) => {
       assert.equal(where.tenantId, 'tenant-a');
       assert.equal(where.OR[3].box.department.equals, 'Księgowość');
-      assert.equal(take, 10);
+      assert.equal(take, 11);
       if (where.AND[0].OR[0].fileName?.equals) return [];
       if (where.AND[0].OR[0].ocrText?.contains) {
         assert.equal(where.AND[0].OR[0].ocrText.contains, 'UMOWA');
@@ -467,7 +497,7 @@ test('ranks an older exact folder number ahead of newer partial matches within t
     prisma.folder.findMany = async ({ where, take }) => {
       assert.equal(where.tenantId, 'tenant-a');
       assert.deepEqual(where.box.is.department, { equals: 'Księgowość', mode: 'insensitive' });
-      assert.equal(take, 10);
+      assert.equal(take, 11);
       if (where.OR[0].folderNumber?.equals) {
         assert.equal(where.OR[0].folderNumber.equals, 'SMG/1473');
         return [folder('exact-folder', 'SMG/1473')];
@@ -494,7 +524,7 @@ test('ranks an older exact document title ahead of newer partial matches within 
       assert.equal(where.tenantId, 'tenant-a');
       assert.equal(where.OR[0].folder.box.department.equals, 'Księgowość');
       assert.equal(where.OR[1].box.department.equals, 'Księgowość');
-      assert.equal(take, 10);
+      assert.equal(take, 11);
       if (where.AND[0].OR[0].title.equals) {
         assert.equal(where.AND[0].OR[0].title.equals, 'Umowa dzierżawy 2024');
         return [document('exact-document', 'Umowa dzierżawy 2024')];
@@ -709,7 +739,7 @@ test('an exact box number does not bypass a document-only filter', async () => {
     const result = await searchService.search('tenant-a', 'K-2026-000030', {
       types: ['document'], canViewHr: false, limit: 10, offset: 0,
     });
-    assert.deepEqual(result, { results: [], total: 0 });
+    assert.deepEqual(result, { results: [], total: 0, hasMore: false });
   } finally {
     prisma.box.findMany = originalBox;
     prisma.document.findMany = originalDocument;

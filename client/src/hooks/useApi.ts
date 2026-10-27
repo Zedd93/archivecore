@@ -143,14 +143,14 @@ export function useDelete(
 }
 
 // ─── Search hook ────────────────────────────────────────
-export function useSearch(query: string, types?: string[]) {
+export function useSearch(query: string, types?: string[], limit = 20) {
   return useQuery({
-    queryKey: ['search', query, types],
+    queryKey: ['search', query, types, limit],
     queryFn: async () => {
-      const params: any = { q: query };
+      const params: any = { q: query, limit };
       if (types?.length) params.types = types.join(',');
       const { data } = await api.get('/search', { params });
-      return data.data as { results: any[]; total: number };
+      return data.data as { results: any[]; total: number; hasMore: boolean };
     },
     enabled: query.length >= 2,
   });

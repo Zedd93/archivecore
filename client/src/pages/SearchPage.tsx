@@ -37,11 +37,13 @@ export default function SearchPage() {
   const [orderItems, setOrderItems] = useState<OrderDraftItem[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [resultLimit, setResultLimit] = useState(20);
 
   useEffect(() => {
     const nextQuery = searchParams.get('q') || '';
     setQuery((current) => current === nextQuery ? current : nextQuery);
     setDebouncedQuery((current) => current === nextQuery ? current : nextQuery);
+    setResultLimit(20);
   }, [searchParams]);
 
   // Debounce search
@@ -54,7 +56,7 @@ export default function SearchPage() {
     return () => clearTimeout(timer);
   }, [query, setSearchParams]);
 
-  const { data: results, isLoading } = useSearch(debouncedQuery, selectedTypes.length > 0 ? selectedTypes : undefined);
+  const { data: results, isLoading, isError } = useSearch(debouncedQuery, selectedTypes.length > 0 ? selectedTypes : undefined, resultLimit);
   const evidence = useMutation({
     mutationFn: async (term: string) => {
       const response = await api.get<{ data: { sources: EvidenceSource[] } }>('/search/evidence', { params: { q: term } });
@@ -65,6 +67,7 @@ export default function SearchPage() {
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+    setResultLimit(20);
   };
 
   const toggleOrderItem = (item: OrderDraftItem) => {
@@ -130,7 +133,7 @@ export default function SearchPage() {
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setResultLimit(20); }}
             placeholder={t('search.placeholder')}
             className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white"
             autoFocus
@@ -217,6 +220,9 @@ export default function SearchPage() {
           <Loader2 className="animate-spin text-primary-500" size={32} />
         </div>
       )}
+      {isError && debouncedQuery.length >= 2 && (
+        <p role="alert" className="text-sm text-red-700">{t('search.resultsError')}</p>
+      )}
 
       {hasPermission(Permissions.ORDER_CREATE) && orderItems.length > 0 && (
         <div className="card flex flex-wrap items-center justify-between gap-3">
@@ -233,7 +239,7 @@ export default function SearchPage() {
       {results && (
         <div className="space-y-2">
           <p className="text-sm text-gray-500">
-            {t('search.resultsCount', { count: results.total, item: results.total === 1 ? t('search.resultSingular') : t('search.resultPlural') })}
+            {t('search.resultsShown', { count: results.results.length })}
           </p>
           {results.results.map((result: any) => {
             const orderItem = toOrderDraftItem(result);
@@ -279,7 +285,13 @@ export default function SearchPage() {
             </div>;
           })}
 
-          {results.total === 0 && debouncedQuery.length >= 2 && (
+          {results.hasMore && (
+            <button type="button" className="btn-secondary mx-auto" onClick={() => setResultLimit((current) => current + 20)}>
+              {t('search.showMore')}
+            </button>
+          )}
+
+          {results.results.length === 0 && debouncedQuery.length >= 2 && (
             <div className="text-center py-12 text-gray-500">
               <Search size={48} className="mx-auto mb-4 text-gray-300" />
               <p>{t('search.noResults', { query: debouncedQuery })}</p>

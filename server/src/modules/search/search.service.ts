@@ -55,9 +55,10 @@ export class SearchService {
     canViewHr?: boolean;
     limit?: number;
     offset?: number;
-  } = {}, department?: string): Promise<{ results: SearchResult[]; total: number }> {
+  } = {}, department?: string): Promise<{ results: SearchResult[]; total: number; hasMore: boolean }> {
     const limit = options.limit || 20;
     const offset = options.offset || 0;
+    const fetchLimit = offset + limit + 1;
     const types = options.types || ['box', 'folder', 'document', 'hr_folder'];
     const results: SearchResult[] = [];
     const trimmedQuery = query.trim();
@@ -94,7 +95,7 @@ export class SearchService {
       }
 
       if (results.length > 0) {
-        return { results, total: results.length };
+        return { results: results.slice(offset, offset + limit), total: results.length, hasMore: false };
       }
     }
 
@@ -102,29 +103,32 @@ export class SearchService {
     const searchPromises: Promise<void>[] = [];
 
     if (types.includes('box')) {
-      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('folder')) {
-      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
-      if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department, 'filename').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department, 'ocr').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, true).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
+      if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'ocr').then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
-      if (options.canViewHr) searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      if (options.canViewHr) searchPromises.push(this.searchHRFolders(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
     }
 
     await Promise.all(searchPromises);
 
     // Sort by relevance
-    results.sort((a, b) => b.relevance - a.relevance);
+    results.sort((a, b) => b.relevance - a.relevance
+      || a.type.localeCompare(b.type)
+      || a.id.localeCompare(b.id)
+      || String(a.metadata.source || '').localeCompare(String(b.metadata.source || '')));
 
     const uniqueResults = results.filter((result, index) => results.findIndex(candidate =>
       candidate.type === result.type && candidate.id === result.id && candidate.metadata.source === result.metadata.source
@@ -132,7 +136,7 @@ export class SearchService {
     const total = uniqueResults.length;
     const paginated = uniqueResults.slice(offset, offset + limit);
 
-    return { results: paginated, total };
+    return { results: paginated, total, hasMore: total > offset + limit };
   }
 
   private async searchBoxes(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
