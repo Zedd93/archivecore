@@ -113,6 +113,7 @@ export class SearchService {
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
       searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
       if (options.canViewHr) searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, limit).then(r => { results.push(...r); }));
+      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department, true).then(r => { results.push(...r); }));
       searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, limit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('hr_folder')) {
@@ -361,7 +362,7 @@ export class SearchService {
     });
   }
 
-  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string): Promise<SearchResult[]> {
+  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, exact = false): Promise<SearchResult[]> {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
     const attachments = await prisma.attachment.findMany({
       where: {
@@ -376,7 +377,9 @@ export class SearchService {
         } : {}),
         AND: [
           {
-            OR: [
+            OR: exact ? [
+              { fileName: { equals: query, mode: 'insensitive' } },
+            ] : [
               { fileName: { contains: query, mode: 'insensitive' } },
               { ocrText: { contains: query, mode: 'insensitive' } },
               { document: { title: { contains: query, mode: 'insensitive' } } },

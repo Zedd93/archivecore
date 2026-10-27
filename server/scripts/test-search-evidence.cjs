@@ -375,6 +375,55 @@ test('deduplicates a box found by both exact and partial searches', async () => 
   }
 });
 
+test('ranks an older exact attachment filename ahead of newer partial matches within the department', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    const attachment = (id, fileName) => ({
+      id, fileName, ocrText: null, mimeType: 'application/pdf', document: null,
+      folder: null, box: { id: 'box-1', boxNumber: 'K-2026-000001', title: 'Karton',
+        department: 'Księgowość', status: 'active', deletedAt: null, location: null },
+    });
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async ({ where, take }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.equal(where.OR.length, 4);
+      assert.equal(where.OR[3].box.department.equals, 'Księgowość');
+      assert.equal(take, 10);
+      if (where.AND[0].OR[0].fileName.equals) {
+        assert.equal(where.AND[0].OR[0].fileName.equals, 'Skan.pdf');
+        return [attachment('exact-scan', 'Skan.pdf')];
+      }
+      return Array.from({ length: 10 }, (_, index) => attachment(`newer-${index}`, `Skan.pdf - kopia ${index}`));
+    };
+    const result = await searchService.search('tenant-a', 'Skan.pdf', { types: ['document'], limit: 10 }, 'Księgowość');
+    assert.equal(result.results[0].id, 'exact-scan');
+    assert.equal(result.results[0].metadata.source, 'attachment');
+    assert.equal(result.total, 11);
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
+test('deduplicates an attachment found by both exact and partial searches', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async () => [{
+      id: 'scan-1', fileName: 'Skan.pdf', ocrText: null, mimeType: 'application/pdf',
+      document: null, folder: null, box: null,
+    }];
+    const result = await searchService.search('tenant-a', 'Skan.pdf', { types: ['document'] });
+    assert.equal(result.total, 1);
+    assert.equal(result.results.length, 1);
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
 test('ranks an older exact folder number ahead of newer partial matches within the department', async () => {
   const original = prisma.folder.findMany;
   try {
