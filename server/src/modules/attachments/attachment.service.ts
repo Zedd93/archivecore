@@ -6,14 +6,17 @@ import { Prisma } from '@prisma/client';
 import { createPeselRedactedCopy } from './pdf-redaction.service';
 
 export class AttachmentService {
-  private accessWhere(tenantId: string, department?: string): Prisma.AttachmentWhereInput {
+  private accessWhere(tenantId: string, department?: string, canViewHr = false): Prisma.AttachmentWhereInput {
+    const departmentFilter = { equals: department, mode: 'insensitive' as const };
     return {
       tenantId,
+      ...(!canViewHr ? { hrDocuments: { none: {} } } : {}),
       ...(department ? {
         OR: [
-          { box: { department: { equals: department, mode: 'insensitive' } } },
-          { folder: { box: { department: { equals: department, mode: 'insensitive' } } } },
-          { document: { box: { department: { equals: department, mode: 'insensitive' } } } },
+          { documentId: { not: null }, document: { folderId: { not: null }, folder: { box: { department: departmentFilter } } } },
+          { documentId: { not: null }, document: { folderId: null, box: { department: departmentFilter } } },
+          { documentId: null, folderId: { not: null }, folder: { box: { department: departmentFilter } } },
+          { documentId: null, folderId: null, box: { department: departmentFilter } },
         ],
       } : {}),
     };
@@ -58,9 +61,9 @@ export class AttachmentService {
     };
   }
 
-  async getById(id: string, tenantId: string, department?: string) {
+  async getById(id: string, tenantId: string, department?: string, canViewHr = false) {
     const attachment = await prisma.attachment.findFirst({
-      where: { id, ...this.accessWhere(tenantId, department) },
+      where: { id, ...this.accessWhere(tenantId, department, canViewHr) },
       include: {
         uploader: { select: { id: true, firstName: true, lastName: true } },
         document: { select: { id: true, title: true } },
@@ -72,22 +75,22 @@ export class AttachmentService {
     return attachment;
   }
 
-  async download(id: string, tenantId: string, department?: string) {
-    const attachment = await this.getById(id, tenantId, department);
+  async download(id: string, tenantId: string, department?: string, canViewHr = false) {
+    const attachment = await this.getById(id, tenantId, department, canViewHr);
     const buffer = await downloadFile(attachment.filePath);
     return { attachment, buffer };
   }
 
-  async downloadPeselRedactedCopy(id: string, tenantId: string, department?: string) {
-    const { attachment, buffer } = await this.download(id, tenantId, department);
+  async downloadPeselRedactedCopy(id: string, tenantId: string, department?: string, canViewHr = false) {
+    const { attachment, buffer } = await this.download(id, tenantId, department, canViewHr);
     if (attachment.mimeType !== 'application/pdf' || buffer.subarray(0, 5).toString() !== '%PDF-') {
       throw Object.assign(new Error('Kopia z zakrytym PESEL jest dostępna tylko dla plików PDF'), { statusCode: 400 });
     }
     return { attachment, ...await createPeselRedactedCopy(buffer) };
   }
 
-  async list(tenantId: string, filters: any, skip: number, take: number, department?: string) {
-    const where: Prisma.AttachmentWhereInput = this.accessWhere(tenantId, department);
+  async list(tenantId: string, filters: any, skip: number, take: number, department?: string, canViewHr = false) {
+    const where: Prisma.AttachmentWhereInput = this.accessWhere(tenantId, department, canViewHr);
     if (filters.boxId) where.boxId = filters.boxId;
     if (filters.folderId) where.folderId = filters.folderId;
     if (filters.documentId) where.documentId = filters.documentId;

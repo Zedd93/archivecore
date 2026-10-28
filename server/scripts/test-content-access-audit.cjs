@@ -6,6 +6,7 @@ const { attachmentController } = require('../dist/modules/attachments/attachment
 const { attachmentService } = require('../dist/modules/attachments/attachment.service');
 const { documentController } = require('../dist/modules/documents/document.controller');
 const { documentService } = require('../dist/modules/documents/document.service');
+const { Permissions } = require('@archivecore/shared');
 
 const tenantId = '1f11541e-00c7-4bbd-8059-bbb7d189a013';
 const userId = '0ab09ae1-75cb-4e65-9342-8b613196271f';
@@ -14,7 +15,7 @@ const attachmentId = 'db7c235e-661f-4bcb-bbf7-6c3d414a5d46';
 
 function request(id = attachmentId) {
   return {
-    tenantId, user: { userId }, accessDepartment: 'Księgowość', params: { id },
+  tenantId, user: { userId, permissions: [] }, accessDepartment: 'Księgowość', params: { id },
     headers: { 'user-agent': 'audit-test', 'x-forwarded-for': '198.51.100.10' },
     ips: [], ip: '127.0.0.1', socket: { remoteAddress: '127.0.0.1' },
   };
@@ -50,8 +51,8 @@ test('attachment bytes are sent only after authorized lookup and durable audit',
   const events = [];
   const bytes = Buffer.from('%PDF-test');
   try {
-    attachmentService.download = async (id, tenant, department) => {
-      assert.deepEqual([id, tenant, department], [attachmentId, tenantId, 'Księgowość']);
+    attachmentService.download = async (id, tenant, department, canViewHr) => {
+      assert.deepEqual([id, tenant, department, canViewHr], [attachmentId, tenantId, 'Księgowość', false]);
       events.push('loaded');
       return { attachment: { id, documentId, folderId: null, boxId: null, fileName: 'umowa Łódź.pdf', mimeType: 'application/pdf', filePath: 'secret/path' }, buffer: bytes };
     };
@@ -81,6 +82,71 @@ test('attachment bytes are sent only after authorized lookup and durable audit',
     assert.equal(auditCalls, 0);
     assert.equal(denied.body, undefined);
   } finally {
+    attachmentService.download = oldDownload;
+    prisma.auditLog.create = oldAudit;
+  }
+});
+
+test('attachment reads use the linked record department and hide HR files without HR access', async () => {
+  const oldFindFirst = prisma.attachment.findFirst;
+  const oldFindMany = prisma.attachment.findMany;
+  const oldCount = prisma.attachment.count;
+  const queries = [];
+  try {
+    prisma.attachment.findFirst = async ({ where }) => { queries.push(where); return null; };
+    prisma.attachment.findMany = async ({ where }) => { queries.push(where); return []; };
+    prisma.attachment.count = async ({ where }) => { queries.push(where); return 0; };
+
+    await assert.rejects(attachmentService.getById(attachmentId, tenantId, 'Księgowość'), { statusCode: 404 });
+    await attachmentService.list(tenantId, {}, 0, 20, 'Księgowość');
+    assert.equal(queries.length, 3);
+    for (const where of queries) {
+      assert.equal(where.tenantId, tenantId);
+      assert.deepEqual(where.hrDocuments, { none: {} });
+      assert.equal(where.OR.length, 4);
+      assert.deepEqual(where.OR[0].documentId, { not: null });
+      assert.equal(where.OR[0].document.folder.box.department.equals, 'Księgowość');
+      assert.equal(where.OR[1].document.box.department.equals, 'Księgowość');
+      assert.deepEqual(where.OR[2].documentId, null);
+      assert.equal(where.OR[2].folder.box.department.equals, 'Księgowość');
+      assert.deepEqual(where.OR[3].folderId, null);
+      assert.equal(where.OR[3].box.department.equals, 'Księgowość');
+    }
+
+    await assert.rejects(attachmentService.getById(attachmentId, tenantId, undefined, true), { statusCode: 404 });
+    assert.equal(queries[3].hrDocuments, undefined);
+    assert.equal(queries[3].OR, undefined);
+  } finally {
+    prisma.attachment.findFirst = oldFindFirst;
+    prisma.attachment.findMany = oldFindMany;
+    prisma.attachment.count = oldCount;
+  }
+});
+
+test('attachment controllers forward HR access to both list and download', async () => {
+  const oldList = attachmentService.list;
+  const oldDownload = attachmentService.download;
+  const oldAudit = prisma.auditLog.create;
+  try {
+    attachmentService.list = async (_tenant, _filters, _skip, _take, department, canViewHr) => {
+      assert.equal(department, 'Księgowość');
+      assert.equal(canViewHr, true);
+      return { data: [], total: 0 };
+    };
+    attachmentService.download = async (_id, _tenant, department, canViewHr) => {
+      assert.equal(department, 'Księgowość');
+      assert.equal(canViewHr, true);
+      return { attachment: { id: attachmentId, fileName: 'test.pdf', mimeType: 'application/pdf' }, buffer: Buffer.from('%PDF-test') };
+    };
+    prisma.auditLog.create = async () => ({});
+    const req = { ...request(), user: { userId, permissions: [Permissions.HR_VIEW] }, query: {} };
+    let error;
+    await attachmentController.list(req, response(), (err) => { error = err; });
+    assert.equal(error, undefined);
+    await attachmentController.download(req, response(), (err) => { error = err; });
+    assert.equal(error, undefined);
+  } finally {
+    attachmentService.list = oldList;
     attachmentService.download = oldDownload;
     prisma.auditLog.create = oldAudit;
   }

@@ -295,8 +295,8 @@ export class SearchService {
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { docType: { contains: query, mode: 'insensitive' } },
-          { attachments: { some: { fileName: { contains: query, mode: 'insensitive' } } } },
-          { attachments: { some: { ocrText: { contains: query, mode: 'insensitive' } } } },
+          { attachments: { some: { fileName: { contains: query, mode: 'insensitive' }, hrDocuments: { none: {} } } } },
+          { attachments: { some: { ocrText: { contains: query, mode: 'insensitive' }, hrDocuments: { none: {} } } } },
         ] }],
       },
       include: {
@@ -307,7 +307,7 @@ export class SearchService {
         } },
         box: { select: { id: true, boxNumber: true, department: true, status: true, deletedAt: true, location: { select: { fullPath: true } } } },
         custodyEvents: { select: { eventType: true }, orderBy: { eventAt: 'desc' }, take: 1 },
-        attachments: { select: { fileName: true, ocrText: true }, take: 3 },
+        attachments: { where: { hrDocuments: { none: {} } }, select: { fileName: true, ocrText: true }, take: 3 },
       },
       take: limit,
       orderBy: { id: 'asc' },
@@ -410,6 +410,7 @@ export class SearchService {
     const attachments = await prisma.attachment.findMany({
       where: {
         tenantId,
+        hrDocuments: { none: {} },
         ...(department ? {
           OR: [
             { documentId: { not: null }, document: { folderId: { not: null }, folder: { box: { department: departmentFilter } } } },

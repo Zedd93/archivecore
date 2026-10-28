@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { attachmentService } from './attachment.service';
 import { scanBatchService } from './scan-batch.service';
 import { successResponse, paginatedResponse, errorResponse } from '../../utils/response';
+import { Permissions } from '@archivecore/shared';
 import { parsePagination } from '../../utils/pagination';
 import { recordContentAccess } from '../../middleware/audit';
 
@@ -50,7 +51,7 @@ export class AttachmentController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { skip, take, page, limit } = parsePagination(req.query as any);
-      const { data, total } = await attachmentService.list(req.tenantId, req.query, skip, take, req.accessDepartment || undefined);
+      const { data, total } = await attachmentService.list(req.tenantId, req.query, skip, take, req.accessDepartment || undefined, req.user!.permissions.includes(Permissions.HR_VIEW));
       return paginatedResponse(res, data, total, page, limit);
     } catch (err) { next(err); }
   }
@@ -58,7 +59,7 @@ export class AttachmentController {
   async download(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
-      const { attachment, buffer } = await attachmentService.download(req.params.id, req.tenantId, req.accessDepartment || undefined);
+      const { attachment, buffer } = await attachmentService.download(req.params.id, req.tenantId, req.accessDepartment || undefined, req.user!.permissions.includes(Permissions.HR_VIEW));
       await recordContentAccess(req, 'attachment.download', 'attachment', attachment.id, {
         ...(attachment.documentId ? { documentId: attachment.documentId } : {}),
         ...(attachment.folderId ? { folderId: attachment.folderId } : {}),
@@ -77,7 +78,7 @@ export class AttachmentController {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
       const { attachment, buffer, redactedCount } = await attachmentService.downloadPeselRedactedCopy(
-        req.params.id, req.tenantId, req.accessDepartment || undefined,
+        req.params.id, req.tenantId, req.accessDepartment || undefined, req.user!.permissions.includes(Permissions.HR_VIEW),
       );
       await recordContentAccess(req, 'attachment.redacted_copy.download', 'attachment', attachment.id, {
         redactedCount: String(redactedCount),

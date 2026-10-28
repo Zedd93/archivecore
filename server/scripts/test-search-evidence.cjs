@@ -300,6 +300,7 @@ test('scopes every evidence query to the tenant and employee department', async 
     assert.equal(queries.get('document').OR[1].folderId, null);
     assert.equal(queries.get('document').OR[1].box.department.equals, 'Księgowość');
     assert.equal(queries.get('attachment').OR.length, 4);
+    assert.deepEqual(queries.get('attachment').hrDocuments, { none: {} });
     assert.deepEqual(queries.get('attachment').OR[0].documentId, { not: null });
     assert.deepEqual(queries.get('attachment').OR[0].document.folderId, { not: null });
     assert.equal(queries.get('attachment').OR[0].document.folder.box.department.equals, 'Księgowość');
@@ -318,6 +319,22 @@ test('scopes every evidence query to the tenant and employee department', async 
     ]);
   } finally {
     for (const model of models) prisma[model].findMany = originals.get(model);
+  }
+});
+
+test('ordinary document search does not match or score HR-linked attachment text', async () => {
+  const original = prisma.document.findMany;
+  try {
+    prisma.document.findMany = async ({ where, include }) => {
+      const match = where.AND[0].OR;
+      assert.deepEqual(match[3].attachments.some.hrDocuments, { none: {} });
+      assert.deepEqual(match[4].attachments.some.hrDocuments, { none: {} });
+      assert.deepEqual(include.attachments.where.hrDocuments, { none: {} });
+      return [];
+    };
+    await searchService.searchDocuments('tenant-a', 'umowa', 10, undefined, 'partial');
+  } finally {
+    prisma.document.findMany = original;
   }
 });
 
