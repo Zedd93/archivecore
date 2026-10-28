@@ -41,7 +41,8 @@ export class AttachmentController {
           documentId: req.body.documentId,
           folderId: req.body.folderId,
           boxId: req.body.boxId,
-        }
+        },
+        req.accessDepartment || undefined,
       );
       return successResponse(res, attachment, 201);
     } catch (err) { next(err); }

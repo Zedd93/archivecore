@@ -3,7 +3,14 @@ import { uploadFile, downloadFile, deleteFile } from '../../config/minio';
 import crypto from 'crypto';
 import path from 'path';
 import { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { createPeselRedactedCopy } from './pdf-redaction.service';
+
+const uploadRelationsSchema = z.object({
+  documentId: z.preprocess(value => value === '' ? undefined : value, z.string().uuid().optional()),
+  folderId: z.preprocess(value => value === '' ? undefined : value, z.string().uuid().optional()),
+  boxId: z.preprocess(value => value === '' ? undefined : value, z.string().uuid().optional()),
+});
 
 export class AttachmentService {
   private accessWhere(tenantId: string, department?: string, canViewHr = false): Prisma.AttachmentWhereInput {
@@ -26,8 +33,10 @@ export class AttachmentService {
     file: Express.Multer.File,
     tenantId: string,
     userId: string,
-    relations: { documentId?: string; folderId?: string; boxId?: string }
+    relations: { documentId?: string; folderId?: string; boxId?: string },
+    department?: string,
   ) {
+    const target = await this.validateUploadRelations(tenantId, relations, department);
     // Generate file path: tenantId/year/month/uuid.ext
     const ext = path.extname(file.originalname);
     const now = new Date();
@@ -43,9 +52,9 @@ export class AttachmentService {
     const attachment = await prisma.attachment.create({
       data: {
         tenantId,
-        documentId: relations.documentId,
-        folderId: relations.folderId,
-        boxId: relations.boxId,
+        documentId: target.documentId,
+        folderId: target.folderId,
+        boxId: target.boxId,
         fileName: file.originalname,
         filePath,
         fileSize: BigInt(file.size),
@@ -59,6 +68,53 @@ export class AttachmentService {
       ...attachment,
       fileSize: attachment.fileSize.toString(),
     };
+  }
+
+  private async validateUploadRelations(
+    tenantId: string,
+    relations: { documentId?: string; folderId?: string; boxId?: string },
+    department?: string,
+  ) {
+    const parsed = uploadRelationsSchema.safeParse(relations);
+    if (!parsed.success) throw Object.assign(new Error('Nieprawidłowy identyfikator dokumentu, teczki lub kartonu'), { statusCode: 400 });
+    const target = parsed.data;
+    if (!target.documentId && !target.folderId && !target.boxId) {
+      throw Object.assign(new Error('Wskaż dokument, teczkę lub karton'), { statusCode: 400 });
+    }
+
+    const document = target.documentId ? await prisma.document.findFirst({
+      where: { id: target.documentId, tenantId },
+      select: { folderId: true, boxId: true },
+    }) : null;
+    if (target.documentId && !document) throw Object.assign(new Error('Dokument nie znaleziony'), { statusCode: 404 });
+    if (document && target.folderId && target.folderId !== document.folderId) {
+      throw Object.assign(new Error('Dokument nie należy do wskazanej teczki'), { statusCode: 400 });
+    }
+
+    const folderId = document?.folderId || target.folderId;
+    const folder = folderId ? await prisma.folder.findFirst({
+      where: { id: folderId, tenantId },
+      select: { boxId: true },
+    }) : null;
+    if (folderId && !folder) throw Object.assign(new Error('Teczka nie znaleziona'), { statusCode: 404 });
+    if (document?.folderId && document.boxId && document.boxId !== folder?.boxId) {
+      throw Object.assign(new Error('Dokument ma sprzeczne przypisanie do kartonu'), { statusCode: 409 });
+    }
+
+    const linkedBoxId = folder ? folder.boxId : document?.boxId;
+    if (target.boxId && (document || folder) && target.boxId !== linkedBoxId) {
+      throw Object.assign(new Error('Karton nie odpowiada wskazanemu dokumentowi lub teczce'), { statusCode: 400 });
+    }
+    const boxId = target.boxId || linkedBoxId;
+    const box = boxId ? await prisma.box.findFirst({
+      where: { id: boxId, tenantId, deletedAt: null },
+      select: { department: true },
+    }) : null;
+    if (boxId && !box) throw Object.assign(new Error('Karton nie znaleziony'), { statusCode: 404 });
+    if (department && box?.department?.toLocaleLowerCase('pl') !== department.toLocaleLowerCase('pl')) {
+      throw Object.assign(new Error('Brak dostępu do działu kartonu'), { statusCode: 403 });
+    }
+    return target;
   }
 
   async getById(id: string, tenantId: string, department?: string, canViewHr = false) {
