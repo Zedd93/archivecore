@@ -311,8 +311,37 @@ test('scopes every evidence query to the tenant and employee department', async 
     assert.equal(queries.get('attachment').OR[3].documentId, null);
     assert.equal(queries.get('attachment').OR[3].folderId, null);
     assert.equal(queries.get('attachment').OR[3].box.department.equals, 'Księgowość');
+    assert.deepEqual(queries.get('attachment').AND[1].OR, [
+      { documentId: { not: null } },
+      { folderId: { not: null } },
+      { boxId: { not: null } },
+    ]);
   } finally {
     for (const model of models) prisma[model].findMany = originals.get(model);
+  }
+});
+
+test('does not expose HR-only or orphan attachments as unopenable search sources', async () => {
+  const originalAttachment = prisma.attachment.findMany;
+  const originalDocument = prisma.document.findMany;
+  try {
+    prisma.document.findMany = async () => [];
+    prisma.attachment.findMany = async ({ where }) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(where.AND[1].OR, [
+        { documentId: { not: null } },
+        { folderId: { not: null } },
+        { boxId: { not: null } },
+      ]);
+      return [];
+    };
+    const result = await searchService.search('tenant-a', 'scan', {
+      types: ['document'], canViewHr: false, limit: 10,
+    });
+    assert.deepEqual(result.results, []);
+  } finally {
+    prisma.attachment.findMany = originalAttachment;
+    prisma.document.findMany = originalDocument;
   }
 });
 

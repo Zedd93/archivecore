@@ -435,6 +435,13 @@ export class SearchService {
               { box: { boxNumber: { contains: query, mode: 'insensitive' } } },
             ],
           },
+          {
+            OR: [
+              { documentId: { not: null } },
+              { folderId: { not: null } },
+              { boxId: { not: null } },
+            ],
+          },
         ],
       },
       include: {
