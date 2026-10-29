@@ -13,7 +13,10 @@ const uploadRelationsSchema = z.object({
 });
 
 export class AttachmentService {
-  constructor(private readonly storage: { uploadFile: typeof uploadFile; deleteFile: typeof deleteFile } = { uploadFile, deleteFile }) {}
+  constructor(
+    private readonly storage: { uploadFile: typeof uploadFile; deleteFile: typeof deleteFile } = { uploadFile, deleteFile },
+    private readonly readFile: typeof downloadFile = downloadFile,
+  ) {}
 
   private accessWhere(tenantId: string, department?: string, canViewHr = false): Prisma.AttachmentWhereInput {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
@@ -151,7 +154,10 @@ export class AttachmentService {
 
   async download(id: string, tenantId: string, department?: string, canViewHr = false) {
     const attachment = await this.getById(id, tenantId, department, canViewHr);
-    const buffer = await downloadFile(attachment.filePath);
+    const buffer = await this.readFile(attachment.filePath);
+    if (crypto.createHash('sha256').update(buffer).digest('hex') !== attachment.checksumSha256) {
+      throw new Error('Suma kontrolna załącznika nie zgadza się z zapisem');
+    }
     return { attachment, buffer };
   }
 

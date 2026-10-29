@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
 const { prisma } = require('../dist/config/database');
 const { recordContentAccess } = require('../dist/middleware/audit');
 const { attachmentController } = require('../dist/modules/attachments/attachment.controller');
@@ -85,6 +86,31 @@ test('attachment bytes are sent only after authorized lookup and durable audit',
     attachmentService.download = oldDownload;
     prisma.auditLog.create = oldAudit;
   }
+});
+
+test('attachment download verifies stored bytes before exposing them or making a redacted copy', async () => {
+  const expected = Buffer.from('%PDF-valid');
+  const actual = Buffer.from('%PDF-damaged');
+  const attachment = {
+    id: attachmentId,
+    filePath: `${tenantId}/attachment.pdf`,
+    mimeType: 'application/pdf',
+    checksumSha256: createHash('sha256').update(expected).digest('hex'),
+  };
+  let stored = actual;
+  const service = new AttachmentService(undefined, async (key) => {
+    assert.equal(key, attachment.filePath);
+    return stored;
+  });
+  service.getById = async (id, tenant, department, canViewHr) => {
+    assert.deepEqual([id, tenant, department, canViewHr], [attachmentId, tenantId, 'Księgowość', false]);
+    return attachment;
+  };
+
+  await assert.rejects(service.download(attachmentId, tenantId, 'Księgowość'), /Suma kontrolna załącznika/);
+  await assert.rejects(service.downloadPeselRedactedCopy(attachmentId, tenantId, 'Księgowość'), /Suma kontrolna załącznika/);
+  stored = expected;
+  assert.deepEqual((await service.download(attachmentId, tenantId, 'Księgowość')).buffer, expected);
 });
 
 test('attachment reads use the linked record department and hide HR files without HR access', async () => {
