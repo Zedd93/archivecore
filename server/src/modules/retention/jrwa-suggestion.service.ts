@@ -1,13 +1,19 @@
 import { prisma } from '../../config/database';
 
-type JrwaMatch = 'exactCode' | 'codePrefix' | 'name';
+type JrwaMatch = 'exactCode' | 'codePrefix' | 'name' | 'nameTokens';
+
+function nameTokens(query: string) {
+  return [...new Set((query.match(/[\p{L}]{3,}/gu) || []).map((token) => token.toLocaleLowerCase('pl-PL')))]
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 3);
+}
 
 function matchType(policy: { jrwaCode: string | null; name: string }, query: string): JrwaMatch {
   const code = policy.jrwaCode?.toLocaleLowerCase('pl-PL') ?? '';
   const normalized = query.toLocaleLowerCase('pl-PL');
   if (code === normalized) return 'exactCode';
   if (/^\d{2,}$/.test(query) && code.startsWith(normalized)) return 'codePrefix';
-  return 'name';
+  return policy.name.toLocaleLowerCase('pl-PL').includes(normalized) ? 'name' : 'nameTokens';
 }
 
 function todayInWarsaw(now = new Date()) {
@@ -36,6 +42,7 @@ export class JrwaSuggestionService {
   async suggest(tenantId: string, rawQuery: string) {
     const query = rawQuery.trim();
     if ((query.length < 2 && !/^\d$/.test(query)) || query.length > 100) return [];
+    const tokens = /^\d+$/.test(query) ? [] : nameTokens(query);
     const jrwaVersionId = await this.currentVersionId(tenantId);
     const policies = await prisma.retentionPolicy.findMany({
       where: {
@@ -49,6 +56,7 @@ export class JrwaSuggestionService {
             { jrwaCode: { equals: query, mode: 'insensitive' } },
             ...(/^\d{2,}$/.test(query) ? [{ jrwaCode: { startsWith: query, mode: 'insensitive' as const } }] : []),
             { name: { contains: query, mode: 'insensitive' } },
+            ...tokens.map((token) => ({ name: { contains: token, mode: 'insensitive' as const } })),
           ],
       },
       select: {
@@ -61,15 +69,27 @@ export class JrwaSuggestionService {
         jrwaVersion: { select: { label: true, validFrom: true, validTo: true } },
       },
       orderBy: [{ jrwaCode: 'asc' }, { name: 'asc' }],
-      take: 100,
+      take: 300,
     });
-    const priority: Record<JrwaMatch, number> = { exactCode: 0, codePrefix: 1, name: 2 };
+    const priority: Record<JrwaMatch, number> = { exactCode: 0, codePrefix: 1, name: 2, nameTokens: 3 };
     return policies
-      .map((policy) => ({ ...policy, matchType: matchType(policy, query) }))
+      .map((policy) => {
+        const type = matchType(policy, query);
+        const normalizedName = policy.name.toLocaleLowerCase('pl-PL');
+        const matchedTokens = tokens.filter((token) => normalizedName.includes(token)).length;
+        return {
+          ...policy,
+          matchType: type,
+          matchStrength: type === 'exactCode' ? 'high' : type === 'nameTokens' ? 'low' : 'medium',
+          matchedTokens,
+        };
+      })
       .sort((a, b) => priority[a.matchType] - priority[b.matchType]
+        || b.matchedTokens - a.matchedTokens
         || (a.jrwaCode ?? '').localeCompare(b.jrwaCode ?? '', 'pl', { numeric: true })
         || a.name.localeCompare(b.name, 'pl'))
-      .slice(0, 30);
+      .slice(0, 30)
+      .map(({ matchedTokens, ...policy }) => policy);
   }
 
   async validateSelection(tenantId: string, policyId: string | null | undefined, categoryCode: string, existingPolicyId?: string | null) {

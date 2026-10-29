@@ -622,7 +622,7 @@
     "category": "Kategoria",
     "retentionSuggestion": {
       "label": "Podpowiedź JRWA i retencji",
-      "hint": "Wyszukaj symbol lub nazwę pozycji JRWA. Wybór wymaga potwierdzenia; nie zmienia wcześniejszych teczek ani nie wylicza daty brakowania kartonu. Dla akt historycznych zweryfikuj właściwą wersję wykazu.",
+      "hint": "Podpowiedzi są oparte na symbolu lub słowach z tytułu teczki. Siła dopasowania nie jest pewnością klasyfikacji. Wybór wymaga potwierdzenia; nie zmienia wcześniejszych teczek ani nie wylicza daty brakowania kartonu. Dla akt historycznych zweryfikuj właściwą wersję wykazu.",
       "searchPlaceholder": "Symbol JRWA lub nazwa klasy",
       "legacy": "Import bez wersji",
       "permanent": "przechowywanie wieczyste",
@@ -633,7 +633,13 @@
       "match": {
         "exactCode": "Dokładny symbol JRWA",
         "codePrefix": "Początek symbolu JRWA",
-        "name": "Dopasowanie nazwy klasy"
+        "name": "Dopasowanie nazwy klasy",
+        "nameTokens": "Wspólne słowa w tytule i nazwie klasy"
+      },
+      "strength": {
+        "high": "silne dopasowanie",
+        "medium": "średnie dopasowanie",
+        "low": "słabe dopasowanie"
       }
     },
     "itemsCount": "Liczba pozycji",

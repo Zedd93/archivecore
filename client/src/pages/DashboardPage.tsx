@@ -274,6 +274,7 @@ export default function DashboardPage() {
 
           <JrwaSuggestionPicker
             signature={folderForm.folderSignature}
+            title={folderForm.folderTitle}
             value={folderForm.retentionPolicyId}
             onChoose={(policy) => setFolderForm((prev) => ({
               ...prev,

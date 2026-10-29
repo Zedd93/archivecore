@@ -622,7 +622,7 @@
     "category": "Category",
     "retentionSuggestion": {
       "label": "JRWA and retention suggestion",
-      "hint": "Search by JRWA code or class name. Confirm a suggestion to use it; existing folders stay unchanged and the box disposal date is not calculated. Review the applicable version for historical records.",
+      "hint": "Suggestions use the JRWA code or words from the folder title. Match strength is not classification certainty. Confirm a suggestion to use it; existing folders stay unchanged and the box disposal date is not calculated. Review the applicable version for historical records.",
       "searchPlaceholder": "JRWA code or class name",
       "legacy": "Unversioned import",
       "permanent": "permanent retention",
@@ -633,7 +633,13 @@
       "match": {
         "exactCode": "Exact JRWA code",
         "codePrefix": "JRWA code prefix",
-        "name": "Class name match"
+        "name": "Class name match",
+        "nameTokens": "Shared words in the title and class name"
+      },
+      "strength": {
+        "high": "strong match",
+        "medium": "moderate match",
+        "low": "weak match"
       }
     },
     "itemsCount": "Items count",

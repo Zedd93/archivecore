@@ -19,11 +19,11 @@ test('suggestions are scoped to the tenant and its current JRWA version', async 
     assert.equal(where.jrwaVersionId, 'current-version');
     assert.equal(where.isActive, true);
     assert.equal(where.OR[0].jrwaCode.equals, '1234');
-    assert.equal(take, 100);
+    assert.equal(take, 300);
     return [{ id: policyId, jrwaCode: '1234', name: 'Umowy' }];
   };
   try {
-    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, '1234'), [{ id: policyId, jrwaCode: '1234', name: 'Umowy', matchType: 'exactCode' }]);
+    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, '1234'), [{ id: policyId, jrwaCode: '1234', name: 'Umowy', matchType: 'exactCode', matchStrength: 'high' }]);
     assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, ''), []);
   } finally {
     prisma.jrwaVersion.findFirst = originalVersion;
@@ -41,7 +41,7 @@ test('legacy JRWA entries remain searchable until a dated version becomes effect
     return [{ id: policyId, jrwaCode: '1234', name: 'Akta' }];
   };
   try {
-    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, 'Akta'), [{ id: policyId, jrwaCode: '1234', name: 'Akta', matchType: 'name' }]);
+    assert.deepEqual(await jrwaSuggestionService.suggest(tenantId, 'Akta'), [{ id: policyId, jrwaCode: '1234', name: 'Akta', matchType: 'name', matchStrength: 'medium' }]);
   } finally {
     prisma.jrwaVersion.findFirst = originalVersion;
     prisma.retentionPolicy.findMany = originalPolicies;
@@ -64,6 +64,30 @@ test('suggestions explain exact, prefix and name matches without making a select
   try {
     assert.deepEqual((await jrwaSuggestionService.suggest(tenantId, '12')).map(({ id, matchType }) => [id, matchType]), [
       ['exact', 'exactCode'], ['by-prefix', 'codePrefix'], ['by-name', 'name'],
+    ]);
+  } finally {
+    prisma.jrwaVersion.findFirst = originalVersion;
+    prisma.retentionPolicy.findMany = originalPolicies;
+  }
+});
+
+test('folder title suggests matching JRWA names without claiming classification certainty', async () => {
+  const originalVersion = prisma.jrwaVersion.findFirst;
+  const originalPolicies = prisma.retentionPolicy.findMany;
+  prisma.jrwaVersion.findFirst = async () => ({ id: 'current-version' });
+  prisma.retentionPolicy.findMany = async ({ where }) => {
+    assert.equal(where.tenantId, tenantId);
+    assert.ok(where.OR.some((entry) => entry.name?.contains === 'dokumentacja'));
+    assert.ok(where.OR.some((entry) => entry.name?.contains === 'finansowa'));
+    return [
+      { id: 'partial', jrwaCode: '15', name: 'Dokumentacja' },
+      { id: 'stronger', jrwaCode: '22', name: 'Dokumentacja finansowa' },
+    ];
+  };
+  try {
+    const suggestions = await jrwaSuggestionService.suggest(tenantId, 'Dokumentacja finansowa spółdzielni');
+    assert.deepEqual(suggestions.map(({ id, matchType, matchStrength }) => [id, matchType, matchStrength]), [
+      ['stronger', 'nameTokens', 'low'], ['partial', 'nameTokens', 'low'],
     ]);
   } finally {
     prisma.jrwaVersion.findFirst = originalVersion;

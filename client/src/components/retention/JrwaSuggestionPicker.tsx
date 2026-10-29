@@ -12,15 +12,17 @@ export interface JrwaSuggestion {
   retentionYears: number | null;
   isPermanent: boolean;
   jrwaVersion: { label: string; validFrom: string; validTo: string | null } | null;
-  matchType?: 'exactCode' | 'codePrefix' | 'name';
+  matchType?: 'exactCode' | 'codePrefix' | 'name' | 'nameTokens';
+  matchStrength?: 'high' | 'medium' | 'low';
 }
 
 function codeFromSignature(signature: string) {
   return signature.trim().match(/^(\d{1,6})(?=\D|$)/)?.[1] || '';
 }
 
-export default function JrwaSuggestionPicker({ signature, value, existingPolicy, onChoose }: {
+export default function JrwaSuggestionPicker({ signature, title, value, existingPolicy, onChoose }: {
   signature: string;
+  title: string;
   value: string;
   existingPolicy?: JrwaSuggestion | null;
   onChoose: (policy: JrwaSuggestion | null) => void;
@@ -33,7 +35,7 @@ export default function JrwaSuggestionPicker({ signature, value, existingPolicy,
   const hasSearch = debouncedSearch.length >= 2 || /^\d$/.test(debouncedSearch);
   const showSuggestions = hasSearch && search.trim() === debouncedSearch;
 
-  useEffect(() => setSearch(codeFromSignature(signature)), [signature]);
+  useEffect(() => setSearch(codeFromSignature(signature) || title.trim().slice(0, 100)), [signature, title]);
   useEffect(() => { if (!value) setChosen(null); }, [value]);
 
   const { data: suggestions = [], isFetching, isError } = useQuery({
@@ -93,7 +95,10 @@ export default function JrwaSuggestionPicker({ signature, value, existingPolicy,
                 onClick={() => { setChosen(policy); onChoose(policy); }}
               >
                 <span className="font-mono font-medium">{policy.jrwaCode}</span> · {policy.name}
-                {policy.matchType && <span className="block text-xs text-blue-800">{t(`transferLists.retentionSuggestion.match.${policy.matchType}`)}</span>}
+                {policy.matchType && <span className="block text-xs text-blue-800">
+                  {t(`transferLists.retentionSuggestion.match.${policy.matchType}`)}
+                  {policy.matchStrength && ` · ${t(`transferLists.retentionSuggestion.strength.${policy.matchStrength}`)}`}
+                </span>}
                 <span className="block text-xs text-gray-600">{policy.archivalCategory} · {periodLabel(policy)} · {policy.jrwaVersion?.label || t('transferLists.retentionSuggestion.legacy')}</span>
               </button>
             </li>

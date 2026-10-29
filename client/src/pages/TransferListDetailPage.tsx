@@ -1026,6 +1026,7 @@ export default function TransferListDetailPage() {
 
           <JrwaSuggestionPicker
             signature={form.folderSignature}
+            title={form.folderTitle}
             value={form.retentionPolicyId}
             existingPolicy={editingItem?.folder?.retentionPolicy}
             onChoose={(policy) => setForm((prev) => ({
