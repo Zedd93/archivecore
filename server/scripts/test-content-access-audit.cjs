@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { prisma } = require('../dist/config/database');
 const { recordContentAccess } = require('../dist/middleware/audit');
 const { attachmentController } = require('../dist/modules/attachments/attachment.controller');
-const { attachmentService } = require('../dist/modules/attachments/attachment.service');
+const { AttachmentService, attachmentService } = require('../dist/modules/attachments/attachment.service');
 const { documentController } = require('../dist/modules/documents/document.controller');
 const { documentService } = require('../dist/modules/documents/document.service');
 const { Permissions } = require('@archivecore/shared');
@@ -231,6 +231,30 @@ test('attachment upload controller forwards employee department', async () => {
     assert.equal(res.statusCode, 201);
   } finally {
     attachmentService.upload = oldUpload;
+  }
+});
+
+test('attachment upload removes stored file when metadata cannot be saved', async () => {
+  const oldBox = prisma.box.findFirst;
+  const oldCreate = prisma.attachment.create;
+  const boxId = '7198f438-e0c8-48d7-8b10-339fb73870b2';
+  const file = { originalname: 'test.pdf', buffer: Buffer.from('test'), mimetype: 'application/pdf', size: 4 };
+  const events = [];
+  const dbError = new Error('database unavailable');
+  const service = new AttachmentService({
+    uploadFile: async (key) => { events.push(['upload', key]); },
+    deleteFile: async (key) => { events.push(['delete', key]); },
+  });
+  try {
+    prisma.box.findFirst = async () => ({ department: 'Księgowość' });
+    prisma.attachment.create = async () => { throw dbError; };
+    await assert.rejects(service.upload(file, tenantId, userId, { boxId }, 'Księgowość'), (error) => error === dbError);
+    assert.deepEqual(events.map(([action]) => action), ['upload', 'delete']);
+    assert.equal(events[0][1], events[1][1]);
+    assert.match(events[0][1], new RegExp(`^${tenantId}/`));
+  } finally {
+    prisma.box.findFirst = oldBox;
+    prisma.attachment.create = oldCreate;
   }
 });
 

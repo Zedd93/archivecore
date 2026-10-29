@@ -13,6 +13,8 @@ const uploadRelationsSchema = z.object({
 });
 
 export class AttachmentService {
+  constructor(private readonly storage: { uploadFile: typeof uploadFile; deleteFile: typeof deleteFile } = { uploadFile, deleteFile }) {}
+
   private accessWhere(tenantId: string, department?: string, canViewHr = false): Prisma.AttachmentWhereInput {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
     return {
@@ -46,23 +48,33 @@ export class AttachmentService {
     const checksumSha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
 
     // Upload to MinIO
-    await uploadFile(filePath, file.buffer, file.mimetype);
+    await this.storage.uploadFile(filePath, file.buffer, file.mimetype);
 
     // Save metadata
-    const attachment = await prisma.attachment.create({
-      data: {
-        tenantId,
-        documentId: target.documentId,
-        folderId: target.folderId,
-        boxId: target.boxId,
-        fileName: file.originalname,
-        filePath,
-        fileSize: BigInt(file.size),
-        mimeType: file.mimetype,
-        checksumSha256,
-        uploadedBy: userId,
-      },
-    });
+    let attachment;
+    try {
+      attachment = await prisma.attachment.create({
+        data: {
+          tenantId,
+          documentId: target.documentId,
+          folderId: target.folderId,
+          boxId: target.boxId,
+          fileName: file.originalname,
+          filePath,
+          fileSize: BigInt(file.size),
+          mimeType: file.mimetype,
+          checksumSha256,
+          uploadedBy: userId,
+        },
+      });
+    } catch (error) {
+      try {
+        await this.storage.deleteFile(filePath);
+      } catch (cleanupError) {
+        console.error('Attachment upload cleanup failed:', filePath, cleanupError);
+      }
+      throw error;
+    }
 
     return {
       ...attachment,
