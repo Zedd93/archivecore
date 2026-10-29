@@ -40,7 +40,10 @@ function fixture() {
     } },
     attachment: { findFirst: async ({ where }) => {
       const attachment = attachments.get(where.id);
-      return attachment?.tenantId === where.tenantId && attachment?.folderId === where.folderId && attachment?.mimeType === where.mimeType ? attachment : null;
+      assert.deepEqual(where.folder, { is: { tenantId } });
+      assert.deepEqual(where.hrDocuments, { none: {} });
+      return attachment?.tenantId === where.tenantId && attachment?.folderId === where.folderId && attachment?.mimeType === where.mimeType
+        && !attachment.hrLinked && (attachment.folderTenantId ?? attachment.tenantId) === tenantId ? attachment : null;
     } },
     orderScanFile: { create: async ({ data }) => {
       scanFile = { id: 'scan-id', uploadedAt: new Date(), ...data };
@@ -122,6 +125,16 @@ test('existing scan cannot cross tenant, folder or department boundaries', async
   await assert.rejects(service.attachExisting(orderId, itemId, 'another-tenant', userId, attachmentId), { statusCode: 404 });
   assert.equal(getScan(), null);
   assert.equal(objects.size, 1);
+});
+
+test('existing scan cannot copy an HR-linked attachment or a cross-tenant folder', async () => {
+  const { service, addAttachment, getScan } = fixture();
+  const pdf = await scanPdf();
+  addAttachment(pdf, { hrLinked: true });
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId, 'Księgowość'), { statusCode: 404 });
+  addAttachment(pdf, { folderTenantId: '42e703a6-4528-4423-b4bf-ae554614bfc9' });
+  await assert.rejects(service.attachExisting(orderId, itemId, tenantId, userId, attachmentId, 'Księgowość'), { statusCode: 404 });
+  assert.equal(getScan(), null);
 });
 
 test('existing scan checks checksum and order state before copying', async () => {

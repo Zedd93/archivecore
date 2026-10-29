@@ -80,7 +80,11 @@ export class OrderScanService {
     if (!folderId) fail('Ta pozycja nie wskazuje teczki, z której można wybrać istniejący skan', 400);
 
     const attachment = await this.db.attachment.findFirst({
-      where: { id: attachmentId, tenantId, folderId, mimeType: 'application/pdf' },
+      where: {
+        id: attachmentId, tenantId, folderId, mimeType: 'application/pdf',
+        folder: { is: { tenantId } },
+        hrDocuments: { none: {} },
+      },
       select: { filePath: true, fileName: true, fileSize: true, checksumSha256: true },
     });
     if (!attachment) fail('Nie znaleziono skanu PDF przypisanego do tej teczki', 404);
