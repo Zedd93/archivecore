@@ -5,6 +5,7 @@ import path from 'path';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { createPeselRedactedCopy } from './pdf-redaction.service';
+import { analyzeSensitivePage } from './sensitivity.service';
 
 const uploadRelationsSchema = z.object({
   documentId: z.preprocess(value => value === '' ? undefined : value, z.string().uuid().optional()),
@@ -167,6 +168,11 @@ export class AttachmentService {
       throw Object.assign(new Error('Kopia z zakrytym PESEL jest dostępna tylko dla plików PDF'), { statusCode: 400 });
     }
     return { attachment, ...await createPeselRedactedCopy(buffer) };
+  }
+
+  async analyzeSensitivity(id: string, tenantId: string, page: number, department?: string, canViewHr = false) {
+    const { attachment, buffer } = await this.download(id, tenantId, department, canViewHr);
+    return { attachment, analysis: await analyzeSensitivePage(buffer, page) };
   }
 
   async list(tenantId: string, filters: any, skip: number, take: number, department?: string, canViewHr = false) {

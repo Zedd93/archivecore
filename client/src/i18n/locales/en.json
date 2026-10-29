@@ -2313,7 +2313,22 @@
   "redaction": {
     "downloadCopy": "Cover detected PESEL",
     "explanation": "Detected PESEL numbers are covered in a PDF copy. The original is unchanged; review every page before sharing the copy.",
-    "reviewCopy": "Review every page of the downloaded copy before sharing. Other personal data is not covered."
+    "reviewCopy": "Review every page of the downloaded copy before sharing. Other personal data is not covered.",
+    "analyze": "Check sensitive data",
+    "pageResult": "Analysis of page {{page}} of {{pages}}",
+    "noSignals": "No signals detected on this page.",
+    "analysisCaution": "Only PESEL, selected health and identity terms, and bank accounts are checked. No signals does not mean no sensitive data. The original is unchanged; review every page before sharing.",
+    "signals": {
+      "pesel": "Possible PESEL number",
+      "health": "Possible health information",
+      "identity": "Possible identity document",
+      "bankAccount": "Possible bank account number"
+    },
+    "reviewFlags": {
+      "empty": "No content could be read from this page.",
+      "short": "Very little text was read; the result may be incomplete.",
+      "replacement": "The text contains unreadable characters; the result may be incomplete."
+    }
   },
 
   "shortcuts": {

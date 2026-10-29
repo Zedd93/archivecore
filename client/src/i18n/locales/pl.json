@@ -2313,7 +2313,22 @@
   "redaction": {
     "downloadCopy": "Zakryj wykryty PESEL",
     "explanation": "Automatycznie zakrywamy wykryte numery PESEL na kopii PDF. Oryginał pozostaje bez zmian; przed udostępnieniem sprawdź każdą stronę kopii.",
-    "reviewCopy": "Sprawdź każdą stronę pobranej kopii przed udostępnieniem. Inne dane osobowe nie są zakrywane."
+    "reviewCopy": "Sprawdź każdą stronę pobranej kopii przed udostępnieniem. Inne dane osobowe nie są zakrywane.",
+    "analyze": "Sprawdź dane wrażliwe",
+    "pageResult": "Analiza strony {{page}} z {{pages}}",
+    "noSignals": "Nie wykryto sygnałów na tej stronie.",
+    "analysisCaution": "Sprawdzamy tylko PESEL, wybrane wzmianki o zdrowiu, dokumentach tożsamości i rachunkach. Brak sygnałów nie oznacza braku danych wrażliwych. Oryginał pozostaje bez zmian; sprawdź każdą stronę przed udostępnieniem.",
+    "signals": {
+      "pesel": "Możliwy numer PESEL",
+      "health": "Możliwe dane o zdrowiu",
+      "identity": "Możliwy dokument tożsamości",
+      "bankAccount": "Możliwy numer rachunku bankowego"
+    },
+    "reviewFlags": {
+      "empty": "Nie udało się odczytać treści tej strony.",
+      "short": "Odczytano bardzo mało tekstu; wynik może być niepełny.",
+      "replacement": "Tekst zawiera nieczytelne znaki; wynik może być niepełny."
+    }
   },
 
   "shortcuts": {

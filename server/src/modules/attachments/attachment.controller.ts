@@ -97,6 +97,26 @@ export class AttachmentController {
     } catch (err) { next(err); }
   }
 
+  async analyzeSensitivity(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      const pageInput = req.query.page ?? '1';
+      if (typeof pageInput !== 'string' || !/^[1-9]\d*$/.test(pageInput) || Number(pageInput) > 12) {
+        return errorResponse(res, 'Podaj numer strony od 1 do 12', 400);
+      }
+      const { attachment, analysis } = await attachmentService.analyzeSensitivity(
+        req.params.id, req.tenantId, Number(pageInput), req.accessDepartment || undefined,
+        req.user!.permissions.includes(Permissions.HR_VIEW),
+      );
+      await recordContentAccess(req, 'attachment.sensitivity.analyze', 'attachment', attachment.id, {
+        page: String(analysis.page),
+        signalCount: String(analysis.signals.length),
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      return successResponse(res, analysis);
+    } catch (err) { next(err); }
+  }
+
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

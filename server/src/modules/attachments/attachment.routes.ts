@@ -24,6 +24,7 @@ router.post('/scan-batch/commit', ...auth, requirePermission(Permissions.IMPORT_
 router.get('/', ...auth, requirePermission(Permissions.ATTACHMENT_READ), (req, res, next) => attachmentController.list(req, res, next));
 router.get('/:id/download', ...auth, requirePermission(Permissions.ATTACHMENT_READ), (req, res, next) => attachmentController.download(req, res, next));
 router.get('/:id/redacted-copy', ...auth, requirePermission(Permissions.ATTACHMENT_READ), (req, res, next) => attachmentController.downloadPeselRedactedCopy(req, res, next));
+router.get('/:id/sensitivity', ...auth, requirePermission(Permissions.ATTACHMENT_READ), (req, res, next) => attachmentController.analyzeSensitivity(req, res, next));
 router.post('/', ...auth, requirePermission(Permissions.ATTACHMENT_UPLOAD), fileUpload.single('file'), auditLog('attachment', 'attachment.upload'), (req, res, next) => attachmentController.upload(req, res, next));
 router.delete('/:id', ...auth, requirePermission(Permissions.ATTACHMENT_DELETE), auditLog('attachment', 'attachment.delete'), (req, res, next) => attachmentController.delete(req, res, next));
 

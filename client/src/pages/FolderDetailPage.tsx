@@ -39,6 +39,14 @@ interface FolderDetail {
   documents: Array<{ id: string; title: string }>;
 }
 
+interface SensitivityResult {
+  page: number;
+  pages: number;
+  source: 'embedded' | 'ocr';
+  reviewFlag: 'empty' | 'short' | 'replacement' | null;
+  signals: Array<'pesel' | 'health' | 'identity' | 'bankAccount'>;
+}
+
 function displayDate(value: string | null) {
   return value ? value.slice(0, 10) : '—';
 }
@@ -50,6 +58,8 @@ export default function FolderDetailPage() {
   const tenantId = user?.tenantId || localStorage.getItem('tenantId') || '';
   const [printing, setPrinting] = useState(false);
   const [redactingId, setRedactingId] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [sensitivity, setSensitivity] = useState<{ attachmentId: string; result: SensitivityResult } | null>(null);
   const [attachmentPage, setAttachmentPage] = useState(1);
   const { data: folder, isLoading, error, refetch } = useQuery({
     queryKey: ['folder', tenantId, id],
@@ -61,6 +71,7 @@ export default function FolderDetailPage() {
     staleTime: 0,
   });
   useEffect(() => setAttachmentPage(1), [id]);
+  useEffect(() => setSensitivity(null), [id, attachmentPage]);
   const { data: attachments, isLoading: loadingAttachments, error: attachmentsError, refetch: refetchAttachments } = useQuery({
     queryKey: ['folder-attachments', tenantId, id, attachmentPage],
     queryFn: async () => {
@@ -110,6 +121,18 @@ export default function FolderDetailPage() {
       toast.error(await getApiErrorMessageAsync(err, t('common.genericError')));
     } finally {
       setRedactingId(null);
+    }
+  };
+
+  const analyzeAttachment = async (attachmentId: string, page = 1) => {
+    setAnalyzingId(attachmentId);
+    try {
+      const { data } = await api.get(`/attachments/${attachmentId}/sensitivity`, { params: { page } });
+      setSensitivity({ attachmentId, result: data.data as SensitivityResult });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('common.genericError')));
+    } finally {
+      setAnalyzingId(null);
     }
   };
 
@@ -209,15 +232,31 @@ export default function FolderDetailPage() {
         {loadingAttachments ? <Loader2 size={20} className="animate-spin" /> : attachmentsError ? <div className="text-sm text-red-700">
           {getApiErrorMessage(attachmentsError, t('common.genericError'))}
           <button type="button" className="btn-secondary ml-3" onClick={() => void refetchAttachments()}>{t('common.tryAgain')}</button>
-        </div> : <ul className="divide-y divide-gray-100">{attachments?.data.map((attachment) => <li key={attachment.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
-          <span className="min-w-0 break-words text-sm">{attachment.fileName}</span>
-          <span className="flex flex-wrap items-center gap-2">
-            {attachment.mimeType === 'application/pdf' && <button type="button" onClick={() => void downloadRedactedCopy(attachment.id, attachment.fileName)} disabled={redactingId !== null} className="btn-secondary inline-flex items-center gap-2 text-sm">
-              {redactingId === attachment.id ? <Loader2 size={16} className="animate-spin" /> : <Shield size={16} />}
-              {t('redaction.downloadCopy')}
-            </button>}
-            <button type="button" onClick={() => void openAttachment(attachment.id)} className="btn-secondary shrink-0" aria-label={`${t('common.download')}: ${attachment.fileName}`}><Download size={16} /></button>
-          </span>
+        </div> : <ul className="divide-y divide-gray-100">{attachments?.data.map((attachment) => <li key={attachment.id} className="py-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="min-w-0 break-words text-sm">{attachment.fileName}</span>
+            <span className="flex flex-wrap items-center gap-2">
+              {/^(application\/pdf|image\/(png|jpeg|tiff))$/i.test(attachment.mimeType) && <button type="button" onClick={() => void analyzeAttachment(attachment.id)} disabled={analyzingId !== null} className="btn-secondary inline-flex items-center gap-2 text-sm">
+                {analyzingId === attachment.id ? <Loader2 size={16} className="animate-spin" /> : <Shield size={16} />}
+                {t('redaction.analyze')}
+              </button>}
+              {attachment.mimeType === 'application/pdf' && <button type="button" onClick={() => void downloadRedactedCopy(attachment.id, attachment.fileName)} disabled={redactingId !== null} className="btn-secondary inline-flex items-center gap-2 text-sm">
+                {redactingId === attachment.id ? <Loader2 size={16} className="animate-spin" /> : <Shield size={16} />}
+                {t('redaction.downloadCopy')}
+              </button>}
+              <button type="button" onClick={() => void openAttachment(attachment.id)} className="btn-secondary shrink-0" aria-label={`${t('common.download')}: ${attachment.fileName}`}><Download size={16} /></button>
+            </span>
+          </div>
+          {sensitivity?.attachmentId === attachment.id && <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-gray-800" role="status">
+            <p className="font-medium">{t('redaction.pageResult', { page: sensitivity.result.page, pages: sensitivity.result.pages })}</p>
+            <p className="mt-1">{sensitivity.result.signals.length ? sensitivity.result.signals.map((signal) => t(`redaction.signals.${signal}`)).join(', ') : t('redaction.noSignals')}</p>
+            {sensitivity.result.reviewFlag && <p className="mt-1 text-amber-900">{t(`redaction.reviewFlags.${sensitivity.result.reviewFlag}`)}</p>}
+            <p className="mt-1 text-gray-600">{t('redaction.analysisCaution')}</p>
+            {sensitivity.result.pages > 1 && <div className="mt-2 flex items-center gap-2">
+              <button type="button" className="btn-secondary" disabled={sensitivity.result.page <= 1 || analyzingId !== null} onClick={() => void analyzeAttachment(attachment.id, sensitivity.result.page - 1)}>{t('common.previous')}</button>
+              <button type="button" className="btn-secondary" disabled={sensitivity.result.page >= sensitivity.result.pages || analyzingId !== null} onClick={() => void analyzeAttachment(attachment.id, sensitivity.result.page + 1)}>{t('common.next')}</button>
+            </div>}
+          </div>}
         </li>)}</ul>}
         {(attachments?.pagination.total || 0) > 20 && <div className="flex items-center gap-3 text-sm">
           <button type="button" className="btn-secondary" disabled={attachmentPage === 1} onClick={() => setAttachmentPage((page) => page - 1)}>{t('common.previous')}</button>
