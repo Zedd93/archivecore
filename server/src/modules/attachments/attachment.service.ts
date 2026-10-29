@@ -20,6 +20,12 @@ export class AttachmentService {
     return {
       tenantId,
       ...(!canViewHr ? { hrDocuments: { none: {} } } : {}),
+      AND: [{ OR: [
+        { document: { is: { tenantId } } },
+        { folder: { is: { tenantId } } },
+        { box: { is: { tenantId, deletedAt: null } } },
+        ...(canViewHr ? [{ hrDocuments: { some: { tenantId } } }] : []),
+      ] }],
       ...(department ? {
         OR: [
           { documentId: { not: null }, document: { folderId: { not: null }, folder: { box: { department: departmentFilter } } } },
@@ -190,14 +196,18 @@ export class AttachmentService {
   }
 
   async delete(id: string, tenantId: string) {
-    const attachment = await this.getById(id, tenantId);
+    const attachment = await prisma.attachment.findFirst({
+      where: { id, tenantId },
+      select: { id: true, filePath: true, documentId: true, folderId: true, boxId: true },
+    });
+    if (!attachment) throw Object.assign(new Error('Załącznik nie znaleziony'), { statusCode: 404 });
     if (attachment.documentId || attachment.folderId || attachment.boxId
       || await prisma.hRDocument.count({ where: { attachmentId: id, tenantId } })) {
       throw Object.assign(new Error('Załącznik przypisany do dokumentacji wymaga procedury brakowania'), { statusCode: 409 });
     }
 
     // Delete from MinIO
-    await deleteFile(attachment.filePath);
+    await this.storage.deleteFile(attachment.filePath);
 
     // Delete from DB
     await prisma.attachment.delete({ where: { id } });

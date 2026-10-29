@@ -103,6 +103,11 @@ test('attachment reads use the linked record department and hide HR files withou
     for (const where of queries) {
       assert.equal(where.tenantId, tenantId);
       assert.deepEqual(where.hrDocuments, { none: {} });
+      assert.deepEqual(where.AND, [{ OR: [
+        { document: { is: { tenantId } } },
+        { folder: { is: { tenantId } } },
+        { box: { is: { tenantId, deletedAt: null } } },
+      ] }]);
       assert.equal(where.OR.length, 4);
       assert.deepEqual(where.OR[0].documentId, { not: null });
       assert.equal(where.OR[0].document.folder.box.department.equals, 'Księgowość');
@@ -116,6 +121,12 @@ test('attachment reads use the linked record department and hide HR files withou
     await assert.rejects(attachmentService.getById(attachmentId, tenantId, undefined, true), { statusCode: 404 });
     assert.equal(queries[3].hrDocuments, undefined);
     assert.equal(queries[3].OR, undefined);
+    assert.deepEqual(queries[3].AND, [{ OR: [
+      { document: { is: { tenantId } } },
+      { folder: { is: { tenantId } } },
+      { box: { is: { tenantId, deletedAt: null } } },
+      { hrDocuments: { some: { tenantId } } },
+    ] }]);
   } finally {
     prisma.attachment.findFirst = oldFindFirst;
     prisma.attachment.findMany = oldFindMany;
@@ -255,6 +266,35 @@ test('attachment upload removes stored file when metadata cannot be saved', asyn
   } finally {
     prisma.box.findFirst = oldBox;
     prisma.attachment.create = oldCreate;
+  }
+});
+
+test('attachment cleanup can find an orphan without granting download access', async () => {
+  const oldFindFirst = prisma.attachment.findFirst;
+  const oldHrCount = prisma.hRDocument.count;
+  const oldDelete = prisma.attachment.delete;
+  const events = [];
+  const service = new AttachmentService({
+    uploadFile: async () => {},
+    deleteFile: async (key) => { events.push(['file', key]); },
+  });
+  try {
+    prisma.attachment.findFirst = async ({ where, select }) => {
+      assert.deepEqual(where, { id: attachmentId, tenantId });
+      assert.equal(select.filePath, true);
+      return { id: attachmentId, filePath: 'orphan.pdf', documentId: null, folderId: null, boxId: null };
+    };
+    prisma.hRDocument.count = async ({ where }) => {
+      assert.deepEqual(where, { attachmentId, tenantId });
+      return 0;
+    };
+    prisma.attachment.delete = async ({ where }) => { events.push(['metadata', where.id]); };
+    assert.deepEqual(await service.delete(attachmentId, tenantId), { deleted: true });
+    assert.deepEqual(events, [['file', 'orphan.pdf'], ['metadata', attachmentId]]);
+  } finally {
+    prisma.attachment.findFirst = oldFindFirst;
+    prisma.hRDocument.count = oldHrCount;
+    prisma.attachment.delete = oldDelete;
   }
 });
 
