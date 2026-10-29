@@ -23,7 +23,7 @@ export class OrderScanService {
     const item = await this.db.orderItem.findFirst({
       where: { id: itemId, orderId, order: { tenantId, orderType: 'scan', ...(department ? { items: { every: scanItemDepartmentWhere(department) } } : {}) } },
       select: {
-        id: true, folderId: true, order: { select: { status: true } }, scanFile: { select: { id: true, storageKey: true, checksumSha256: true, fileName: true, pageCount: true, fileSize: true, uploadedAt: true } },
+        id: true, folderId: true, order: { select: { status: true } }, scanFile: { select: { id: true, tenantId: true, storageKey: true, checksumSha256: true, fileName: true, pageCount: true, fileSize: true, uploadedAt: true } },
         folder: { select: { box: { select: { department: true } } } },
         document: { select: { box: { select: { department: true } }, folder: { select: { box: { select: { department: true } } } } } },
         transferListItem: { select: { folderId: true, box: { select: { department: true } }, folder: { select: { box: { select: { department: true } } } } } },
@@ -101,7 +101,7 @@ export class OrderScanService {
   async download(orderId: string, itemId: string, tenantId: string, department?: string) {
     const item = await this.item(orderId, itemId, tenantId, department);
     if (!['delivered', 'completed'].includes(item.order.status)) fail('Skan nie został jeszcze udostępniony', 409);
-    if (!item.scanFile) fail('Skan nie został znaleziony', 404);
+    if (!item.scanFile || item.scanFile.tenantId !== tenantId) fail('Skan nie został znaleziony', 404);
     const buffer = await this.objectStorage.downloadFile(item.scanFile.storageKey);
     if (sha256(buffer) !== item.scanFile.checksumSha256) throw new Error('Suma kontrolna skanu nie zgadza się z zapisem');
     return { id: item.scanFile.id, buffer, fileName: item.scanFile.fileName };

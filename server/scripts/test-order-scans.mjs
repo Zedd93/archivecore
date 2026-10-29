@@ -101,6 +101,17 @@ test('download is tenant- and department-scoped and waits for delivery', async (
   await assert.rejects(service.download(orderId, itemId, tenantId), /Suma kontrolna/);
 });
 
+test('download rejects a scan file linked to an order from another tenant', async () => {
+  const { service, getScan, setStatus } = fixture();
+  const pdf = await scanPdf();
+  await service.upload(orderId, itemId, tenantId, userId,
+    { buffer: pdf, mimetype: 'application/pdf', originalname: 'scan.pdf' });
+  setStatus('delivered');
+  getScan().tenantId = '42e703a6-4528-4423-b4bf-ae554614bfc9';
+  service.objectStorage.downloadFile = async () => { throw new Error('Skan nie powinien być odczytany'); };
+  await assert.rejects(service.download(orderId, itemId, tenantId), { statusCode: 404 });
+});
+
 test('existing folder PDF can fulfill a scan order without depending on the source attachment', async () => {
   const { service, addAttachment, objects, getScan, setStatus } = fixture();
   const pdf = await scanPdf();
