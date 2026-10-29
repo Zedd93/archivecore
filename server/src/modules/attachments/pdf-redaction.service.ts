@@ -18,12 +18,35 @@ function invalid(message: string, statusCode = 422): Error {
 
 export function peselBoxesFromTsv(tsv: string): Box[] {
   const boxes: Box[] = [];
+  const words: Array<Box & { line: string; text: string }> = [];
   for (const line of tsv.split(/\r?\n/).slice(1)) {
     const columns = line.split('\t');
-    if (columns.length < 12 || !containsPesel(columns.slice(11).join('\t'))) continue;
+    if (columns.length < 12 || columns[0] !== '5') continue;
     const [x, y, width, height] = [6, 7, 8, 9].map((index) => Number(columns[index]));
-    if ([x, y, width, height].every(Number.isInteger) && x >= 0 && y >= 0 && width > 0 && height > 0) {
-      boxes.push({ x, y, width, height });
+    if (![x, y, width, height].every(Number.isInteger) || x < 0 || y < 0 || width <= 0 || height <= 0) continue;
+    const text = columns.slice(11).join('\t').trim();
+    words.push({ x, y, width, height, text, line: columns.slice(1, 5).join(':') });
+    if (containsPesel(text)) boxes.push({ x, y, width, height });
+  }
+
+  // OCR may split a printed PESEL into adjacent numeric words (for example 440 514 013 59).
+  for (let start = 0; start < words.length; start++) {
+    const first = words[start];
+    if (!/^\d[\d.:-]*$/.test(first.text) || first.text.replace(/\D/g, '').length >= 11) continue;
+    let digits = '';
+    let right = first.x;
+    let bottom = first.y;
+    for (let end = start; end < words.length; end++) {
+      const word = words[end];
+      if (word.line !== first.line || !/^\d[\d.:-]*$/.test(word.text) || (end > start && word.x - right > 24)) break;
+      digits += word.text.replace(/\D/g, '');
+      if (digits.length > 11) break;
+      right = Math.max(right, word.x + word.width);
+      bottom = Math.max(bottom, word.y + word.height);
+      if (end > start && digits.length === 11 && containsPesel(digits)) {
+        boxes.push({ x: first.x, y: first.y, width: right - first.x, height: bottom - first.y });
+        break;
+      }
     }
   }
   return boxes;

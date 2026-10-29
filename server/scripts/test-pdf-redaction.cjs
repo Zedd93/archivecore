@@ -55,6 +55,17 @@ test('redaction paints selected pixels black without changing other pixels', () 
   assert.deepEqual(peselBoxesFromTsv('level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n5\t1\t1\t1\t1\t1\t0\t0\t40\t10\t95\texample'), []);
 });
 
+test('joins adjacent PESEL fragments but not unrelated numbers or other lines', () => {
+  const { peselBoxesFromTsv } = require('../dist/modules/attachments/pdf-redaction.service');
+  const header = 'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n';
+  const row = (line, word, x, text) => `5\t1\t1\t1\t${line}\t${word}\t${x}\t10\t20\t12\t95\t${text}\n`;
+  const split = header + row(1, 1, 10, '440') + row(1, 2, 34, '514') + row(1, 3, 58, '013') + row(1, 4, 82, '59');
+  assert.deepEqual(peselBoxesFromTsv(split), [{ x: 10, y: 10, width: 92, height: 12 }]);
+  assert.deepEqual(peselBoxesFromTsv(split.replace('013\n', '014\n')), []);
+  assert.deepEqual(peselBoxesFromTsv(split.replace('\t58\t10', '\t200\t10')), []);
+  assert.deepEqual(peselBoxesFromTsv(split.replace('1\t4\t82', '2\t4\t82')), []);
+});
+
 test('creates a flattened copy after detecting a synthetic PESEL', async () => {
   const scanOcr = require('../dist/modules/import-export/scan-ocr.service');
   const originalExecute = scanOcr.execute;
