@@ -169,3 +169,4 @@ npm run db:evaluate-semantic-metadata -- --tenant SMPOLI --query "faktury koszto
 
 To test jednego zapytania, a nie miarodajna ocena trafnosci dla calego
 archiwum. Tryby `--file` oraz `--query`/`--relevant` sa rozlaczne.
+Przy teczce mozna pominac `folder:` i podac sam UUID.

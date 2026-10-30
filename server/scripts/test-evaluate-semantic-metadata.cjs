@@ -34,6 +34,8 @@ test('requires bounded arguments and well-formed evaluation cases', () => {
   assert.deepEqual(parseEvaluationArgs(['--tenant', 'ABC', '--file', 'cases.json']).max, 100);
   assert.deepEqual(parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', `folder:${folderId}`]).cases,
     [{ query: 'faktury', relevant: [{ type: 'folder', id: folderId }] }]);
+  assert.deepEqual(parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', folderId]).cases,
+    [{ query: 'faktury', relevant: [{ type: 'folder', id: folderId }] }]);
   assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--file', 'cases.json', '--query', 'faktury']), /nie obu trybow/);
   assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', 'folder:bad']), /UUID/);
   assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', `folder:${folderId}:extra`]), /type:UUID/);

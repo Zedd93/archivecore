@@ -11,7 +11,7 @@ function parseEvaluationArgs(argv) {
       if (file || !argv[index + 1]) throw new Error('Podaj jeden --file z przypadkami testowymi.');
       file = argv[++index];
     } else if (argv[index] === '--relevant') {
-      if (!argv[index + 1]) throw new Error('Podaj --relevant type:UUID.');
+      if (!argv[index + 1]) throw new Error('Podaj --relevant UUID albo type:UUID.');
       relevant.push(argv[++index]);
     } else {
       pilotArgs.push(argv[index]);
@@ -23,13 +23,16 @@ function parseEvaluationArgs(argv) {
     return { ...options, file };
   }
   if (!options.query || !relevant.length) {
-    throw new Error('Podaj --file albo --query oraz co najmniej jeden --relevant type:UUID.');
+    throw new Error('Podaj --file albo --query oraz co najmniej jeden --relevant UUID albo type:UUID.');
   }
   const cases = parseCases(JSON.stringify([{
     query: options.query,
     relevant: relevant.map((value) => {
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+        return { type: 'folder', id: value };
+      }
       const [type, id, extra] = value.split(':');
-      if (extra || !type || !id) throw new Error('Podaj --relevant type:UUID.');
+      if (extra || !type || !id) throw new Error('Podaj --relevant UUID albo type:UUID.');
       return { type, id };
     }),
   }]));
