@@ -71,6 +71,17 @@ test('linked list title is not embedded if its tenant differs from the authentic
   assert.equal(records[0].text.includes('Sekret obcego klienta'), false);
 });
 
+test('department context does not embed a list title shared with other departments', async () => {
+  const { db } = fakeDb();
+  db.folder.findMany = async () => [{ id: 'folder-a', folderNumber: 'T-1', title: 'Faktury',
+    description: null, docType: null, transferListItem: { folderTitle: 'Faktury', categoryCode: 'B10',
+      transferList: { tenantId, title: 'Spis wielu dzialow', listNumber: 'SZO-1' } } }];
+  const records = await loadMetadataForContext(db, { tenantId, department: 'Ksiegowosc', max: 20 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].text.includes('Spis wielu dzialow'), false);
+  assert.equal(records[0].text.includes('Faktury'), true);
+});
+
 test('unrestricted pilot reads only the chosen tenant and ranks local embeddings', async () => {
   const { db, calls } = fakeDb();
   const embed = async (texts) => texts.map((text) => text.includes('Faktury') ? [1, 0] : [0, 1]);

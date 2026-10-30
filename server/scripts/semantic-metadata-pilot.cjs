@@ -87,7 +87,7 @@ async function loadMetadataForContext(db, { tenantId, department, max }) {
     return {
       type: 'folder', id: folder.id, label: `${folder.folderNumber} - ${folder.title}`,
       text: recordText(folder.title, folder.description, folder.docType,
-        item?.folderTitle, item?.categoryCode, item?.transferList?.title),
+        item?.folderTitle, item?.categoryCode, department ? null : item?.transferList?.title),
     };
   });
 

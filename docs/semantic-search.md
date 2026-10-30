@@ -121,6 +121,8 @@ uruchomienie sie nie powiedzie, nie wlaczaj pilota w aplikacji produkcyjnej.
 
 Opcjonalne `--department "Ksiegowosc"` ogranicza wynik do teczek w kartonach
 tego dzialu i nie pokazuje osobnych spisow, ktore obejmuja wiele dzialow.
+Nie dolacza tez tytulu wspolnego spisu do tekstu teczki wysylanego do lokalnego
+modelu; pozostaja dane samej teczki i jej pozycji w spisie.
 Pilot nie stanowi jeszcze kontroli uprawnien aplikacji: uruchamia go tylko
 administrator z dostepem do konsoli i bazy. Przed udostepnieniem wynikow
 uzytkownikom potrzebne sa pgvector, indeks, kontrola dostepu w API i ocena
