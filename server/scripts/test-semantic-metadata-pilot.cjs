@@ -50,6 +50,29 @@ test('unrestricted pilot reads only the chosen tenant and ranks local embeddings
   assert.equal(result.results[0].score, 1);
 });
 
+test('full folder sample still reserves room for a transfer list', async () => {
+  const { db, calls } = fakeDb();
+  db.folder.findMany = async (args) => {
+    calls.push(['folder', args]);
+    return Array.from({ length: args.take }, (_, index) => ({
+      id: `folder-${index}`, folderNumber: `T-${index}`, title: `Teczka ${index}`,
+      description: null, docType: null, transferListItem: null,
+    }));
+  };
+  db.transferList.findMany = async (args) => {
+    calls.push(['list', args]);
+    return Array.from({ length: args.take }, (_, index) => ({
+      id: `list-${index}`, listNumber: `SZO-${index}`, title: `Spis ${index}`,
+      transferringUnit: null, notes: null,
+    }));
+  };
+  const result = await loadMetadata(db, { tenantCode: 'ABC', max: 20 });
+  assert.equal(result.records.length, 20);
+  assert.equal(result.records.filter((record) => record.type === 'transfer_list').length, 5);
+  assert.equal(result.records.at(-1).type, 'transfer_list');
+  assert.equal(calls.find(([kind]) => kind === 'list')[1].take, 5);
+});
+
 test('dry run never calls the embedding service', async () => {
   const { db } = fakeDb();
   const result = await runPilot(db, { tenantCode: 'ABC', dryRun: true, max: 20 }, () => {

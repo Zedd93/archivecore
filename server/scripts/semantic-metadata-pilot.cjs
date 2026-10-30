@@ -65,7 +65,7 @@ async function loadMetadata(db, { tenantCode, department, max }) {
     take: max,
   });
 
-  const records = folders.map((folder) => ({
+  const folderRecords = folders.map((folder) => ({
     type: 'folder', id: folder.id, label: `${folder.folderNumber} - ${folder.title}`,
     text: recordText(folder.title, folder.description, folder.docType,
       folder.transferListItem?.folderTitle, folder.transferListItem?.categoryCode,
@@ -73,19 +73,21 @@ async function loadMetadata(db, { tenantCode, department, max }) {
   }));
 
   // A list spans departments. With a department filter, expose it only through its visible folders.
-  if (!department && records.length < max) {
+  if (!department) {
     const lists = await db.transferList.findMany({
       where: { tenantId: tenant.id },
       select: { id: true, listNumber: true, title: true, transferringUnit: true, notes: true },
       orderBy: { id: 'asc' },
-      take: max - records.length,
+      take: Math.max(1, Math.floor(max / 4)),
     });
-    records.push(...lists.map((list) => ({
+    const listRecords = lists.map((list) => ({
       type: 'transfer_list', id: list.id, label: `${list.listNumber} - ${list.title}`,
       text: recordText(list.title, list.transferringUnit, list.notes),
-    })));
+    }));
+    const folderCount = max - listRecords.length;
+    return { tenant: tenant.shortCode, records: [...folderRecords.slice(0, folderCount), ...listRecords] };
   }
-  return { tenant: tenant.shortCode, records };
+  return { tenant: tenant.shortCode, records: folderRecords };
 }
 
 async function embedLocal(texts, fetcher = fetch) {

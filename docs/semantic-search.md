@@ -43,6 +43,8 @@ zmian. Zadna nowa migracja bazy nie jest uruchamiana przez sam audyt.
 
 Pilot nie wymaga pgvector i nie zapisuje danych. Dziala wylacznie z konsoli
 administratora, na probce maksymalnie 200 teczek i spisow jednego tenanta.
+Bez filtra dzialu rezerwuje do 25% probki na spisy ZO, takze gdy samych
+teczek jest wiecej niz ustawiony limit.
 Model `bge-m3:latest` musi byc uruchomiony lokalnie w Ollama na
 `127.0.0.1:11434`. Zapytanie i metadane sa przesylane tylko do tej lokalnej
 uslugi; kod nie pozwala podac zewnetrznego adresu. Nie sa czytane akta
