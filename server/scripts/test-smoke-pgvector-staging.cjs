@@ -1,0 +1,41 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { validateTarget, smoke } = require('./smoke-pgvector-staging.cjs');
+
+test('refuses production database and production loopback port', () => {
+  assert.throws(() => validateTarget('postgresql://u:p@localhost:5432/archivecore', 'archivecore', 'archivecore'), /test/);
+  assert.throws(() => validateTarget('postgresql://u:p@localhost:5432/archivecore_staging', 'archivecore_staging', 'archivecore_staging'), /5432/);
+  assert.throws(() => validateTarget('postgresql://u:p@localhost:5433/archivecore', 'archivecore_staging', 'archivecore'), /zgodne/);
+  assert.doesNotThrow(() => validateTarget('postgresql://u:p@localhost:5433/archivecore_staging', 'archivecore_staging', 'archivecore_staging'));
+});
+
+test('smoke test rolls back synthetic vectors and preserves extension state', async () => {
+  const calls = [];
+  let query = 0;
+  const db = {
+    $queryRawUnsafe: async () => query++ === 0
+      ? [{ database: 'archivecore_staging', available: true, enabled: false }]
+      : [{ enabled: false }],
+    $transaction: async (callback) => callback({
+      $executeRawUnsafe: async (sql) => { calls.push(sql); },
+      $queryRawUnsafe: async () => [{ id: 'blisko' }],
+    }),
+  };
+  const result = await smoke(db, 'postgresql://u:p@localhost:5433/archivecore_staging', 'archivecore_staging');
+  assert.deepEqual(result, { database: 'archivecore_staging', extensionWasEnabled: false });
+  assert.equal(calls.length, 3);
+  assert.equal(query, 2);
+});
+
+test('missing binary fails before any transaction', async () => {
+  const db = {
+    $queryRawUnsafe: async () => [{ database: 'archivecore_staging', available: false, enabled: false }],
+    $transaction: async () => { throw new Error('unexpected transaction'); },
+  };
+  await assert.rejects(smoke(db, 'postgresql://u:p@localhost:5433/archivecore_staging', 'archivecore_staging'), /nie jest zainstalowany/);
+});
+
+test('production target is rejected before querying the database', async () => {
+  const db = { $queryRawUnsafe: async () => { throw new Error('unexpected database query'); } };
+  await assert.rejects(smoke(db, 'postgresql://u:p@localhost:5432/archivecore', 'archivecore'), /test/);
+});

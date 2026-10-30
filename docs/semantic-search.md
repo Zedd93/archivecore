@@ -39,6 +39,46 @@ potrzeby podgladu, ale nie wypelnia automatycznie `attachments.ocrText`.
 Do czasu spelnienia tych warunkow obecna wyszukiwarka tekstowa pozostaje bez
 zmian. Zadna nowa migracja bazy nie jest uruchamiana przez sam audyt.
 
+## Przygotowanie pgvector na Windows bez Dockera
+
+Serwer produkcyjny ma PostgreSQL 16 w `C:\Program Files\PostgreSQL\16`.
+Nie ma obecnie `nmake`, wiec nie nalezy uruchamiac instalacji rozszerzenia
+na tej instancji. Najpierw przygotuj **osobna instancje testowa** PostgreSQL
+16 na innym serwerze lub w izolowanej instalacji z innym katalogiem danych,
+portem i `PGROOT`. Druga baza w tym samym klastrze produkcyjnym nie jest
+izolacja: `nmake install` kopiuje pliki rozszerzenia do wspolnego `PGROOT`.
+
+Na instancji testowej zainstaluj oficjalne narzedzia Visual Studio z obsluga
+C++, otworz jako administrator `x64 Native Tools Command Prompt`, a nastepnie
+wykonaj [instrukcje pgvector dla Windows](https://github.com/pgvector/pgvector#installation).
+`PGROOT` musi wskazywac **testowa**, a nie produkcyjna instalacje PostgreSQL:
+
+```cmd
+set "PGROOT=C:\Program Files\PostgreSQL\16"
+git clone --branch v0.8.7 https://github.com/pgvector/pgvector.git
+cd pgvector
+nmake /F Makefile.win
+nmake /F Makefile.win install
+```
+
+Powyzszy `PGROOT` to tylko przyklad, jesli taka jest sciezka instalacji
+testowej. Przed `nmake install` sprawdz ja ponownie. Nie uzywaj
+nieoficjalnych plikow `vector.dll` z przypadkowych repozytoriow.
+
+Po instalacji ustaw `DATABASE_URL` na osobna baze testowa (bez wpisywania
+hasla w historie konsoli) i uruchom:
+
+```powershell
+npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging
+```
+
+Test nie wczytuje `.env`, odmawia pracy na lokalnym porcie produkcyjnym 5432,
+tworzy tylko sztuczne wektory w transakcji i na koniec ja wycofuje. Samo
+sprawdzenie nazwy bazy nie dowodzi izolacji klastra: operator musi potwierdzic
+osobna instancje. Przed instalacja na produkcji trzeba jeszcze wykonac kopie
+zapasowa, probe odtworzenia, test migracji na kopii schematu i weryfikacje
+uprawnien wyszukiwania miedzy tenantami i dzialami.
+
 ## Lokalny pilot na metadanych
 
 Pilot nie wymaga pgvector i nie zapisuje danych. Dziala wylacznie z konsoli
