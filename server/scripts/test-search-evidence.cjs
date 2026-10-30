@@ -4,7 +4,10 @@ const { searchController } = require('../dist/modules/search/search.controller')
 const { searchService } = require('../dist/modules/search/search.service');
 const { prisma } = require('../dist/config/database');
 const { tenantContext } = require('../dist/middleware/tenant');
-const { RoleCode } = require('@archivecore/shared');
+const { RoleCode, Permissions } = require('@archivecore/shared');
+
+const readablePermissions = [Permissions.BOX_READ, Permissions.FOLDER_READ, Permissions.DOCUMENT_READ, Permissions.ATTACHMENT_READ];
+const evidenceRequest = (request) => ({ user: { permissions: readablePermissions }, ...request });
 
 function response() {
   return {
@@ -24,7 +27,9 @@ test('retrieves only scoped, linkable non-HR sources and hides raw metadata', as
       assert.equal(query, 'umowa');
       assert.equal(department, 'Księgowość');
       assert.deepEqual(options, {
-        types: ['box', 'folder', 'document'], canViewHr: false, limit: 10, offset: 0,
+        types: ['box', 'folder', 'document'], canViewHr: false,
+        canReadBoxes: true, canReadFolders: true, canReadDocuments: true, canReadAttachments: true,
+        limit: 10, offset: 0,
       });
       return { total: 5, results: [
         { id: 'box-1', type: 'box', title: 'Karton', subtitle: 'Półka', metadata: { secret: 'hidden' } },
@@ -36,7 +41,7 @@ test('retrieves only scoped, linkable non-HR sources and hides raw metadata', as
     };
     const res = response();
     let error;
-    await searchController.evidence({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'umowa', types: 'hr_folder', limit: '100' } }, res, (err) => { error = err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'umowa', types: 'hr_folder', limit: '100' } }), res, (err) => { error = err; });
     assert.equal(error, undefined);
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers['Cache-Control'], 'private, no-store');
@@ -46,6 +51,46 @@ test('retrieves only scoped, linkable non-HR sources and hides raw metadata', as
     assert.equal(JSON.stringify(res.body).includes('sensitive'), false);
     assert.equal(JSON.stringify(res.body).includes('Akta osobowe'), false);
     assert.equal(JSON.stringify(res.body).includes('secret'), false);
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('warehouse search and evidence never retrieve documents or scans without read permissions', async () => {
+  const oldSearch = searchService.search;
+  try {
+    searchService.search = async (_tenantId, _query, options) => {
+      assert.deepEqual(options.types, ['box', 'folder']);
+      assert.equal(options.canReadDocuments, false);
+      assert.equal(options.canReadAttachments, false);
+      return { results: [
+        { id: 'box-1', type: 'box', title: 'Karton', subtitle: '', metadata: {} },
+        { id: 'folder-1', type: 'folder', title: 'Teczka', subtitle: '', metadata: {} },
+        { id: 'document-1', type: 'document', title: 'Dokument', subtitle: '', metadata: {} },
+        { id: 'scan-1', type: 'document', title: 'Skan', subtitle: '', metadata: { source: 'attachment', boxId: 'box-1' } },
+      ] };
+    };
+    const user = { permissions: [Permissions.BOX_READ, Permissions.FOLDER_READ, Permissions.SEARCH_ALL] };
+    const evidenceResponse = response();
+    await searchController.evidence({ tenantId: 'tenant-a', user, query: { q: 'umowa' } }, evidenceResponse, (err) => { throw err; });
+    assert.deepEqual(evidenceResponse.body.data.sources.map(({ type }) => type), ['box', 'folder']);
+
+    const searchResponse = response();
+    await searchController.search({ tenantId: 'tenant-a', user, query: { q: 'umowa' } }, searchResponse, (err) => { throw err; });
+  } finally {
+    searchService.search = oldSearch;
+  }
+});
+
+test('evidence requires an authenticated user before searching', async () => {
+  const oldSearch = searchService.search;
+  let called = false;
+  try {
+    searchService.search = async () => { called = true; throw new Error('must not run'); };
+    const res = response();
+    await searchController.evidence({ tenantId: 'tenant-a', query: { q: 'umowa' } }, res, () => {});
+    assert.equal(res.statusCode, 401);
+    assert.equal(called, false);
   } finally {
     searchService.search = oldSearch;
   }
@@ -73,7 +118,7 @@ test('finds an exact box number inside a natural-language question', async () =>
       return { total: 0, results: [] };
     };
     const res = response();
-    await searchController.evidence({ tenantId: 'tenant-a', query: { q: 'Gdzie jest karton k-2026-000030?' } }, res, (err) => { throw err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', query: { q: 'Gdzie jest karton k-2026-000030?' } }), res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -91,7 +136,7 @@ test('finds a folder number in a question without mistaking its box prefix for a
       return { total: 1, results: [{ id: 'folder-1', type: 'folder', title: 'Teczka', subtitle: 'Karton', metadata: {} }] };
     };
     const res = response();
-    await searchController.evidence({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'Gdzie jest teczka k-2026-000030/t-001?' } }, res, (err) => { throw err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'Gdzie jest teczka k-2026-000030/t-001?' } }), res, (err) => { throw err; });
     assert.deepEqual(res.body.data.sources.map(({ href }) => href), ['/folders/folder-1']);
   } finally {
     searchService.search = oldSearch;
@@ -107,7 +152,7 @@ test('ordinary results resolve the same folder number question', async () => {
       return { total: 1, results: [] };
     };
     const res = response();
-    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: 'Pokaż teczkę K-2026-000030/T-001', types: 'folder' } }, res, (err) => { throw err; });
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: readablePermissions }, query: { q: 'Pokaż teczkę K-2026-000030/T-001', types: 'folder' } }, res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -124,7 +169,7 @@ test('finds an imported transfer-list folder number in a natural question', asyn
       return { total: 1, results: [{ id: 'folder-1', type: 'folder', title: 'SMG/1473 — Regulaminy', subtitle: 'Spis ZO', metadata: {} }] };
     };
     const res = response();
-    await searchController.evidence({ tenantId: 'tenant-a', query: { q: 'Gdzie jest teczka smg/1473?' } }, res, (err) => { throw err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', query: { q: 'Gdzie jest teczka smg/1473?' } }), res, (err) => { throw err; });
     assert.deepEqual(res.body.data.sources.map(({ href }) => href), ['/folders/folder-1']);
   } finally {
     searchService.search = oldSearch;
@@ -140,7 +185,7 @@ test('does not choose between two imported folder numbers', async () => {
       return { total: 0, results: [] };
     };
     const res = response();
-    await searchController.evidence({ tenantId: 'tenant-a', query: { q: question } }, res, (err) => { throw err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', query: { q: question } }), res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -158,7 +203,7 @@ test('finds a quoted document title in a question while retaining the user scope
       return { total: 1, results: [{ id: 'document-1', type: 'document', title: 'Umowa dzierżawy 2024', subtitle: 'Karton', metadata: {} }] };
     };
     const res = response();
-    await searchController.evidence({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'Pokaż dokument „Umowa dzierżawy 2024”' } }, res, (err) => { throw err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', accessDepartment: 'Księgowość', query: { q: 'Pokaż dokument „Umowa dzierżawy 2024”' } }), res, (err) => { throw err; });
     assert.deepEqual(res.body.data.sources.map(({ href }) => href), ['/documents/document-1']);
   } finally {
     searchService.search = oldSearch;
@@ -174,7 +219,7 @@ test('ordinary document-only results use a quoted title without searching boxes'
       return { total: 0, results: [] };
     };
     const res = response();
-    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: 'Pokaż dokument "Umowa dzierżawy 2024"', types: 'document' } }, res, (err) => { throw err; });
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: readablePermissions }, query: { q: 'Pokaż dokument "Umowa dzierżawy 2024"', types: 'document' } }, res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -196,7 +241,7 @@ test('does not choose between two quoted titles or a title and a box number', as
     };
     for (const q of questions) {
       const res = response();
-      await searchController.evidence({ tenantId: 'tenant-a', query: { q } }, res, (err) => { throw err; });
+      await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', query: { q } }), res, (err) => { throw err; });
       assert.equal(res.statusCode, 200);
     }
     assert.equal(index, questions.length);
@@ -215,7 +260,7 @@ test('a document-only filter does not resolve a folder number to a folder', asyn
       return { total: 0, results: [] };
     };
     const res = response();
-    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: question, types: 'document' } }, res, (err) => { throw err; });
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: readablePermissions }, query: { q: question, types: 'document' } }, res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -231,7 +276,7 @@ test('does not guess between two different box numbers', async () => {
       return { total: 0, results: [] };
     };
     const res = response();
-    await searchController.evidence({ tenantId: 'tenant-a', query: { q: question } }, res, (err) => { throw err; });
+    await searchController.evidence(evidenceRequest({ tenantId: 'tenant-a', query: { q: question } }), res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -247,7 +292,7 @@ test('ordinary results resolve the same box question when boxes are included', a
       return { total: 1, results: [] };
     };
     const res = response();
-    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: 'Gdzie jest karton K-2026-000030?' } }, res, (err) => { throw err; });
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: readablePermissions }, query: { q: 'Gdzie jest karton K-2026-000030?' } }, res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -264,7 +309,7 @@ test('a document-only filter does not resolve a box question to a box', async ()
       return { total: 0, results: [] };
     };
     const res = response();
-    await searchController.search({ tenantId: 'tenant-a', user: { permissions: [] }, query: { q: question, types: 'document' } }, res, (err) => { throw err; });
+    await searchController.search({ tenantId: 'tenant-a', user: { permissions: readablePermissions }, query: { q: question, types: 'document' } }, res, (err) => { throw err; });
     assert.equal(res.statusCode, 200);
   } finally {
     searchService.search = oldSearch;
@@ -314,8 +359,8 @@ test('scopes every evidence query to the tenant and employee department', async 
     assert.equal(queries.get('attachment').OR[3].box.department.equals, 'Księgowość');
     assert.deepEqual(queries.get('attachment').AND[1].OR, [
       { documentId: { not: null } },
-      { folderId: { not: null } },
-      { boxId: { not: null } },
+      { documentId: null, folderId: { not: null } },
+      { documentId: null, folderId: null, boxId: { not: null } },
     ]);
   } finally {
     for (const model of models) prisma[model].findMany = originals.get(model);
@@ -347,8 +392,8 @@ test('does not expose HR-only or orphan attachments as unopenable search sources
       assert.equal(where.tenantId, 'tenant-a');
       assert.deepEqual(where.AND[1].OR, [
         { documentId: { not: null } },
-        { folderId: { not: null } },
-        { boxId: { not: null } },
+        { documentId: null, folderId: { not: null } },
+        { documentId: null, folderId: null, boxId: { not: null } },
       ]);
       return [];
     };
@@ -359,6 +404,61 @@ test('does not expose HR-only or orphan attachments as unopenable search sources
   } finally {
     prisma.attachment.findMany = originalAttachment;
     prisma.document.findMany = originalDocument;
+  }
+});
+
+test('document search does not query inaccessible document or attachment records', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  try {
+    prisma.document.findMany = async () => { throw new Error('document query must not run'); };
+    prisma.attachment.findMany = async () => { throw new Error('attachment query must not run'); };
+    const result = await searchService.search('tenant-a', 'umowa', {
+      types: ['document'], canReadDocuments: false, canReadAttachments: false, canViewHr: false,
+    });
+    assert.deepEqual(result, { results: [], total: 0, hasMore: false });
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
+  }
+});
+
+test('explicit read denial overrides requested box and folder types, including exact box lookup', async () => {
+  const originalBox = prisma.box.findMany;
+  const originalFolder = prisma.folder.findMany;
+  try {
+    prisma.box.findMany = async () => { throw new Error('box query must not run'); };
+    prisma.folder.findMany = async () => { throw new Error('folder query must not run'); };
+    const result = await searchService.search('tenant-a', 'K-2026-000030', {
+      types: ['box', 'folder'], canReadBoxes: false, canReadFolders: false,
+    });
+    assert.deepEqual(result, { results: [], total: 0, hasMore: false });
+  } finally {
+    prisma.box.findMany = originalBox;
+    prisma.folder.findMany = originalFolder;
+  }
+});
+
+test('scan search includes only attachments whose parent record is readable', async () => {
+  const originalDocument = prisma.document.findMany;
+  const originalAttachment = prisma.attachment.findMany;
+  let calls = 0;
+  try {
+    prisma.document.findMany = async () => { throw new Error('document query must not run'); };
+    prisma.attachment.findMany = async ({ where }) => {
+      calls++;
+      assert.deepEqual(where.AND[1].OR, [{ documentId: null, folderId: { not: null } }]);
+      return [];
+    };
+    const result = await searchService.search('tenant-a', 'umowa', {
+      types: ['document'], canReadDocuments: false, canReadAttachments: true,
+      canReadBoxes: false, canReadFolders: true, canViewHr: false,
+    });
+    assert.equal(calls, 4);
+    assert.deepEqual(result.results, []);
+  } finally {
+    prisma.document.findMany = originalDocument;
+    prisma.attachment.findMany = originalAttachment;
   }
 });
 

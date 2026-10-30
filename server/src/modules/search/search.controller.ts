@@ -3,6 +3,16 @@ import { searchService, SearchResult } from './search.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions } from '@archivecore/shared';
 
+function readableTypes(permissions: string[], includeHr: boolean): string[] {
+  const canViewHr = includeHr && permissions.includes(Permissions.HR_VIEW);
+  return [
+    ...(permissions.includes(Permissions.BOX_READ) ? ['box'] : []),
+    ...(permissions.includes(Permissions.FOLDER_READ) ? ['folder'] : []),
+    ...(permissions.includes(Permissions.DOCUMENT_READ) || permissions.includes(Permissions.ATTACHMENT_READ) || canViewHr ? ['document'] : []),
+    ...(canViewHr ? ['hr_folder'] : []),
+  ];
+}
+
 function searchTerm(query: string, types: string[]): string {
   const folderNumbers = [...query.matchAll(/(?:^|[^A-Za-z0-9/-])(K-\d{4}-\d+\/T-\d+)(?![A-Za-z0-9/-])/gi)]
     .map((match) => match[1].toUpperCase());
@@ -24,10 +34,21 @@ export class SearchController {
   async evidence(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);
+      if (!req.user) return errorResponse(res, 'Niezalogowany', 401);
       const query = req.query.q as string;
-      const { results } = await searchService.search(req.tenantId, searchTerm(query, ['box', 'folder', 'document']), {
-        types: ['box', 'folder', 'document'],
+      const permissions = req.user.permissions;
+      const types = readableTypes(permissions, false);
+      const canReadBoxes = permissions.includes(Permissions.BOX_READ);
+      const canReadFolders = permissions.includes(Permissions.FOLDER_READ);
+      const canReadDocuments = permissions.includes(Permissions.DOCUMENT_READ);
+      const canReadAttachments = permissions.includes(Permissions.ATTACHMENT_READ);
+      const { results } = await searchService.search(req.tenantId, searchTerm(query, types), {
+        types,
         canViewHr: false,
+        canReadBoxes,
+        canReadFolders,
+        canReadDocuments,
+        canReadAttachments,
         limit: 10,
         offset: 0,
       }, req.accessDepartment || undefined);
@@ -35,6 +56,13 @@ export class SearchController {
       const sources = results.flatMap((result: SearchResult) => {
         if (result.type === 'hr_folder' || result.metadata.source === 'hr_document') return [];
         const isAttachment = result.metadata.source === 'attachment';
+        if (result.type === 'box' && !canReadBoxes) return [];
+        if (result.type === 'folder' && !canReadFolders) return [];
+        if (result.type === 'document' && !isAttachment && !canReadDocuments) return [];
+        if (isAttachment && (!canReadAttachments
+          || (result.metadata.documentId && !canReadDocuments)
+          || (!result.metadata.documentId && result.metadata.folderId && !canReadFolders)
+          || (!result.metadata.documentId && !result.metadata.folderId && result.metadata.boxId && !canReadBoxes))) return [];
         const path = isAttachment
           ? result.metadata.documentId ? `/documents/${result.metadata.documentId}`
             : result.metadata.folderId ? `/folders/${result.metadata.folderId}`
@@ -67,12 +95,16 @@ export class SearchController {
       }
 
       const requestedTypes = types ? (types as string).split(',') : ['box', 'folder', 'document', 'hr_folder'];
-      const typeArray = req.user!.permissions.includes(Permissions.HR_VIEW)
-        ? requestedTypes
-        : requestedTypes.filter((type) => type !== 'hr_folder');
+      const permissions = req.user!.permissions;
+      const allowedTypes = readableTypes(permissions, true);
+      const typeArray = requestedTypes.filter((type) => allowedTypes.includes(type));
       const results = await searchService.search(req.tenantId, searchTerm(q as string, typeArray), {
         types: typeArray,
-        canViewHr: req.user!.permissions.includes(Permissions.HR_VIEW),
+        canViewHr: permissions.includes(Permissions.HR_VIEW),
+        canReadBoxes: permissions.includes(Permissions.BOX_READ),
+        canReadFolders: permissions.includes(Permissions.FOLDER_READ),
+        canReadDocuments: permissions.includes(Permissions.DOCUMENT_READ),
+        canReadAttachments: permissions.includes(Permissions.ATTACHMENT_READ),
         limit: limit ? parseInt(limit as string) : 20,
         offset: offset ? parseInt(offset as string) : 0,
       }, req.accessDepartment || undefined);

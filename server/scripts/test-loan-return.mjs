@@ -474,7 +474,7 @@ test('search does not expose personnel documents without HR permission', async (
     await searchService.search(tenantId, 'test', { types: ['document'], canViewHr: false }, 'Księgowość');
     assert.equal(hrQueries, 0);
     await searchService.search(tenantId, 'test', { types: ['document'], canViewHr: true });
-    assert.equal(hrQueries, 1);
+    assert.equal(hrQueries, 3);
   } finally { mocks.reverse().forEach((entry) => entry.mock.restore()); }
 });
 

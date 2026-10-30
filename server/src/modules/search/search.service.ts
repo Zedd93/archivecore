@@ -53,6 +53,10 @@ export class SearchService {
   async search(tenantId: string, query: string, options: {
     types?: string[];
     canViewHr?: boolean;
+    canReadDocuments?: boolean;
+    canReadAttachments?: boolean;
+    canReadBoxes?: boolean;
+    canReadFolders?: boolean;
     limit?: number;
     offset?: number;
   } = {}, department?: string): Promise<{ results: SearchResult[]; total: number; hasMore: boolean }> {
@@ -64,7 +68,7 @@ export class SearchService {
     const trimmedQuery = query.trim();
 
     // 1. Check if query is a QR code or exact box number
-    if (types.includes('box') && (trimmedQuery.startsWith('AC:') || trimmedQuery.match(/^K-\d{4}-\d+$/))) {
+    if (types.includes('box') && options.canReadBoxes !== false && (trimmedQuery.startsWith('AC:') || trimmedQuery.match(/^K-\d{4}-\d+$/))) {
       const boxes = await prisma.box.findMany({
         where: {
           tenantId,
@@ -102,29 +106,38 @@ export class SearchService {
     // Fetch each relevance tier separately so older strong matches are not hidden by a newer batch.
     const searchPromises: Promise<void>[] = [];
 
-    if (types.includes('box')) {
+    if (types.includes('box') && options.canReadBoxes !== false) {
       searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
       searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
       searchPromises.push(this.searchBoxes(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
-    if (types.includes('folder')) {
+    if (types.includes('folder') && options.canReadFolders !== false) {
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
       searchPromises.push(this.searchFolders(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
     }
     if (types.includes('document')) {
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
+      if (options.canReadDocuments !== false) {
+        searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, 'exact').then(r => { results.push(...r); }));
+        searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department, 'prefix').then(r => { results.push(...r); }));
+        searchPromises.push(this.searchDocuments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
+      }
       if (options.canViewHr) {
         searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit, 'exact').then(r => { results.push(...r); }));
         searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit, 'prefix').then(r => { results.push(...r); }));
         searchPromises.push(this.searchHRDocuments(tenantId, trimmedQuery, fetchLimit).then(r => { results.push(...r); }));
       }
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename_prefix').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'ocr').then(r => { results.push(...r); }));
-      searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department).then(r => { results.push(...r); }));
+      if (options.canReadAttachments !== false) {
+        const readableParents = {
+          document: options.canReadDocuments !== false,
+          folder: options.canReadFolders !== false,
+          box: options.canReadBoxes !== false,
+        };
+        searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename', readableParents).then(r => { results.push(...r); }));
+        searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'filename_prefix', readableParents).then(r => { results.push(...r); }));
+        searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'ocr', readableParents).then(r => { results.push(...r); }));
+        searchPromises.push(this.searchAttachments(tenantId, trimmedQuery, fetchLimit, department, 'all', readableParents).then(r => { results.push(...r); }));
+      }
     }
     if (types.includes('hr_folder')) {
       if (options.canViewHr) {
@@ -405,8 +418,14 @@ export class SearchService {
     });
   }
 
-  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, match: 'all' | 'filename' | 'filename_prefix' | 'ocr' = 'all'): Promise<SearchResult[]> {
+  private async searchAttachments(tenantId: string, query: string, limit: number, department?: string, match: 'all' | 'filename' | 'filename_prefix' | 'ocr' = 'all', readableParents = { document: true, folder: true, box: true }): Promise<SearchResult[]> {
     const departmentFilter = { equals: department, mode: 'insensitive' as const };
+    const parentFilters = [
+      ...(readableParents.document ? [{ documentId: { not: null } }] : []),
+      ...(readableParents.folder ? [{ documentId: null, folderId: { not: null } }] : []),
+      ...(readableParents.box ? [{ documentId: null, folderId: null, boxId: { not: null } }] : []),
+    ];
+    if (parentFilters.length === 0) return [];
     const attachments = await prisma.attachment.findMany({
       where: {
         tenantId,
@@ -436,13 +455,7 @@ export class SearchService {
               { box: { boxNumber: { contains: query, mode: 'insensitive' } } },
             ],
           },
-          {
-            OR: [
-              { documentId: { not: null } },
-              { folderId: { not: null } },
-              { boxId: { not: null } },
-            ],
-          },
+          { OR: parentFilters },
         ],
       },
       include: {
