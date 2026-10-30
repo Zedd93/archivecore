@@ -48,34 +48,53 @@ async function loadMetadata(db, { tenantCode, department, max }) {
   });
   if (!tenant) throw new Error('Nie znaleziono tenanta.');
 
+  const records = await loadMetadataForContext(db, { tenantId: tenant.id, department, max });
+  return { tenant: tenant.shortCode, records };
+}
+
+async function loadMetadataForContext(db, { tenantId, department, max }) {
+  if (typeof tenantId !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) {
+    throw new Error('Brak poprawnego identyfikatora tenanta.');
+  }
+  if (!Number.isSafeInteger(max) || max < 1 || max > 200) {
+    throw new Error('Limit probki musi byc liczba od 1 do 200.');
+  }
+  if (department !== undefined && (typeof department !== 'string' || !department.trim())) {
+    throw new Error('Filtr dzialu nie moze byc pusty.');
+  }
+
   const folders = await db.folder.findMany({
     where: {
-      tenantId: tenant.id,
+      tenantId,
       status: { not: 'disposed' },
       ...(department
-        ? { box: { is: { deletedAt: null, department: { equals: department, mode: 'insensitive' } } } }
-        : { OR: [{ boxId: null }, { box: { is: { deletedAt: null } } }] }),
+        ? { box: { is: { tenantId, deletedAt: null, department: { equals: department, mode: 'insensitive' } } } }
+        : { OR: [{ boxId: null }, { box: { is: { tenantId, deletedAt: null } } }] }),
     },
     select: {
       id: true, folderNumber: true, title: true, description: true, docType: true,
       transferListItem: { select: { folderTitle: true, categoryCode: true,
-        transferList: { select: { listNumber: true, title: true } } } },
+        transferList: { select: { tenantId: true, listNumber: true, title: true } } } },
     },
     orderBy: { id: 'asc' },
     take: max,
   });
 
-  const folderRecords = folders.map((folder) => ({
-    type: 'folder', id: folder.id, label: `${folder.folderNumber} - ${folder.title}`,
-    text: recordText(folder.title, folder.description, folder.docType,
-      folder.transferListItem?.folderTitle, folder.transferListItem?.categoryCode,
-      folder.transferListItem?.transferList?.title),
-  }));
+  const folderRecords = folders.map((folder) => {
+    const item = folder.transferListItem?.transferList?.tenantId === tenantId
+      ? folder.transferListItem : null;
+    return {
+      type: 'folder', id: folder.id, label: `${folder.folderNumber} - ${folder.title}`,
+      text: recordText(folder.title, folder.description, folder.docType,
+        item?.folderTitle, item?.categoryCode, item?.transferList?.title),
+    };
+  });
 
   // A list spans departments. With a department filter, expose it only through its visible folders.
   if (!department) {
     const lists = await db.transferList.findMany({
-      where: { tenantId: tenant.id },
+      where: { tenantId },
       select: { id: true, listNumber: true, title: true, transferringUnit: true, notes: true },
       orderBy: { id: 'asc' },
       take: Math.max(1, Math.floor(max / 4)),
@@ -85,9 +104,9 @@ async function loadMetadata(db, { tenantCode, department, max }) {
       text: recordText(list.title, list.transferringUnit, list.notes),
     }));
     const folderCount = max - listRecords.length;
-    return { tenant: tenant.shortCode, records: [...folderRecords.slice(0, folderCount), ...listRecords] };
+    return [...folderRecords.slice(0, folderCount), ...listRecords];
   }
-  return { tenant: tenant.shortCode, records: folderRecords };
+  return folderRecords;
 }
 
 async function embedLocal(texts, fetcher = fetch) {
@@ -162,4 +181,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseArgs, loadMetadata, embedLocal, cosine, runPilot, EMBED_URL, MODEL };
+module.exports = { parseArgs, loadMetadata, loadMetadataForContext, embedLocal, cosine, runPilot, EMBED_URL, MODEL };

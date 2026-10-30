@@ -4,6 +4,7 @@ const { parseEvaluationArgs, parseCases, evaluateCases } = require('./evaluate-s
 
 const folderId = '00000000-0000-0000-0000-000000000001';
 const listId = '00000000-0000-0000-0000-000000000002';
+const tenantId = '00000000-0000-0000-0000-000000000003';
 const vector = (first) => [first, 1 - first, ...Array(1022).fill(0)];
 
 function fakeDb() {
@@ -12,7 +13,7 @@ function fakeDb() {
     calls,
     tenant: { findFirst: async (args) => {
       calls.push(['tenant', args]);
-      return { id: 'tenant-a', shortCode: 'ABC' };
+      return { id: tenantId, shortCode: 'ABC' };
     } },
     folder: { findMany: async (args) => {
       calls.push(['folder', args]);
@@ -52,7 +53,7 @@ test('scores scoped results and embeds metadata only once for multiple queries',
   assert.equal(summary.meanRecall, 1);
   assert.equal(summary.mrr, 1);
   assert.deepEqual(requests.map((batch) => batch.length), [2, 2]);
-  assert.ok(db.calls.slice(1).every(([, args]) => args.where.tenantId === 'tenant-a'));
+  assert.ok(db.calls.slice(1).every(([, args]) => args.where.tenantId === tenantId));
   assert.deepEqual(results.map((result) => result.top[0].type), ['folder', 'transfer_list']);
 });
 
