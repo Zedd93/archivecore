@@ -4,18 +4,36 @@ const { parseArgs, loadMetadata, embedLocal, cosine } = require('./semantic-meta
 
 function parseEvaluationArgs(argv) {
   let file;
+  const relevant = [];
   const pilotArgs = ['--dry-run'];
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === '--file') {
       if (file || !argv[index + 1]) throw new Error('Podaj jeden --file z przypadkami testowymi.');
       file = argv[++index];
+    } else if (argv[index] === '--relevant') {
+      if (!argv[index + 1]) throw new Error('Podaj --relevant type:UUID.');
+      relevant.push(argv[++index]);
     } else {
       pilotArgs.push(argv[index]);
     }
   }
-  if (!file) throw new Error('Podaj --file z przypadkami testowymi.');
   const options = parseArgs(pilotArgs);
-  return { ...options, file };
+  if (file) {
+    if (options.query || relevant.length) throw new Error('Uzyj --file albo --query i --relevant, nie obu trybow.');
+    return { ...options, file };
+  }
+  if (!options.query || !relevant.length) {
+    throw new Error('Podaj --file albo --query oraz co najmniej jeden --relevant type:UUID.');
+  }
+  const cases = parseCases(JSON.stringify([{
+    query: options.query,
+    relevant: relevant.map((value) => {
+      const [type, id, extra] = value.split(':');
+      if (extra || !type || !id) throw new Error('Podaj --relevant type:UUID.');
+      return { type, id };
+    }),
+  }]));
+  return { ...options, cases };
 }
 
 function parseCases(input) {
@@ -95,7 +113,7 @@ async function evaluateCases(db, options, cases, embed = embedLocal) {
 
 async function main() {
   const options = parseEvaluationArgs(process.argv.slice(2));
-  const cases = parseCases(await fs.readFile(options.file, 'utf8'));
+  const cases = options.cases ?? parseCases(await fs.readFile(options.file, 'utf8'));
   require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
   const { PrismaClient } = require('@prisma/client');
   const db = new PrismaClient();

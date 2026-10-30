@@ -158,3 +158,14 @@ sie pierwszy trafny wynik. Wynik mierzy tylko wybrana probke metadanych, nie
 cale archiwum ani jakosc przyszlego indeksu pgvector. Przed udostepnieniem
 funkcji nalezy osobno sprawdzic, czy wyniki nie ujawniaja danych innych
 tenantow i dzialow.
+
+Do pojedynczego testu kontrolnego nie trzeba przygotowywac pliku JSON. Po
+recznym potwierdzeniu, ze dany rekord jest trafny dla zapytania, podaj jego
+typ i UUID:
+
+```powershell
+npm run db:evaluate-semantic-metadata -- --tenant SMPOLI --query "faktury kosztowe" --relevant folder:00000000-0000-0000-0000-000000000001 --max 200 --top 10
+```
+
+To test jednego zapytania, a nie miarodajna ocena trafnosci dla calego
+archiwum. Tryby `--file` oraz `--query`/`--relevant` sa rozlaczne.
