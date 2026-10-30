@@ -61,6 +61,20 @@ Po zainstalowaniu Ollama i pobraniu modelu `bge-m3:latest`:
 npm run db:pilot-semantic-metadata -- --tenant SMPOLI --query "dokumentacja finansowa" --max 100 --top 10
 ```
 
+Na serwerze Windows odizolowany pakiet pilota mozna przygotowac tak:
+
+```powershell
+node server/scripts/setup-local-embedding.cjs --install
+node server/scripts/setup-local-embedding.cjs --serve
+node server/scripts/setup-local-embedding.cjs --pull
+```
+
+Pakiet jest pobierany z oficjalnej wersji Ollama i sprawdzany wzgledem SHA-256
+podanego przez GitHub. Proces nasluchuje tylko na `127.0.0.1`, nie jest
+rejestrowany jako usluga i nie modyfikuje PostgreSQL ani PM2. Windows Server
+2022 nie widnieje na oficjalnej liscie wspieranych systemow Ollama; jesli
+uruchomienie sie nie powiedzie, nie wlaczaj pilota w aplikacji produkcyjnej.
+
 Opcjonalne `--department "Ksiegowosc"` ogranicza wynik do teczek w kartonach
 tego dzialu i nie pokazuje osobnych spisow, ktore obejmuja wiele dzialow.
 Pilot nie stanowi jeszcze kontroli uprawnien aplikacji: uruchamia go tylko
