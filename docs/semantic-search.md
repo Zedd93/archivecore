@@ -42,42 +42,48 @@ zmian. Zadna nowa migracja bazy nie jest uruchamiana przez sam audyt.
 ## Przygotowanie pgvector na Windows bez Dockera
 
 Serwer produkcyjny ma PostgreSQL 16 w `C:\Program Files\PostgreSQL\16`.
-Nie ma obecnie `nmake`, wiec nie nalezy uruchamiac instalacji rozszerzenia
-na tej instancji. Najpierw przygotuj **osobna instancje testowa** PostgreSQL
-16 na innym serwerze lub w izolowanej instalacji z innym katalogiem danych,
-portem i `PGROOT`. Druga baza w tym samym klastrze produkcyjnym nie jest
-izolacja: `nmake install` kopiuje pliki rozszerzenia do wspolnego `PGROOT`.
+Na tym samym serwerze dziala juz **osobny klaster testowy** PostgreSQL 16.15:
+binaria `C:\Apps\PostgreSQL-Staging\16`, dane
+`C:\Apps\PostgreSQL-Staging\data`, port `127.0.0.1:55433`, usluga Windows
+`archivecore-pgvector-staging` (konto LocalService, start reczny), baza
+`archivecore_staging`. Haslo testowej bazy jest zaszyfrowane przez Windows DPAPI
+w `C:\Apps\PostgreSQL-Staging\staging-password.dpapi`; nie umieszczaj go
+w repozytorium ani w produkcyjnym `.env`. Skrypt
+`server/scripts/setup-pgvector-staging.ps1` dokumentuje utworzenie klastra;
+**nie uruchamiaj go ponownie na istniejacej instalacji**. Rozszerzenie
+pgvector v0.8.7 jest zainstalowane tylko w testowym `PGROOT`. Druga baza
+w klastrze produkcyjnym nie zapewnialaby takiej izolacji.
 
 Na instancji testowej zainstaluj oficjalne narzedzia Visual Studio z obsluga
 C++, otworz jako administrator `x64 Native Tools Command Prompt`, a nastepnie
 wykonaj [instrukcje pgvector dla Windows](https://github.com/pgvector/pgvector#installation).
 `PGROOT` musi wskazywac **testowa**, a nie produkcyjna instalacje PostgreSQL.
-W ponizszym przykladzie `C:\PostgreSQL-Staging\16` oznacza odrebna instalacje;
-nie podstawiaj tam produkcyjnego `C:\Program Files\PostgreSQL\16`:
+Na serwerze Doxart uzyto:
 
 ```cmd
-set "PGROOT=C:\PostgreSQL-Staging\16"
+set "PGROOT=C:\Apps\PostgreSQL-Staging\16"
 git clone --branch v0.8.7 https://github.com/pgvector/pgvector.git
 cd pgvector
 nmake /F Makefile.win
 nmake /F Makefile.win install
 ```
 
-Powyzszy `PGROOT` to tylko przyklad, jesli taka jest sciezka instalacji
-testowej. Przed `nmake install` sprawdz ja ponownie. Nie uzywaj
-nieoficjalnych plikow `vector.dll` z przypadkowych repozytoriow.
+Nie uruchamiaj `nmake install` ponownie bez sprawdzenia `PGROOT`. Na serwerze
+kompilacje przeprowadzono przy uzyciu oficjalnych Visual Studio Build Tools
+2022 i zrodla pgvector v0.8.7. Nie uzywaj nieoficjalnych plikow `vector.dll`.
 
 Po instalacji ustaw `DATABASE_URL` na osobna baze testowa (bez wpisywania
 hasla w historie konsoli) i uruchom:
 
 ```powershell
-npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging --staging-data-dir "C:\PostgreSQL-Staging\16\data"
+npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging --staging-data-dir "C:\Apps\PostgreSQL-Staging\data"
 ```
 
 Test nie wczytuje `.env`, odmawia pracy na porcie 5432 niezaleznie od hosta,
 sprawdza rzeczywisty katalog danych instancji i odmawia pracy na znanym
 katalogu produkcyjnym. Tworzy tylko sztuczne wektory w transakcji i na koniec
-ja wycofuje. Podaj faktyczny katalog danych odrebnej instalacji testowej;
+ja wycofuje. Sprawdza rowniez filtrowanie sztucznych rekordow wedlug tenanta
+i dzialu. To **nie jest jeszcze test uprawnien API**. Podaj faktyczny katalog danych odrebnej instalacji testowej;
 podobna nazwa bazy lub inny port same w sobie nie dowodza izolacji klastra.
 Przed instalacja na produkcji trzeba jeszcze wykonac kopie
 zapasowa, probe odtworzenia, test migracji na kopii schematu i weryfikacje

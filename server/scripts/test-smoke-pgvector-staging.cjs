@@ -29,13 +29,34 @@ test('smoke test rolls back synthetic vectors and preserves extension state', as
       : [{ enabled: false }],
     $transaction: async (callback) => callback({
       $executeRawUnsafe: async (sql) => { calls.push(sql); },
-      $queryRawUnsafe: async () => [{ id: 'blisko' }],
+      $queryRawUnsafe: async (sql) => sql.includes('WHERE tenant')
+        ? [{ id: 'blisko' }, { id: 'daleko' }]
+        : [{ id: 'blisko' }],
     }),
   };
   const result = await smoke(db, 'postgresql://u:p@localhost:5433/archivecore_staging', 'archivecore_staging', STAGING_DATA_DIRECTORY);
   assert.deepEqual(result, { database: 'archivecore_staging', extensionWasEnabled: false });
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.equal(query, 2);
+});
+
+test('smoke test rejects a result from another tenant or department', async () => {
+  const db = {
+    $queryRawUnsafe: async () => [{
+      database: 'archivecore_staging', dataDirectory: STAGING_DATA_DIRECTORY,
+      available: true, enabled: false,
+    }],
+    $transaction: async (callback) => callback({
+      $executeRawUnsafe: async () => {},
+      $queryRawUnsafe: async (sql) => sql.includes('WHERE tenant')
+        ? [{ id: 'inny-tenant' }]
+        : [{ id: 'blisko' }],
+    }),
+  };
+  await assert.rejects(
+    smoke(db, 'postgresql://u:p@localhost:5433/archivecore_staging', 'archivecore_staging', STAGING_DATA_DIRECTORY),
+    /ujawnil obcy rekord/
+  );
 });
 
 test('missing binary fails before any transaction', async () => {

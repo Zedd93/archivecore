@@ -55,12 +55,18 @@ async function smoke(db, databaseUrl, expectedDatabase, expectedDataDirectory) {
   try {
     await db.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('CREATE EXTENSION IF NOT EXISTS vector');
-      await tx.$executeRawUnsafe('CREATE TEMP TABLE semantic_vector_smoke (id text PRIMARY KEY, embedding vector(3)) ON COMMIT DROP');
-      await tx.$executeRawUnsafe("INSERT INTO semantic_vector_smoke VALUES ('blisko', '[1,0,0]'), ('daleko', '[0,1,0]')");
+      await tx.$executeRawUnsafe('CREATE TEMP TABLE semantic_vector_smoke (id text PRIMARY KEY, tenant text NOT NULL, department text NOT NULL, embedding vector(3)) ON COMMIT DROP');
+      await tx.$executeRawUnsafe("INSERT INTO semantic_vector_smoke VALUES ('blisko', 'tenant-a', 'dzial-a', '[1,0,0]'), ('daleko', 'tenant-a', 'dzial-a', '[0,1,0]')");
       const rows = await tx.$queryRawUnsafe(
         "SELECT id FROM semantic_vector_smoke ORDER BY embedding <=> '[1,0,0]'::vector LIMIT 1"
       );
       assert.equal(rows[0]?.id, 'blisko', 'pgvector zwrocil bledna kolejnosc podobienstwa.');
+      await tx.$executeRawUnsafe("INSERT INTO semantic_vector_smoke VALUES ('inny-tenant', 'tenant-b', 'dzial-a', '[1,0,0]'), ('inny-dzial', 'tenant-a', 'dzial-b', '[1,0,0]')");
+      const visible = await tx.$queryRawUnsafe(
+        "SELECT id FROM semantic_vector_smoke WHERE tenant = $1 AND department = $2 ORDER BY embedding <=> '[1,0,0]'::vector LIMIT 10",
+        'tenant-a', 'dzial-a'
+      );
+      assert.deepEqual(visible.map((row) => row.id), ['blisko', 'daleko'], 'Filtr tenant/dzial ujawnil obcy rekord.');
       throw ROLLBACK;
     });
   } catch (error) {
