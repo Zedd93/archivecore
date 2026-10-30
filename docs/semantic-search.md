@@ -38,3 +38,32 @@ potrzeby podgladu, ale nie wypelnia automatycznie `attachments.ocrText`.
 
 Do czasu spelnienia tych warunkow obecna wyszukiwarka tekstowa pozostaje bez
 zmian. Zadna nowa migracja bazy nie jest uruchamiana przez sam audyt.
+
+## Lokalny pilot na metadanych
+
+Pilot nie wymaga pgvector i nie zapisuje danych. Dziala wylacznie z konsoli
+administratora, na probce maksymalnie 200 teczek i spisow jednego tenanta.
+Model `bge-m3:latest` musi byc uruchomiony lokalnie w Ollama na
+`127.0.0.1:11434`. Zapytanie i metadane sa przesylane tylko do tej lokalnej
+uslugi; kod nie pozwala podac zewnetrznego adresu. Nie sa czytane akta
+osobowe, skany ani tekst OCR. Wyniki pozostaja w konsoli i nie sa widoczne
+w wyszukiwarce aplikacji.
+
+Najpierw sam odczyt liczby rekordow:
+
+```powershell
+npm run db:pilot-semantic-metadata -- --tenant SMPOLI --dry-run
+```
+
+Po zainstalowaniu Ollama i pobraniu modelu `bge-m3:latest`:
+
+```powershell
+npm run db:pilot-semantic-metadata -- --tenant SMPOLI --query "dokumentacja finansowa" --max 100 --top 10
+```
+
+Opcjonalne `--department "Ksiegowosc"` ogranicza wynik do teczek w kartonach
+tego dzialu i nie pokazuje osobnych spisow, ktore obejmuja wiele dzialow.
+Pilot nie stanowi jeszcze kontroli uprawnien aplikacji: uruchamia go tylko
+administrator z dostepem do konsoli i bazy. Przed udostepnieniem wynikow
+uzytkownikom potrzebne sa pgvector, indeks, kontrola dostepu w API i ocena
+trafnosci na polskich zapytaniach.
