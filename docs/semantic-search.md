@@ -71,13 +71,15 @@ Po instalacji ustaw `DATABASE_URL` na osobna baze testowa (bez wpisywania
 hasla w historie konsoli) i uruchom:
 
 ```powershell
-npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging
+npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging --staging-data-dir "C:\PostgreSQL-Staging\16\data"
 ```
 
 Test nie wczytuje `.env`, odmawia pracy na porcie 5432 niezaleznie od hosta,
-tworzy tylko sztuczne wektory w transakcji i na koniec ja wycofuje. Samo
-sprawdzenie nazwy bazy nie dowodzi izolacji klastra: operator musi potwierdzic
-osobna instancje. Przed instalacja na produkcji trzeba jeszcze wykonac kopie
+sprawdza rzeczywisty katalog danych instancji i odmawia pracy na znanym
+katalogu produkcyjnym. Tworzy tylko sztuczne wektory w transakcji i na koniec
+ja wycofuje. Podaj faktyczny katalog danych odrebnej instalacji testowej;
+podobna nazwa bazy lub inny port same w sobie nie dowodza izolacji klastra.
+Przed instalacja na produkcji trzeba jeszcze wykonac kopie
 zapasowa, probe odtworzenia, test migracji na kopii schematu i weryfikacje
 uprawnien wyszukiwania miedzy tenantami i dzialami.
 

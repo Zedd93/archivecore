@@ -1,6 +1,26 @@
 const assert = require('node:assert/strict');
+const path = require('node:path');
 
 const ROLLBACK = new Error('Rollback pgvector smoke test');
+const PRODUCTION_DATA_DIRECTORY = 'C:\\Program Files\\PostgreSQL\\16\\data';
+
+function normalizeDataDirectory(directory) {
+  if (!directory || !path.win32.isAbsolute(directory)) {
+    throw new Error('Podaj bezwzgledna sciezke katalogu danych instancji testowej.');
+  }
+  return path.win32.normalize(directory).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function validateDataDirectory(actualDirectory, expectedDirectory) {
+  const actual = normalizeDataDirectory(actualDirectory);
+  const expected = normalizeDataDirectory(expectedDirectory);
+  if (actual === normalizeDataDirectory(PRODUCTION_DATA_DIRECTORY)) {
+    throw new Error('Odmowa: polaczono z produkcyjnym katalogiem danych PostgreSQL.');
+  }
+  if (actual !== expected) {
+    throw new Error('Katalog danych bazy nie zgadza sie z --staging-data-dir.');
+  }
+}
 
 function validateTarget(databaseUrl, expectedDatabase, actualDatabase) {
   if (!databaseUrl || !expectedDatabase) throw new Error('Podaj DATABASE_URL instancji testowej i --staging-db NAZWA.');
@@ -19,14 +39,17 @@ function validateTarget(databaseUrl, expectedDatabase, actualDatabase) {
   }
 }
 
-async function smoke(db, databaseUrl, expectedDatabase) {
+async function smoke(db, databaseUrl, expectedDatabase, expectedDataDirectory) {
   validateTarget(databaseUrl, expectedDatabase, expectedDatabase);
+  normalizeDataDirectory(expectedDataDirectory);
   const [before] = await db.$queryRawUnsafe(`
     SELECT current_database() AS "database",
+      current_setting('data_directory') AS "dataDirectory",
       EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') AS "available",
       EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS "enabled"
   `);
   validateTarget(databaseUrl, expectedDatabase, before.database);
+  validateDataDirectory(before.dataDirectory, expectedDataDirectory);
   if (!before.available) throw new Error('pgvector nie jest zainstalowany na tej instancji testowej.');
 
   try {
@@ -53,12 +76,14 @@ async function smoke(db, databaseUrl, expectedDatabase) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 2 || args[0] !== '--staging-db') throw new Error('Uzycie: --staging-db NAZWA');
+  if (args.length !== 4 || args[0] !== '--staging-db' || args[2] !== '--staging-data-dir') {
+    throw new Error('Uzycie: --staging-db NAZWA --staging-data-dir SCIEZKA');
+  }
   if (!process.env.DATABASE_URL) throw new Error('Ustaw DATABASE_URL osobnej instancji testowej. Plik .env nie jest wczytywany.');
   const { PrismaClient } = require('@prisma/client');
   const db = new PrismaClient();
   try {
-    const result = await smoke(db, process.env.DATABASE_URL, args[1]);
+    const result = await smoke(db, process.env.DATABASE_URL, args[1], args[3]);
     console.log(`pgvector dziala w bazie testowej ${result.database}. Transakcje wycofano; stan rozszerzenia bez zmian.`);
   } finally {
     await db.$disconnect();
@@ -72,4 +97,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { validateTarget, smoke };
+module.exports = { validateTarget, validateDataDirectory, smoke };
