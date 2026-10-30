@@ -3,6 +3,13 @@ const path = require('node:path');
 
 const ROLLBACK = new Error('Rollback pgvector smoke test');
 const PRODUCTION_DATA_DIRECTORY = 'C:\\Program Files\\PostgreSQL\\16\\data';
+const MODEL_VERSION = 'bge-m3:latest';
+const TENANT_A = '11111111-1111-4111-8111-111111111111';
+const TENANT_B = '22222222-2222-4222-8222-222222222222';
+
+function syntheticVector(first, second) {
+  return JSON.stringify([first, second, ...Array(1022).fill(0)]);
+}
 
 function normalizeDataDirectory(directory) {
   if (!directory || !path.win32.isAbsolute(directory)) {
@@ -55,18 +62,47 @@ async function smoke(db, databaseUrl, expectedDatabase, expectedDataDirectory) {
   try {
     await db.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('CREATE EXTENSION IF NOT EXISTS vector');
-      await tx.$executeRawUnsafe('CREATE TEMP TABLE semantic_vector_smoke (id text PRIMARY KEY, tenant text NOT NULL, department text NOT NULL, embedding vector(3)) ON COMMIT DROP');
-      await tx.$executeRawUnsafe("INSERT INTO semantic_vector_smoke VALUES ('blisko', 'tenant-a', 'dzial-a', '[1,0,0]'), ('daleko', 'tenant-a', 'dzial-a', '[0,1,0]')");
+      await tx.$executeRawUnsafe(`CREATE TEMP TABLE semantic_vector_smoke (
+        id text PRIMARY KEY,
+        tenant_id uuid NOT NULL,
+        department text,
+        source_type text NOT NULL CHECK (source_type IN ('folder', 'transfer_list')),
+        source_id uuid NOT NULL,
+        source_checksum text NOT NULL,
+        model_version text NOT NULL,
+        source_deleted_at timestamptz,
+        embedding vector(1024) NOT NULL
+      ) ON COMMIT DROP`);
+      const near = syntheticVector(1, 0);
+      const far = syntheticVector(0, 1);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO semantic_vector_smoke VALUES
+          ('blisko', '${TENANT_A}', 'dzial-a', 'folder', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'checksum-a', '${MODEL_VERSION}', NULL, $1::vector),
+          ('daleko', '${TENANT_A}', 'dzial-a', 'folder', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', 'checksum-b', '${MODEL_VERSION}', NULL, $2::vector)`,
+        near, far
+      );
       const rows = await tx.$queryRawUnsafe(
-        "SELECT id FROM semantic_vector_smoke ORDER BY embedding <=> '[1,0,0]'::vector LIMIT 1"
+        'SELECT id FROM semantic_vector_smoke ORDER BY embedding <=> $1::vector LIMIT 1', near
       );
       assert.equal(rows[0]?.id, 'blisko', 'pgvector zwrocil bledna kolejnosc podobienstwa.');
-      await tx.$executeRawUnsafe("INSERT INTO semantic_vector_smoke VALUES ('inny-tenant', 'tenant-b', 'dzial-a', '[1,0,0]'), ('inny-dzial', 'tenant-a', 'dzial-b', '[1,0,0]')");
-      const visible = await tx.$queryRawUnsafe(
-        "SELECT id FROM semantic_vector_smoke WHERE tenant = $1 AND department = $2 ORDER BY embedding <=> '[1,0,0]'::vector LIMIT 10",
-        'tenant-a', 'dzial-a'
+      await tx.$executeRawUnsafe(
+        `INSERT INTO semantic_vector_smoke VALUES
+          ('inny-tenant', '${TENANT_B}', 'dzial-a', 'folder', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', 'checksum-c', '${MODEL_VERSION}', NULL, $1::vector),
+          ('inny-dzial', '${TENANT_A}', 'dzial-b', 'folder', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', 'checksum-d', '${MODEL_VERSION}', NULL, $1::vector),
+          ('usuniety', '${TENANT_A}', 'dzial-a', 'folder', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5', 'checksum-e', '${MODEL_VERSION}', now(), $1::vector),
+          ('inny-model', '${TENANT_A}', 'dzial-a', 'folder', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6', 'checksum-f', 'other-model', NULL, $1::vector)`,
+        near
       );
-      assert.deepEqual(visible.map((row) => row.id), ['blisko', 'daleko'], 'Filtr tenant/dzial ujawnil obcy rekord.');
+      await tx.$executeRawUnsafe(
+        'CREATE INDEX semantic_vector_smoke_hnsw ON semantic_vector_smoke USING hnsw (embedding vector_cosine_ops)'
+      );
+      const visible = await tx.$queryRawUnsafe(
+        `SELECT id FROM semantic_vector_smoke
+         WHERE tenant_id = $1::uuid AND department = $2 AND model_version = $3 AND source_deleted_at IS NULL
+         ORDER BY embedding <=> $4::vector LIMIT 10`,
+        TENANT_A, 'dzial-a', MODEL_VERSION, near
+      );
+      assert.deepEqual(visible.map((row) => row.id), ['blisko', 'daleko'], 'Filtr metadanych ujawnil obcy lub nieaktualny rekord.');
       throw ROLLBACK;
     });
   } catch (error) {

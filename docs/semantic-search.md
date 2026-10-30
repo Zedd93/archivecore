@@ -81,9 +81,13 @@ npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging --staging-
 
 Test nie wczytuje `.env`, odmawia pracy na porcie 5432 niezaleznie od hosta,
 sprawdza rzeczywisty katalog danych instancji i odmawia pracy na znanym
-katalogu produkcyjnym. Tworzy tylko sztuczne wektory w transakcji i na koniec
-ja wycofuje. Sprawdza rowniez filtrowanie sztucznych rekordow wedlug tenanta
-i dzialu. To **nie jest jeszcze test uprawnien API**. Podaj faktyczny katalog danych odrebnej instalacji testowej;
+katalogu produkcyjnym. W transakcji tworzy tymczasowa tabele metadanych z
+wektorami o 1024 wymiarach oraz indeks HNSW; na koniec wycofuje transakcje.
+Sprawdza filtrowanie sztucznych rekordow wedlug tenanta, dzialu, wersji modelu
+i usuniecia zrodla. To **nie jest jeszcze test uprawnien API** ani gwarancja
+kompletnosci wynikow indeksu przy duzej liczbie rekordow. Przed zwroceniem
+wyniku przyszle API musi ponownie sprawdzic dostep do aktywnego zrodla.
+Podaj faktyczny katalog danych odrebnej instalacji testowej;
 podobna nazwa bazy lub inny port same w sobie nie dowodza izolacji klastra.
 Przed instalacja na produkcji trzeba jeszcze wykonac kopie
 zapasowa, probe odtworzenia, test migracji na kopii schematu i weryfikacje
