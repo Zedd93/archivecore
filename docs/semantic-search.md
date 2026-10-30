@@ -170,3 +170,6 @@ npm run db:evaluate-semantic-metadata -- --tenant SMPOLI --query "faktury koszto
 To test jednego zapytania, a nie miarodajna ocena trafnosci dla calego
 archiwum. Tryby `--file` oraz `--query`/`--relevant` sa rozlaczne.
 Przy teczce mozna pominac `folder:` i podac sam UUID.
+Mozna podac kilka par `--query`/`--relevant` w jednym uruchomieniu; kazdy
+`--relevant` nalezy do poprzedzajacego go zapytania. Model oblicza wektory
+rekordow tylko raz, a wynik pokazuje osobno kazde zapytanie i srednie miary.

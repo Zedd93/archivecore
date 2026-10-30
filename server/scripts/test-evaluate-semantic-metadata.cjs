@@ -36,7 +36,16 @@ test('requires bounded arguments and well-formed evaluation cases', () => {
     [{ query: 'faktury', relevant: [{ type: 'folder', id: folderId }] }]);
   assert.deepEqual(parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', folderId]).cases,
     [{ query: 'faktury', relevant: [{ type: 'folder', id: folderId }] }]);
+  assert.deepEqual(parseEvaluationArgs([
+    '--tenant', 'ABC', '--query', 'faktury', '--relevant', folderId,
+    '--query', 'spis ZO', '--relevant', `transfer_list:${listId}`,
+  ]).cases, [
+    { query: 'faktury', relevant: [{ type: 'folder', id: folderId }] },
+    { query: 'spis ZO', relevant: [{ type: 'transfer_list', id: listId }] },
+  ]);
   assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--file', 'cases.json', '--query', 'faktury']), /nie obu trybow/);
+  assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--relevant', folderId, '--query', 'faktury']), /Najpierw/);
+  assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', folderId, '--query', 'spis']), /Kazdy przypadek/);
   assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', 'folder:bad']), /UUID/);
   assert.throws(() => parseEvaluationArgs(['--tenant', 'ABC', '--query', 'faktury', '--relevant', `folder:${folderId}:extra`]), /type:UUID/);
   assert.throws(() => parseCases('[null]'), /Kazdy przypadek/);

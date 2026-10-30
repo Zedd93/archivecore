@@ -4,39 +4,40 @@ const { parseArgs, loadMetadata, embedLocal, cosine } = require('./semantic-meta
 
 function parseEvaluationArgs(argv) {
   let file;
-  const relevant = [];
+  const inlineCases = [];
   const pilotArgs = ['--dry-run'];
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === '--file') {
       if (file || !argv[index + 1]) throw new Error('Podaj jeden --file z przypadkami testowymi.');
       file = argv[++index];
+    } else if (argv[index] === '--query') {
+      if (!argv[index + 1]) throw new Error('Podaj zapytanie po --query.');
+      inlineCases.push({ query: argv[++index], relevant: [] });
     } else if (argv[index] === '--relevant') {
       if (!argv[index + 1]) throw new Error('Podaj --relevant UUID albo type:UUID.');
-      relevant.push(argv[++index]);
+      const currentCase = inlineCases.at(-1);
+      if (!currentCase) throw new Error('Najpierw podaj --query, potem --relevant.');
+      const value = argv[++index];
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+        currentCase.relevant.push({ type: 'folder', id: value });
+      } else {
+        const [type, id, extra] = value.split(':');
+        if (extra || !type || !id) throw new Error('Podaj --relevant UUID albo type:UUID.');
+        currentCase.relevant.push({ type, id });
+      }
     } else {
       pilotArgs.push(argv[index]);
     }
   }
   const options = parseArgs(pilotArgs);
   if (file) {
-    if (options.query || relevant.length) throw new Error('Uzyj --file albo --query i --relevant, nie obu trybow.');
+    if (inlineCases.length) throw new Error('Uzyj --file albo --query i --relevant, nie obu trybow.');
     return { ...options, file };
   }
-  if (!options.query || !relevant.length) {
+  if (!inlineCases.length) {
     throw new Error('Podaj --file albo --query oraz co najmniej jeden --relevant UUID albo type:UUID.');
   }
-  const cases = parseCases(JSON.stringify([{
-    query: options.query,
-    relevant: relevant.map((value) => {
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-        return { type: 'folder', id: value };
-      }
-      const [type, id, extra] = value.split(':');
-      if (extra || !type || !id) throw new Error('Podaj --relevant UUID albo type:UUID.');
-      return { type, id };
-    }),
-  }]));
-  return { ...options, cases };
+  return { ...options, cases: parseCases(JSON.stringify(inlineCases)) };
 }
 
 function parseCases(input) {
