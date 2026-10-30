@@ -151,6 +151,8 @@ jobs:
         run: npm run test:hr-retention-audit
       - name: Verify read-only disposal readiness audit
         run: npm run test:disposal-readiness-audit
+      - name: Verify semantic search pilot and evaluation
+        run: npm run test:semantic-metadata-pilot && npm run test:semantic-metadata-evaluation && npm run test:smoke-pgvector-staging
       - name: Verify transfer-list missing-date reconciliation
         run: npm run test:transfer-list-date-reconciliation
 

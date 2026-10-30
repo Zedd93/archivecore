@@ -123,3 +123,38 @@ Pilot nie stanowi jeszcze kontroli uprawnien aplikacji: uruchamia go tylko
 administrator z dostepem do konsoli i bazy. Przed udostepnieniem wynikow
 uzytkownikom potrzebne sa pgvector, indeks, kontrola dostepu w API i ocena
 trafnosci na polskich zapytaniach.
+
+## Pomiar trafnosci pilota
+
+Przygotuj na serwerze plik JSON z 1-20 recznie sprawdzonymi zapytaniami.
+Kazde `relevant` wskazuje teczke lub spis, ktory powinien pojawic sie wsrod
+wynikow. Identyfikatory musza nalezec do wybranego tenanta i miescic sie
+w probce `--max`; w przeciwnym razie test przerwie sie bez podawania
+mylacego wyniku. Przy filtrze `--department` nie podawaj samodzielnego spisu,
+poniewaz obejmuje on potencjalnie wiele dzialow.
+
+```json
+[
+  {
+    "query": "faktury za remont budynku",
+    "relevant": [
+      { "type": "folder", "id": "00000000-0000-0000-0000-000000000001" }
+    ]
+  }
+]
+```
+
+Zastap przykladowe UUID rzeczywistym identyfikatorem teczki ze spisu ZO.
+Nie wpisuj do pliku PESEL ani tresci dokumentow. Uruchomienie nie zapisuje
+danych i uzywa tego samego lokalnego modelu co pilot:
+
+```powershell
+npm run db:evaluate-semantic-metadata -- --tenant SMPOLI --file C:\Apps\reconciliation\semantic-cases.json --max 200 --top 10
+```
+
+Wynik pokazuje hit-rate (odsetek zapytan z co najmniej jednym oczekiwanym
+rekordem w pierwszych 10), sredni recall oraz MRR, czyli jak wysoko pojawil
+sie pierwszy trafny wynik. Wynik mierzy tylko wybrana probke metadanych, nie
+cale archiwum ani jakosc przyszlego indeksu pgvector. Przed udostepnieniem
+funkcji nalezy osobno sprawdzic, czy wyniki nie ujawniaja danych innych
+tenantow i dzialow.
