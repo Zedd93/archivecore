@@ -2,9 +2,11 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { validateTarget, smoke } = require('./smoke-pgvector-staging.cjs');
 
-test('refuses production database and production loopback port', () => {
+test('refuses production database and port 5432 regardless of host', () => {
   assert.throws(() => validateTarget('postgresql://u:p@localhost:5432/archivecore', 'archivecore', 'archivecore'), /test/);
   assert.throws(() => validateTarget('postgresql://u:p@localhost:5432/archivecore_staging', 'archivecore_staging', 'archivecore_staging'), /5432/);
+  assert.throws(() => validateTarget('postgresql://u:p@db.example:5432/archivecore_staging', 'archivecore_staging', 'archivecore_staging'), /5432/);
+  assert.throws(() => validateTarget('postgresql://u:p@db.example/archivecore_staging', 'archivecore_staging', 'archivecore_staging'), /5432/);
   assert.throws(() => validateTarget('postgresql://u:p@localhost:5433/archivecore', 'archivecore_staging', 'archivecore'), /zgodne/);
   assert.doesNotThrow(() => validateTarget('postgresql://u:p@localhost:5433/archivecore_staging', 'archivecore_staging', 'archivecore_staging'));
 });

@@ -14,8 +14,8 @@ function validateTarget(databaseUrl, expectedDatabase, actualDatabase) {
   if (database !== expectedDatabase || actualDatabase !== expectedDatabase) {
     throw new Error('DATABASE_URL, --staging-db i aktualna baza musza byc zgodne.');
   }
-  if (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) && port === '5432') {
-    throw new Error('Odmowa: lokalny port 5432 jest uzywany przez produkcyjny ArchiveCore.');
+  if (port === '5432') {
+    throw new Error('Odmowa: port 5432 moze wskazywac produkcyjny ArchiveCore. Uzyj osobnej instancji testowej na innym porcie.');
   }
 }
 

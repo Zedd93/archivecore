@@ -51,10 +51,12 @@ izolacja: `nmake install` kopiuje pliki rozszerzenia do wspolnego `PGROOT`.
 Na instancji testowej zainstaluj oficjalne narzedzia Visual Studio z obsluga
 C++, otworz jako administrator `x64 Native Tools Command Prompt`, a nastepnie
 wykonaj [instrukcje pgvector dla Windows](https://github.com/pgvector/pgvector#installation).
-`PGROOT` musi wskazywac **testowa**, a nie produkcyjna instalacje PostgreSQL:
+`PGROOT` musi wskazywac **testowa**, a nie produkcyjna instalacje PostgreSQL.
+W ponizszym przykladzie `C:\PostgreSQL-Staging\16` oznacza odrebna instalacje;
+nie podstawiaj tam produkcyjnego `C:\Program Files\PostgreSQL\16`:
 
 ```cmd
-set "PGROOT=C:\Program Files\PostgreSQL\16"
+set "PGROOT=C:\PostgreSQL-Staging\16"
 git clone --branch v0.8.7 https://github.com/pgvector/pgvector.git
 cd pgvector
 nmake /F Makefile.win
@@ -72,7 +74,7 @@ hasla w historie konsoli) i uruchom:
 npm run db:smoke-pgvector-staging -- --staging-db archivecore_staging
 ```
 
-Test nie wczytuje `.env`, odmawia pracy na lokalnym porcie produkcyjnym 5432,
+Test nie wczytuje `.env`, odmawia pracy na porcie 5432 niezaleznie od hosta,
 tworzy tylko sztuczne wektory w transakcji i na koniec ja wycofuje. Samo
 sprawdzenie nazwy bazy nie dowodzi izolacji klastra: operator musi potwierdzic
 osobna instancje. Przed instalacja na produkcji trzeba jeszcze wykonac kopie
