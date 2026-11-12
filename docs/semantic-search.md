@@ -64,9 +64,13 @@ Na tym samym serwerze dziala juz **osobny klaster testowy** PostgreSQL 16.15:
 binaria `C:\Apps\PostgreSQL-Staging\16`, dane
 `C:\Apps\PostgreSQL-Staging\data`, port `127.0.0.1:55433`, usluga Windows
 `archivecore-pgvector-staging` (konto LocalService, start reczny), baza
-`archivecore_staging`. Haslo testowej bazy jest zaszyfrowane przez Windows DPAPI
-w `C:\Apps\PostgreSQL-Staging\staging-password.dpapi`; nie umieszczaj go
-w repozytorium ani w produkcyjnym `.env`. Skrypt
+`archivecore_staging`. Haslo testowej bazy jest zaszyfrowane w
+`C:\Apps\PostgreSQL-Staging\staging-password.aes`, z osobnym kluczem w
+`C:\Apps\PostgreSQL-Staging\staging-password.key`. Dostep do obu plikow jest
+ograniczony do Administratorow i konta System. Nie umieszczaj ich
+w repozytorium ani w produkcyjnym `.env`. Wczesniejszy zapis DPAPI przestal
+byc odczytywalny w sesji SSH; haslo testowej bazy zostalo odnowione, bez
+zmiany hasla produkcyjnego. Skrypt
 `server/scripts/setup-pgvector-staging.ps1` dokumentuje utworzenie klastra;
 **nie uruchamiaj go ponownie na istniejacej instalacji**. Rozszerzenie
 pgvector v0.8.7 jest zainstalowane tylko w testowym `PGROOT`. Druga baza
@@ -122,12 +126,12 @@ usunac. Indeksy B-tree i HNSW przyspieszaja filtrowanie i podobienstwo.
 Nie ma tu skanow, OCR ani akt osobowych. Kod nie odczytuje bazy produkcyjnej,
 nie kopiuje danych klientow i nie dodaje migracji Prisma.
 
-Uruchom tylko z `DATABASE_URL` odrebnego klastra na `127.0.0.1:55433`.
-Hasla nie wpisuj w poleceniu ani w produkcyjnym `.env`:
+Na serwerze Doxart uruchom ponizszy skrypt. Odczytuje on zaszyfrowane haslo
+testowe bez wypisywania go i laczy sie tylko z klastrem `127.0.0.1:55433`:
 
 ```powershell
-npm run db:semantic-index-staging -- --staging-db archivecore_staging --staging-data-dir "C:\Apps\PostgreSQL-Staging\data" --init
-npm run db:semantic-index-staging -- --staging-db archivecore_staging --staging-data-dir "C:\Apps\PostgreSQL-Staging\data" --smoke
+& .\server\scripts\run-semantic-index-staging.ps1 -Action init
+& .\server\scripts\run-semantic-index-staging.ps1 -Action smoke
 ```
 
 `--init` trwale tworzy pusta tabele i rozszerzenie tylko w bazie testowej.
