@@ -39,6 +39,24 @@ potrzeby podgladu, ale nie wypelnia automatycznie `attachments.ocrText`.
 Do czasu spelnienia tych warunkow obecna wyszukiwarka tekstowa pozostaje bez
 zmian. Zadna nowa migracja bazy nie jest uruchamiana przez sam audyt.
 
+## Kontrola dostepu do przyszlych wynikow API
+
+`readableSemanticSources` w module wyszukiwania ponownie sprawdza kandydatow
+z indeksu w aktualnej bazie aplikacji. Wymaga kontekstu tenanta oraz uprawnien
+do wyszukiwania i odczytu zrodla. Pracownik tenanta bez przypisanego dzialu
+nie dostaje wynikow. Dla pracownika dzialowego zwracane sa tylko aktywne teczki
+w nieusunietych kartonach jego dzialu; caly spis ZO moze obejmowac wiele
+dzialow, wiec nie jest zwracany. Zwracane sa wylacznie identyfikatory, a nie
+tytuly lub punktacja z potencjalnie nieaktualnego indeksu. Limit wynosi 100
+kandydatow. Test: `npm run test:semantic-access` po zbudowaniu serwera.
+
+To przygotowanie do przyszlej trasy API, nie wlaczenie wyszukiwania
+semantycznego w aplikacji. Zapytanie do indeksu musi najpierw ograniczac
+tenanta, dzial i wersje modelu; kontrola po zapytaniu nie zastapi tych
+filtrow ani nie naprawi ucieczki danych przez sam ranking. Przed uruchomieniem
+trasy trzeba tez wdrozyc aktualizacje/usuwanie wektorow wraz ze zmianami zrodel
+oraz przetestowac caly przeplyw na oddzielnej bazie.
+
 ## Przygotowanie pgvector na Windows bez Dockera
 
 Serwer produkcyjny ma PostgreSQL 16 w `C:\Program Files\PostgreSQL\16`.

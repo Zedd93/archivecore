@@ -101,6 +101,7 @@
     "test:semantic-metadata-pilot": "node --test server/scripts/test-semantic-metadata-pilot.cjs",
     "test:semantic-metadata-evaluation": "node --test server/scripts/test-evaluate-semantic-metadata.cjs",
     "test:smoke-pgvector-staging": "node --test server/scripts/test-smoke-pgvector-staging.cjs",
+    "test:semantic-access": "node --import tsx --test server/scripts/test-semantic-access.cjs",
     "test:transfer-list-date-reconciliation": "node --test server/scripts/test-reconcile-transfer-list-missing-dates.cjs",
     "test:jrwa-versions": "node --import tsx --test server/scripts/test-jrwa-versions.mjs",
     "test:jrwa-suggestions": "node --import tsx --test server/scripts/test-jrwa-suggestions.mjs",
