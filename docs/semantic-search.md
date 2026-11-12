@@ -111,6 +111,39 @@ Przed instalacja na produkcji trzeba jeszcze wykonac kopie
 zapasowa, probe odtworzenia, test migracji na kopii schematu i weryfikacje
 uprawnien wyszukiwania miedzy tenantami i dzialami.
 
+## Trwaly indeks tylko w bazie testowej
+
+Skrypt `server/scripts/semantic-index-staging.cjs` przygotowuje oddzielna
+tabele `semantic_metadata_index` w bazie testowej: klucz tenanta i zrodla,
+znormalizowany dzial, sume SHA-256 metadanych, wersje modelu, wektor 1024
+wymiarow i czas indeksowania. Ten sam rekord jest aktualizowany po zmianie
+sumy kontrolnej, dzialu lub wersji modelu; po usunieciu zrodla wpis mozna
+usunac. Indeksy B-tree i HNSW przyspieszaja filtrowanie i podobienstwo.
+Nie ma tu skanow, OCR ani akt osobowych. Kod nie odczytuje bazy produkcyjnej,
+nie kopiuje danych klientow i nie dodaje migracji Prisma.
+
+Uruchom tylko z `DATABASE_URL` odrebnego klastra na `127.0.0.1:55433`.
+Hasla nie wpisuj w poleceniu ani w produkcyjnym `.env`:
+
+```powershell
+npm run db:semantic-index-staging -- --staging-db archivecore_staging --staging-data-dir "C:\Apps\PostgreSQL-Staging\data" --init
+npm run db:semantic-index-staging -- --staging-db archivecore_staging --staging-data-dir "C:\Apps\PostgreSQL-Staging\data" --smoke
+```
+
+`--init` trwale tworzy pusta tabele i rozszerzenie tylko w bazie testowej.
+`--smoke` sprawdza zapis, odswiezenie, odfiltrowanie innego tenanta i
+usuniecie na sztucznych rekordach w wycofywanej transakcji. Polecenia
+sprawdzaja rzeczywisty katalog danych i odmawiaja pracy na znanym katalogu
+produkcyjnym oraz na porcie 5432. Testy jednostkowe:
+`npm run test:semantic-index-staging`.
+
+To jeszcze nie jest automatyczna synchronizacja. Przed wlaczeniem API trzeba
+zbudowac wznowialny proces indeksowania zmian zrodel, trwale powiazac wersje
+modelu z konkretnym artefaktem (nie polegac na zmiennym tagu `latest`),
+sprawdzic aktualnosc zrodel i przeprowadzic testy uprawnien oraz trafnosci.
+Filtry tenanta i dzialu musza byc w zapytaniu do indeksu, a wyniki dodatkowo
+przejsc przez `readableSemanticSources`.
+
 ## Lokalny pilot na metadanych
 
 Pilot nie wymaga pgvector i nie zapisuje danych. Dziala wylacznie z konsoli
