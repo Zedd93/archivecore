@@ -203,6 +203,18 @@ Get-ScheduledTaskInfo -TaskName ArchiveCoreSemanticStagingSMPOLI
 
 W razie potrzeby zadanie mozna wstrzymac poleceniem
 `Disable-ScheduledTask -TaskName ArchiveCoreSemanticStagingSMPOLI`.
+
+Odczytowy test rzeczywistego indeksu uzywa tej samej funkcji co chronione API,
+ale nie wlacza trasy HTTP. Komenda dziala tylko dla zatwierdzonego tenanta
+`SMPOLI`, sprawdza osobny klaster staging i ponownie weryfikuje kazdy wynik
+w aktualnej bazie produkcyjnej. Pokazuje najwyzej 10 biezacych tytulow.
+
+```powershell
+npm run db:smoke-semantic-pilot -- --tenant SMPOLI --query "dokumentacja finansowa" --top 5
+```
+
+Przy niepelnym indeksie to tylko test polaczenia i filtrow, nie miarodajna
+ocena trafnosci. Nie wpisuj danych osobowych w zapytaniu.
 Po pierwszym automatycznym przebiegu potwierdz licznik i kod wyniku zadania.
 
 ## Lokalny pilot na metadanych
