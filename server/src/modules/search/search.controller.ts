@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { searchService, SearchResult } from './search.service';
 import { successResponse, errorResponse } from '../../utils/response';
 import { Permissions } from '@archivecore/shared';
+import { semanticPilotService } from './semantic-pilot.service';
 
 function readableTypes(permissions: string[], includeHr: boolean): string[] {
   const canViewHr = includeHr && permissions.includes(Permissions.HR_VIEW);
@@ -31,6 +32,22 @@ function searchTerm(query: string, types: string[]): string {
 }
 
 export class SearchController {
+  async semanticPilot(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.tenantId || !req.user) return errorResponse(res, 'Wybierz tenanta', 400);
+      const q = req.query.q as string;
+      const limit = Number(req.query.limit);
+      res.setHeader('Cache-Control', 'private, no-store');
+      const results = await semanticPilotService.search({
+        tenantId: req.tenantId,
+        department: req.accessDepartment,
+        roles: req.user.roles,
+        permissions: req.user.permissions,
+      }, q, limit);
+      return successResponse(res, { results });
+    } catch (err) { next(err); }
+  }
+
   async evidence(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.tenantId) return errorResponse(res, 'Brak kontekstu tenanta', 400);

@@ -46,16 +46,26 @@ z indeksu w aktualnej bazie aplikacji. Wymaga kontekstu tenanta oraz uprawnien
 do wyszukiwania i odczytu zrodla. Pracownik tenanta bez przypisanego dzialu
 nie dostaje wynikow. Dla pracownika dzialowego zwracane sa tylko aktywne teczki
 w nieusunietych kartonach jego dzialu; caly spis ZO moze obejmowac wiele
-dzialow, wiec nie jest zwracany. Zwracane sa wylacznie identyfikatory, a nie
-tytuly lub punktacja z potencjalnie nieaktualnego indeksu. Limit wynosi 100
-kandydatow. Test: `npm run test:semantic-access` po zbudowaniu serwera.
+dzialow, wiec nie jest zwracany. Zwracane sa tylko biezace tytuly z bazy
+produkcyjnej, jesli suma kontrolna metadanych zgadza sie z indeksem. Nie sa
+zwracane tytuly ani punktacja z indeksu. Limit wynosi 100 kandydatow.
+Test: `npm run test:semantic-access`.
 
-To przygotowanie do przyszlej trasy API, nie wlaczenie wyszukiwania
-semantycznego w aplikacji. Zapytanie do indeksu musi najpierw ograniczac
-tenanta, dzial i wersje modelu; kontrola po zapytaniu nie zastapi tych
-filtrow ani nie naprawi ucieczki danych przez sam ranking. Przed uruchomieniem
-trasy trzeba tez wdrozyc aktualizacje/usuwanie wektorow wraz ze zmianami zrodel
-oraz przetestowac caly przeplyw na oddzielnej bazie.
+Trasa `GET /api/search/semantic-pilot?q=...&limit=10` jest domyslnie
+wylaczona (404). Po wlaczeniu wymaga zalogowanego Super Admina, wybranego
+tenanta i uprawnienia `search.all`. Zapytanie do indeksu ogranicza tenanta,
+dzial i dokladny digest lokalnego modelu. Kazdy wynik przechodzi ponowna
+kontrole dostepu i aktualnosci w produkcji. Odpowiedz zawiera tylko typ,
+identyfikator, aktualny tytul i link. Bez OCR, skanow, akt osobowych,
+surowych wektorow i punktacji. Zwykla wyszukiwarka pozostaje bez zmian.
+
+Do jawnego wlaczenia na serwerze potrzebne sa `SEMANTIC_PILOT_ENABLED=true`,
+`SEMANTIC_PILOT_DATABASE_URL` wskazujacy wylacznie
+`127.0.0.1:55433/archivecore_staging` oraz
+`SEMANTIC_PILOT_DATA_DIR=C:\Apps\PostgreSQL-Staging\data`. Aplikacja sprawdza
+rowniez rzeczywista sciezke klastra PostgreSQL przed uzyciem indeksu.
+**Nie wlaczaj flagi przed testem end-to-end na odrebnej bazie i ocena
+jakosci wynikow.** Testy API: `npm run test:semantic-pilot-api`.
 
 ## Przygotowanie pgvector na Windows bez Dockera
 

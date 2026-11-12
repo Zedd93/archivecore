@@ -8,6 +8,7 @@ import { slaTargetAlertService } from './modules/reports/sla-target-alert.servic
 import { orderReturnReminderService } from './modules/orders/order-return-reminder.service';
 import { emailDeliveryService } from './modules/notifications/email-delivery.service';
 import { smtpSettings } from './modules/notifications/email-transport';
+import { semanticPilotService } from './modules/search/semantic-pilot.service';
 
 const log = {
   info: (...args: unknown[]) => { if (config.nodeEnv !== 'test') process.stdout.write(args.join(' ') + '\n'); },
@@ -106,6 +107,7 @@ async function main() {
     log.info(`\n📡 Received ${signal}, shutting down...`);
     server.close(async () => {
       await prisma.$disconnect();
+      await semanticPilotService.disconnect();
       redis.disconnect();
       log.info('👋 Server closed');
       process.exit(0);

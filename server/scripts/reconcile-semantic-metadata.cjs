@@ -1,8 +1,8 @@
-const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { assertStagingTarget, departmentKey, upsertSource, removeSource } = require('./semantic-index-staging.cjs');
+const { assertStagingTarget, upsertSource, removeSource } = require('./semantic-index-staging.cjs');
 const { embedLocal } = require('./semantic-metadata-pilot.cjs');
+const { semanticMetadataText, semanticDepartmentKey, semanticMetadataChecksum } = require('../src/modules/search/semantic-checksum.ts');
 
 const MODEL = 'bge-m3:latest';
 const MODEL_TAGS_URL = 'http://127.0.0.1:11434/api/tags';
@@ -46,19 +46,9 @@ function validateProductionUrl(databaseUrl) {
   }
 }
 
-function sourceText(...parts) {
-  return parts.filter((part) => typeof part === 'string' && part.trim()).join(' | ').slice(0, 1500);
-}
-
-function sourceChecksum(source) {
-  return createHash('sha256').update(JSON.stringify([
-    'semantic-metadata-v1', source.sourceType, source.text, departmentKey(source.department),
-  ])).digest('hex');
-}
-
 function makeSource(tenantId, sourceType, sourceId, department, text) {
-  const source = { tenantId, sourceType, sourceId, department, text };
-  return { ...source, checksum: sourceChecksum(source) };
+  const source = { tenantId, sourceType, sourceId, department: department?.trim() || null, text };
+  return { ...source, checksum: semanticMetadataChecksum(source) };
 }
 
 async function readModelVersion(fetcher = fetch) {
@@ -111,9 +101,9 @@ async function loadTenantSources(production, tenantCode) {
     ]);
     const sources = [
       ...folders.map((folder) => makeSource(tenant.id, 'folder', folder.id, folder.box?.department ?? null,
-        sourceText(folder.title, folder.description, folder.docType))),
+        semanticMetadataText(folder.title, folder.description, folder.docType))),
       ...lists.map((list) => makeSource(tenant.id, 'transfer_list', list.id, null,
-        sourceText(list.title, list.notes))),
+        semanticMetadataText(list.title, list.notes))),
     ];
     return { tenant, sources };
   }, { timeout: 30000 });
@@ -132,7 +122,7 @@ function planChanges(sources, indexed, modelVersion, maxChanges) {
   const changed = sources.filter((source) => {
     const row = indexByKey.get(`${source.sourceType}:${source.sourceId}`);
     return !row || row.checksum !== source.checksum
-      || row.departmentKey !== departmentKey(source.department) || row.modelVersion !== modelVersion;
+      || row.departmentKey !== semanticDepartmentKey(source.department) || row.modelVersion !== modelVersion;
   });
   return {
     stale, changed,
@@ -211,6 +201,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  parseArgs, validateProductionUrl, sourceChecksum, readModelVersion,
+  parseArgs, validateProductionUrl, sourceChecksum: semanticMetadataChecksum, readModelVersion,
   loadTenantSources, loadIndexedSources, planChanges, runReconciliation,
 };

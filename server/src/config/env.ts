@@ -12,6 +12,12 @@ export const config = {
     url: process.env.DATABASE_URL || 'postgresql://archivecore:archivecore123@localhost:5432/archivecore',
   },
 
+  semanticPilot: {
+    enabled: process.env.SEMANTIC_PILOT_ENABLED === 'true',
+    stagingUrl: process.env.SEMANTIC_PILOT_DATABASE_URL || '',
+    stagingDataDir: process.env.SEMANTIC_PILOT_DATA_DIR || '',
+  },
+
   redis: {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   },

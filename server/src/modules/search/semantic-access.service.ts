@@ -1,9 +1,11 @@
 import { BoxStatus, FolderStatus, Prisma } from '@prisma/client';
 import { Permissions, RoleCode } from '@archivecore/shared';
 import { prisma } from '../../config/database';
+import { semanticMetadataChecksum, semanticMetadataText } from './semantic-checksum';
 
 type SemanticSource = 'folder' | 'transfer_list';
-type Candidate = { type: SemanticSource; id: string };
+type Candidate = { type: SemanticSource; id: string; checksum: string };
+type ReadableSource = { type: SemanticSource; id: string; title: string };
 type SearchContext = {
   tenantId: string;
   department?: string | null;
@@ -14,12 +16,12 @@ type SourceDatabase = Pick<typeof prisma, 'folder' | 'transferList'>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Vector candidates are hints, not authorization. Recheck live records before returning IDs to an API caller.
+// Vector candidates are hints, not authorization. Recheck live records and content freshness before returning a title.
 export async function readableSemanticSources(
   candidates: readonly Candidate[],
   context: SearchContext,
   db: SourceDatabase = prisma,
-): Promise<Candidate[]> {
+): Promise<ReadableSource[]> {
   if (!UUID.test(context.tenantId)) throw new Error('Brak poprawnego kontekstu tenanta.');
   if (candidates.length > 100) throw new Error('Za duzo kandydatow wyszukiwania semantycznego.');
   if (!context.permissions.includes(Permissions.SEARCH_ALL)
@@ -54,27 +56,50 @@ export async function readableSemanticSources(
             ? { box: { is: liveBox } }
             : { OR: [{ boxId: null }, { box: { is: liveBox } }] }),
         },
-        select: { id: true },
+        select: {
+          id: true, title: true, description: true, docType: true,
+          box: { select: { department: true } },
+        },
       })
       : Promise.resolve([]),
     canReadLists && listIds.length
       ? db.transferList.findMany({
         where: { id: { in: listIds }, tenantId: context.tenantId },
-        select: { id: true },
+        select: { id: true, title: true, notes: true },
       })
       : Promise.resolve([]),
   ]);
 
-  const visibleFolders = new Set(folders.map((folder) => folder.id));
-  const visibleLists = new Set(lists.map((list) => list.id));
+  const visibleFolders = new Map(folders.map((folder) => [folder.id, folder]));
+  const visibleLists = new Map(lists.map((list) => [list.id, list]));
   const seen = new Set<string>();
   return candidates.flatMap((candidate) => {
-    const visible = candidate.type === 'folder'
-      ? visibleFolders.has(candidate.id)
-      : candidate.type === 'transfer_list' && visibleLists.has(candidate.id);
     const key = `${candidate.type}:${candidate.id}`;
-    if (!visible || seen.has(key)) return [];
+    if (seen.has(key)) return [];
+    let title: string | undefined;
+    let checksum: string | undefined;
+    if (candidate.type === 'folder') {
+      const folder = visibleFolders.get(candidate.id);
+      if (folder) {
+        title = folder.title;
+        checksum = semanticMetadataChecksum({
+          sourceType: 'folder',
+          text: semanticMetadataText(folder.title, folder.description, folder.docType),
+          department: folder.box?.department,
+        });
+      }
+    } else if (candidate.type === 'transfer_list') {
+      const list = visibleLists.get(candidate.id);
+      if (list) {
+        title = list.title;
+        checksum = semanticMetadataChecksum({
+          sourceType: 'transfer_list',
+          text: semanticMetadataText(list.title, list.notes),
+        });
+      }
+    }
+    if (!title || checksum !== candidate.checksum) return [];
     seen.add(key);
-    return [{ type: candidate.type, id: candidate.id }];
+    return [{ type: candidate.type, id: candidate.id, title }];
   });
 }
