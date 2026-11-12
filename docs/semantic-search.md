@@ -141,12 +141,43 @@ sprawdzaja rzeczywisty katalog danych i odmawiaja pracy na znanym katalogu
 produkcyjnym oraz na porcie 5432. Testy jednostkowe:
 `npm run test:semantic-index-staging`.
 
-To jeszcze nie jest automatyczna synchronizacja. Przed wlaczeniem API trzeba
-zbudowac wznowialny proces indeksowania zmian zrodel, trwale powiazac wersje
-modelu z konkretnym artefaktem (nie polegac na zmiennym tagu `latest`),
-sprawdzic aktualnosc zrodel i przeprowadzic testy uprawnien oraz trafnosci.
+Sam schemat nie synchronizuje sie z aplikacja. Ponizszy pilot porownuje sumy
+kontrolne i zapisuje identyfikator konkretnego artefaktu modelu; przed
+wlaczeniem API trzeba jeszcze sprawdzic wznowienie po przerwaniu, aktualnosc
+zrodel oraz uprawnienia i trafnosc na danych pilotowych.
 Filtry tenanta i dzialu musza byc w zapytaniu do indeksu, a wyniki dodatkowo
 przejsc przez `readableSemanticSources`.
+
+## Odswiezanie metadanych w pilocie
+
+Po zgodzie na pilot mozna odczytac z produkcji tylko tytuly, opisy, typy
+dokumentow i dzialy teczek oraz tytuly i notatki spisow ZO. Skrypt
+`reconcile-semantic-metadata.cjs` czyta je w transakcji `READ ONLY`; nie
+odczytuje akt osobowych, zalacznikow, skanow ani OCR. Tekst trafia tylko do
+lokalnego modelu Ollama na `127.0.0.1` i **nie jest zapisywany** w bazie
+testowej. Indeks przechowuje wektory, sumy kontrolne i identyfikatory zrodel.
+Konsola pokazuje wylacznie liczniki. Pelny przeglad jednego tenanta jest
+ograniczony do 10000 rekordow, a jedna proba aktualizuje najwyzej 100.
+
+Na serwerze, z katalogu `C:\Apps\archivecore`, najpierw podglad bez wysylania
+tekstu do modelu i bez zapisu:
+
+```powershell
+& .\server\scripts\run-semantic-reconcile-staging.ps1 -Tenant SMPOLI -MaxChanges 20
+```
+
+Po sprawdzeniu licznikow, ograniczona partia:
+
+```powershell
+& .\server\scripts\run-semantic-reconcile-staging.ps1 -Tenant SMPOLI -MaxChanges 20 -Apply
+```
+
+Uruchomienie mozna powtorzyc. Nieprzetworzone rekordy pozostaja na kolejna
+partie; wpis o niezmienionej sumie i wersji modelu nie jest przeliczany.
+Znikniecie zrodla albo jego wylaczenie z indeksowania usuwa wpis z **bazy
+testowej**. Skrypt blokuje rownolegle uruchomienia. Przed automatycznym
+harmonogramem nalezy ocenic czas pracy, liczbe zmian i ponowne uruchomienie
+po przerwaniu procesu. Testy: `npm run test:reconcile-semantic-staging`.
 
 ## Lokalny pilot na metadanych
 
