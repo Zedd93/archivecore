@@ -175,9 +175,25 @@ Po sprawdzeniu licznikow, ograniczona partia:
 Uruchomienie mozna powtorzyc. Nieprzetworzone rekordy pozostaja na kolejna
 partie; wpis o niezmienionej sumie i wersji modelu nie jest przeliczany.
 Znikniecie zrodla albo jego wylaczenie z indeksowania usuwa wpis z **bazy
-testowej**. Skrypt blokuje rownolegle uruchomienia. Przed automatycznym
-harmonogramem nalezy ocenic czas pracy, liczbe zmian i ponowne uruchomienie
-po przerwaniu procesu. Testy: `npm run test:reconcile-semantic-staging`.
+testowej**. Skrypt blokuje rownolegle uruchomienia. Czas pracy i zachowanie
+po przerwaniu nalezy nadal monitorowac podczas pilota. Testy:
+`npm run test:reconcile-semantic-staging`.
+
+Po podgladzie `SMPOLI` (2225 zrodel) wykonano partie 20 wpisow i probe
+jednego wpisu w kontekscie SYSTEM. Na serwerze dziala testowe zadanie Windows
+`ArchiveCoreSemanticStagingSMPOLI`: do 20 zmian co 15 minut, bez nakladajacych
+sie uruchomien, z limitem 5 minut na przebieg. Dotyczy tylko `SMPOLI` i tylko
+odrebnej bazy `archivecore_staging`. Nie uruchamia produkcyjnego API.
+Stan sprawdzisz na serwerze:
+
+```powershell
+Get-ScheduledTaskInfo -TaskName ArchiveCoreSemanticStagingSMPOLI
+& .\server\scripts\run-semantic-reconcile-staging.ps1 -Tenant SMPOLI -MaxChanges 20
+```
+
+W razie potrzeby zadanie mozna wstrzymac poleceniem
+`Disable-ScheduledTask -TaskName ArchiveCoreSemanticStagingSMPOLI`.
+Po pierwszym automatycznym przebiegu potwierdz licznik i kod wyniku zadania.
 
 ## Lokalny pilot na metadanych
 
